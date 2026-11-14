@@ -1,7 +1,7 @@
 /* ============================================================================
    SIMPLICITY ERP - HIGH-SCALE ENTERPRISE AUTHENTICATION & SECURITY ENGINE
    File: auth/auth.js • Developed by Farhan Jawed
-   Architecture: Supabase PostgreSQL Auth + Gmail OTP & Alerts
+   Architecture: Supabase PostgreSQL Auth + Gmail OTP & Alerts + Renew Flow
 ============================================================================ */
 
 (() => {
@@ -25,6 +25,7 @@
     window.activeSanchaItemId = null;
 
     let _activeSessionAuthCache = null;
+    let _expiredLoginUser = null;
 
     /* ========================================================================
        2. DEFENSIVE UTILITY HELPERS
@@ -116,6 +117,14 @@
                 toRemove.forEach((k) => localStorage.removeItem(k));
             }
         } catch (_) {}
+    };
+
+    const openExpiredRenewModal = () => {
+        if (typeof window.openClientPaymentModal === 'function') {
+            window.openClientPaymentModal(_expiredLoginUser || { id: 'Client', name: 'Karkhana User' });
+        } else {
+            alert('Payment QR ke liye Admin se contact karein: +91 70655 72191');
+        }
     };
 
     /* ========================================================================
@@ -326,7 +335,6 @@
                 is_default: true
             }]);
 
-            // 🔔 Admin ke Gmail par turant naye account ka alert bhejein (non-blocking)
             callGmailEngine({
                 type: 'signup_alert',
                 name: name,
@@ -359,7 +367,7 @@
     };
 
     /* ========================================================================
-       5. LOGIN WITH APPROVAL GATEKEEPER
+       5. LOGIN WITH APPROVAL & EXPIRED RENEW GATEKEEPER
        ------------------------------------------------------------------------
     ======================================================================== */
     const handleLogin = async () => {
@@ -417,8 +425,14 @@
             }
 
             if (isUserExpired(user)) {
+                _expiredLoginUser = {
+                    id: user.id,
+                    name: user.name,
+                    expiryDate: user.expiryDate
+                };
                 if (err) {
-                    err.innerHTML = `⌛ Account Expired (${_formatDateDisplay(user.expiryDate)})!`;
+                    err.innerHTML = `⌛ <strong>Account Expired (${_formatDateDisplay(user.expiryDate)})!</strong><br>
+                        <button type="button" onclick="openExpiredRenewModal()" style="margin-top:8px; background:#0f766e; color:#fff; border:none; padding:9px 14px; border-radius:7px; font-weight:800; font-size:12.5px; cursor:pointer;">💳 QR Dekhein & Renew Karein</button>`;
                     err.style.color = '#dc2626';
                     err.style.display = 'block';
                 }
@@ -539,7 +553,12 @@
                         if (!freshUser) return;
                         const st = String(freshUser.status || '').toLowerCase().trim();
                         if (st === 'blocked' || st === 'pending' || isUserExpired(freshUser)) {
-                            alert('⛔ Aapka account block ya expire ho chuka hai! Admin se contact karein.');
+                            _expiredLoginUser = {
+                                id: freshUser.id,
+                                name: freshUser.name,
+                                expiryDate: freshUser.expiryDate
+                            };
+                            alert('⛔ Aapka account block ya expire ho chuka hai! Renew karne ke liye payment karein ya Admin se contact karein.');
                             logout();
                         } else {
                             try {
@@ -741,7 +760,7 @@
         if (res && res.ok) {
             window.targetResetUser = user;
             _setDisplay('forgot-otp-entry', 'block');
-            msg.textContent = `✅ 6-Digit OTP aapke Gmail (${maskEmail(user.email)}) par bhej diya gaya hai!`;
+            msg.textContent = `✅ 6-Digit OTP aapke Gmail (${maskEmail(user.email)}) par bhej diya gaya hai! (Na dikhe to Spam folder check karein)`;
             msg.className = 'message success';
             msg.style.display = 'block';
         } else {
@@ -857,7 +876,8 @@
         sendForgotGmailOtp,
         verifyForgotGmailOtp,
         saveNewPassword,
-        fetchUserByIdentifier
+        fetchUserByIdentifier,
+        openExpiredRenewModal
     };
 
     Object.keys(authAPI).forEach((fnName) => {
