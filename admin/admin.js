@@ -1,7 +1,7 @@
 /* ============================================================================
-   SIMPLICITY ERP - LIVE ADMIN CONTROL, STORAGE MONITOR & BILLING SETTINGS
+   SIMPLICITY ERP - LIVE ADMIN CONTROL, STORAGE MONITOR & PER-KARIGER BILLING
    File: admin/admin.js • Developed by Farhan Jawed
-   Architecture: Supabase PostgreSQL Realtime + Storage RPC + UPI/Bank Config
+   Architecture: Supabase Realtime + Storage RPC + Kariger-Based Billing (x ₹15)
 ============================================================================ */
 
 (() => {
@@ -12,7 +12,8 @@
     const BILLING_CONFIG_ID = 'farhan_global_billing_config';
 
     const DEFAULT_BILLING_CONFIG = Object.freeze({
-        planPrice: '299',
+        perKarigerRate: '15',
+        minCharge: '0',
         accountHolder: 'FARHAN JAWED',
         bankName: 'State Bank of India',
         accountNumber: '',
@@ -25,6 +26,8 @@
 
     window.adminUsersData = [];
     window.adminStorageMap = {};
+    window.adminKarigerCountMap = {};
+    let currentBillingCfg = { ...DEFAULT_BILLING_CONFIG };
     let supabaseAdminChannel = null;
     let currentAdminFilter = 'all';
     let currentAdminSearch = '';
@@ -69,6 +72,34 @@
         }
     };
 
+    const loadBillingConfig = async () => {
+        let cfg = { ...DEFAULT_BILLING_CONFIG };
+        try {
+            const localRaw = localStorage.getItem('app_global_billing_config');
+            if (localRaw) cfg = { ...cfg, ...JSON.parse(localRaw) };
+        } catch (_) {}
+
+        const sb = getSupabaseAdmin();
+        if (sb && navigator.onLine) {
+            try {
+                const { data } = await sb
+                    .from('app_store')
+                    .select('data, value')
+                    .eq('id', BILLING_CONFIG_ID)
+                    .limit(1);
+                if (data && data.length > 0) {
+                    const cloudObj = data[0].data || data[0].value;
+                    if (cloudObj && typeof cloudObj === 'object') {
+                        cfg = { ...cfg, ...cloudObj };
+                        try { localStorage.setItem('app_global_billing_config', JSON.stringify(cfg)); } catch (_) {}
+                    }
+                }
+            } catch (_) {}
+        }
+        currentBillingCfg = cfg;
+        return cfg;
+    };
+
     const buildModernAdminShell = () => {
         const adminSec = document.getElementById('admin-section');
         if (!adminSec || adminSec.dataset.modernBuilt === 'true') return;
@@ -76,7 +107,7 @@
         adminSec.dataset.modernBuilt = 'true';
         adminSec.innerHTML = `
             <style>
-                .adm-wrap { font-family: sans-serif; max-width: 1180px; margin: 0 auto; }
+                .adm-wrap { font-family: sans-serif; max-width: 1220px; margin: 0 auto; }
                 .adm-topbar {
                     background: #0f172a; color: #ffffff; padding: 14px 18px; border-radius: 14px;
                     display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
@@ -131,7 +162,7 @@
                         <button type="button" onclick="backToDashboard()" style="background:#1e293b; color:#ffffff; border:1px solid #334155; padding:7px 12px; border-radius:8px; font-size:12.5px; font-weight:700; cursor:pointer;">← Dashboard</button>
                         <div>
                             <h2 style="margin:0; font-size:17px; font-weight:800; color:#ffffff;">👑 Master Admin Control</h2>
-                            <div style="font-size:11.5px; color:#94a3b8;">Users Approval, Storage Monitor & Payment QR</div>
+                            <div style="font-size:11.5px; color:#94a3b8;">Users Approval, Storage Monitor & Kariger Billing</div>
                         </div>
                     </div>
                     <div class="adm-top-actions">
@@ -156,6 +187,10 @@
                     <div class="adm-stat-card" style="background:#fef2f2; border-color:#fecaca;">
                         <small style="color:#b91c1c;">⛔ Blocked / Exp</small>
                         <h3 id="adm-stat-blocked" style="color:#b91c1c;">0</h3>
+                    </div>
+                    <div class="adm-stat-card" style="background:#f0fdfa; border-color:#99f6e4;">
+                        <small style="color:#0f766e;">🧵 Kul Karigers</small>
+                        <h3 id="adm-stat-karigers" style="color:#0f766e;">0</h3>
                     </div>
                     <div class="adm-stat-card" style="background:#eff6ff; border-color:#bfdbfe;">
                         <small style="color:#1d4ed8;">💾 Total Cloud Data</small>
@@ -183,6 +218,7 @@
                                     <th style="width:36px; text-align:center;">#</th>
                                     <th>Karkhana / Naam</th>
                                     <th>Mobile & ID</th>
+                                    <th>Karigers & Bill</th>
                                     <th>Storage</th>
                                     <th>Password</th>
                                     <th>Join & Validity</th>
@@ -214,6 +250,24 @@
             }
         } catch (_) {}
         return window.adminStorageMap || {};
+    };
+
+    const fetchAllUsersKarigerCounts = async (sb) => {
+        if (!sb) return {};
+        try {
+            const { data, error } = await sb.rpc('get_all_users_kariger_counts');
+            if (!error && Array.isArray(data)) {
+                const map = {};
+                data.forEach((r) => {
+                    if (r && r.uid) {
+                        map[String(r.uid).trim().toLowerCase()] = Number(r.kariger_count) || 0;
+                    }
+                });
+                window.adminKarigerCountMap = map;
+                return map;
+            }
+        } catch (_) {}
+        return window.adminKarigerCountMap || {};
     };
 
     function openAdminModule() {
@@ -250,7 +304,9 @@
         try {
             const [usersRes] = await Promise.all([
                 sb.from('karkhana_users').select('*').order('created_at', { ascending: false }),
-                fetchAllUsersStorageMap(sb)
+                fetchAllUsersStorageMap(sb),
+                fetchAllUsersKarigerCounts(sb),
+                loadBillingConfig()
             ]);
 
             if (usersRes.error) throw usersRes.error;
@@ -333,11 +389,15 @@
 
         const users = Array.isArray(window.adminUsersData) ? window.adminUsersData : [];
         const storageMap = window.adminStorageMap || {};
+        const karigerMap = window.adminKarigerCountMap || {};
+        const ratePerKariger = Math.max(0, Number(currentBillingCfg.perKarigerRate ?? 15) || 0);
+        const minCharge = Math.max(0, Number(currentBillingCfg.minCharge ?? 0) || 0);
         const tbody = document.getElementById('admin-users-table-body');
         if (!tbody) return;
 
         let tot = 0, act = 0, blk = 0, pnd = 0;
         let totalServerBytes = 0;
+        let totalKarigers = 0;
         const pendingUsersList = [];
         const todayIso = new Date().toISOString().split('T')[0];
 
@@ -347,14 +407,18 @@
 
         const enriched = users.filter(Boolean).map((u) => {
             const uIdStr = String(u.id || '').trim();
-            const isOwner = (uIdStr.toLowerCase() === 'farhan' || String(u.role || '').toLowerCase() === 'admin');
+            const uKey = uIdStr.toLowerCase();
+            const isOwner = (uKey === 'farhan' || String(u.role || '').toLowerCase() === 'admin');
             const st = String(u.status || '').toLowerCase().trim();
             const isPending = !isOwner && (st === 'pending' || st === 'pending_approval' || st === 'waiting');
             const isBlocked = !isOwner && (st === 'blocked');
             const isExpired = !isOwner && Boolean(u.expiryDate && u.expiryDate < todayIso);
-            const usedBytes = Number(storageMap[uIdStr.toLowerCase()]) || 0;
+            const usedBytes = Number(storageMap[uKey]) || 0;
+            const kCount = Number(karigerMap[uKey]) || 0;
+            const billAmt = isOwner ? 0 : Math.max(minCharge, kCount * ratePerKariger);
 
             tot++;
+            totalKarigers += kCount;
             if (isPending) {
                 pnd++;
                 pendingUsersList.push(u);
@@ -364,18 +428,20 @@
                 act++;
             }
 
-            return { u, uIdStr, isOwner, isPending, isBlocked, isExpired, usedBytes };
+            return { u, uIdStr, isOwner, isPending, isBlocked, isExpired, usedBytes, kCount, billAmt };
         });
 
         const elTot = document.getElementById('adm-stat-total');
         const elAct = document.getElementById('adm-stat-active');
         const elPnd = document.getElementById('adm-stat-pending');
         const elBlk = document.getElementById('adm-stat-blocked');
+        const elKar = document.getElementById('adm-stat-karigers');
         const elStg = document.getElementById('adm-stat-storage');
         if (elTot) elTot.textContent = tot;
         if (elAct) elAct.textContent = act;
         if (elPnd) elPnd.textContent = pnd;
         if (elBlk) elBlk.textContent = blk;
+        if (elKar) elKar.textContent = totalKarigers;
         if (elStg) elStg.textContent = formatBytes(totalServerBytes);
 
         const filtered = enriched.filter((item) => {
@@ -390,11 +456,11 @@
         });
 
         if (!filtered.length) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#64748b; font-weight:600;">${users.length ? 'Koi user filter se match nahi hua.' : 'Users load ho rahe hain ya koi user nahi mila...'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:#64748b; font-weight:600;">${users.length ? 'Koi user filter se match nahi hua.' : 'Users load ho rahe hain ya koi user nahi mila...'}</td></tr>`;
         } else {
             let rowsHtml = '';
             filtered.forEach((item, idx) => {
-                const { u, uIdStr, isOwner, isPending, isBlocked, isExpired, usedBytes } = item;
+                const { u, uIdStr, isOwner, isPending, isBlocked, isExpired, usedBytes, kCount, billAmt } = item;
                 const safeIdAttr = esc(uIdStr);
 
                 let stBadge = '';
@@ -441,6 +507,10 @@
                     `;
                 }
 
+                const karigerCellHtml = isOwner
+                    ? `<div style="font-weight:800; color:#0f766e; white-space:nowrap;">🧵 ${kCount} Kariger</div><div style="font-size:11px; color:#64748b;">Admin Free</div>`
+                    : `<div style="font-weight:800; color:#0f172a; white-space:nowrap;">🧵 ${kCount} Kariger</div><div style="font-size:11.5px; font-weight:800; color:#0f766e; white-space:nowrap;">₹ ${billAmt.toLocaleString('en-IN')} /mo</div>`;
+
                 const encodedPass = encodeURIComponent(String(u.pass || '-'));
                 const storageText = formatBytes(usedBytes);
 
@@ -455,6 +525,7 @@
                             <div style="font-weight:600; color:#334155;">📞 ${esc(u.mobile || '-')}</div>
                             <code style="background:#f1f5f9; color:#1e3a8a; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:700;">ID: ${esc(uIdStr)}</code>
                         </td>
+                        <td>${karigerCellHtml}</td>
                         <td>
                             <span style="display:inline-block; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:3px 8px; border-radius:6px; font-weight:800; font-size:11.5px; white-space:nowrap;">💾 ${esc(storageText)}</span>
                         </td>
@@ -520,7 +591,9 @@
         try {
             const [usersRes] = await Promise.all([
                 sb.from('karkhana_users').select('*').order('created_at', { ascending: false }),
-                fetchAllUsersStorageMap(sb)
+                fetchAllUsersStorageMap(sb),
+                fetchAllUsersKarigerCounts(sb),
+                loadBillingConfig()
             ]);
 
             if (usersRes.error) throw usersRes.error;
@@ -712,43 +785,16 @@
     }
 
     /* ========================================================================
-       6. ADMIN PAYMENT / QR SETTINGS MODAL (FOR CLIENT RENEWALS)
+       6. ADMIN PAYMENT / QR SETTINGS MODAL (PER KARIGER RATE x ₹15)
        ------------------------------------------------------------------------
     ======================================================================== */
-    const loadBillingConfig = async () => {
-        let cfg = { ...DEFAULT_BILLING_CONFIG };
-        try {
-            const localRaw = localStorage.getItem('app_global_billing_config');
-            if (localRaw) cfg = { ...cfg, ...JSON.parse(localRaw) };
-        } catch (_) {}
-
-        const sb = getSupabaseAdmin();
-        if (sb && navigator.onLine) {
-            try {
-                const { data } = await sb
-                    .from('app_store')
-                    .select('data, value')
-                    .eq('id', BILLING_CONFIG_ID)
-                    .limit(1);
-                if (data && data.length > 0) {
-                    const cloudObj = data[0].data || data[0].value;
-                    if (cloudObj && typeof cloudObj === 'object') {
-                        cfg = { ...cfg, ...cloudObj };
-                        try { localStorage.setItem('app_global_billing_config', JSON.stringify(cfg)); } catch (_) {}
-                    }
-                }
-            } catch (_) {}
-        }
-        return cfg;
-    };
-
-    const renderAdminQrPreview = (base64Img, upiId, holderName, price) => {
+    const renderAdminQrPreview = (base64Img, upiId, holderName) => {
         const box = document.getElementById('adm-bill-qr-preview');
         if (!box) return;
         if (base64Img) {
             box.innerHTML = `<img src="${base64Img}" alt="QR Code" style="width:140px; height:140px; object-fit:contain; border-radius:8px; border:1px solid #cbd5e1; background:#fff;">`;
         } else if (upiId) {
-            const upiUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(holderName || 'FARHAN JAWED')}${price ? `&am=${encodeURIComponent(price)}` : ''}&cu=INR`;
+            const upiUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(holderName || 'FARHAN JAWED')}&cu=INR`;
             const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(upiUri)}`;
             box.innerHTML = `<img src="${qrUrl}" alt="Auto UPI QR" style="width:140px; height:140px; object-fit:contain; border-radius:8px; border:1px solid #cbd5e1; background:#fff; padding:4px;">`;
         } else {
@@ -767,21 +813,25 @@
             <div style="background:#ffffff; width:100%; max-width:480px; border-radius:14px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.4); font-family:sans-serif; max-height:94vh; display:flex; flex-direction:column;">
                 <div style="background:#0f172a; color:#ffffff; padding:14px 18px; display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <h3 style="margin:0; font-size:16px; font-weight:800;">💳 Client Payment & QR Settings</h3>
-                        <div style="font-size:11px; color:#94a3b8;">Clients ko yahi Bank Details aur QR Code dikhega</div>
+                        <h3 style="margin:0; font-size:16px; font-weight:800;">💳 Per-Kariger Billing & QR Settings</h3>
+                        <div style="font-size:11px; color:#94a3b8;">Client ke Master Sheet Karigers × Rate ke hisab se payment banega</div>
                     </div>
                     <button type="button" onclick="closeAdminBillingModal()" style="background:transparent; border:none; color:#fff; font-size:24px; cursor:pointer; line-height:1;">&times;</button>
                 </div>
                 <div style="padding:16px 18px; overflow-y:auto; flex:1;">
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
                         <div>
-                            <label style="font-size:11.5px; font-weight:700; color:#334155; display:block; margin-bottom:3px;">Monthly Charge (₹):</label>
-                            <input type="number" id="adm-bill-price" value="${esc(cfg.planPrice)}" placeholder="299" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:7px; font-size:13px; box-sizing:border-box; font-weight:800;">
+                            <label style="font-size:11.5px; font-weight:700; color:#0f766e; display:block; margin-bottom:3px;">1 Kariger ka Rate (₹):</label>
+                            <input type="number" id="adm-bill-rate" value="${esc(cfg.perKarigerRate ?? '15')}" placeholder="15" style="width:100%; padding:8px; border:1.5px solid #0f766e; border-radius:7px; font-size:14px; box-sizing:border-box; font-weight:900; color:#0f766e;">
                         </div>
                         <div>
-                            <label style="font-size:11.5px; font-weight:700; color:#334155; display:block; margin-bottom:3px;">WhatsApp (Screenshot):</label>
-                            <input type="text" id="adm-bill-wa" value="${esc(cfg.whatsappNo)}" placeholder="917065572191" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:7px; font-size:13px; box-sizing:border-box;">
+                            <label style="font-size:11.5px; font-weight:700; color:#334155; display:block; margin-bottom:3px;">Minimum Bill (₹, 0=Off):</label>
+                            <input type="number" id="adm-bill-min" value="${esc(cfg.minCharge ?? '0')}" placeholder="0" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:7px; font-size:13px; box-sizing:border-box; font-weight:700;">
                         </div>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:11.5px; font-weight:700; color:#334155; display:block; margin-bottom:3px;">WhatsApp Number (Screenshot ke liye):</label>
+                        <input type="text" id="adm-bill-wa" value="${esc(cfg.whatsappNo)}" placeholder="917065572191" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:7px; font-size:13px; box-sizing:border-box;">
                     </div>
                     <div style="margin-bottom:10px;">
                         <label style="font-size:11.5px; font-weight:700; color:#334155; display:block; margin-bottom:3px;">UPI ID (GPay / PhonePe / Paytm):</label>
@@ -809,7 +859,8 @@
                     </div>
 
                     <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:12px; text-align:center;">
-                        <div style="font-size:12px; font-weight:800; color:#0f172a; margin-bottom:8px;">QR Code Preview</div>
+                        <div style="font-size:12px; font-weight:800; color:#0f172a; margin-bottom:4px;">QR Code Preview</div>
+                        <div style="font-size:11px; color:#64748b; margin-bottom:8px;">Client ko uske (Kariger × ₹Rate) ke hisab se amount ke saath QR dikhega</div>
                         <div id="adm-bill-qr-preview" style="display:flex; justify-content:center; margin-bottom:10px;"></div>
                         <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
                             <label style="background:#0f172a; color:#fff; padding:6px 12px; border-radius:7px; font-size:11.5px; font-weight:700; cursor:pointer;">
@@ -834,14 +885,13 @@
         </div>`;
 
         document.body.insertAdjacentHTML('beforeend', html);
-        renderAdminQrPreview(pendingQrBase64, cfg.upiId, cfg.accountHolder, cfg.planPrice);
+        renderAdminQrPreview(pendingQrBase64, cfg.upiId, cfg.accountHolder);
     }
 
     function refreshAdminQrPreviewFromInputs() {
         const upi = document.getElementById('adm-bill-upi')?.value.trim() || '';
         const holder = document.getElementById('adm-bill-holder')?.value.trim() || '';
-        const price = document.getElementById('adm-bill-price')?.value.trim() || '';
-        renderAdminQrPreview(pendingQrBase64, upi, holder, price);
+        renderAdminQrPreview(pendingQrBase64, upi, holder);
     }
 
     function clearAdminQrImage() {
@@ -889,7 +939,8 @@
         if (btn) { btn.disabled = true; btn.textContent = 'Saving... ⏳'; }
 
         const payload = {
-            planPrice: String(document.getElementById('adm-bill-price')?.value || '299').trim(),
+            perKarigerRate: String(document.getElementById('adm-bill-rate')?.value || '15').trim(),
+            minCharge: String(document.getElementById('adm-bill-min')?.value || '0').trim(),
             whatsappNo: String(document.getElementById('adm-bill-wa')?.value || '917065572191').replace(/[^0-9]/g, ''),
             upiId: String(document.getElementById('adm-bill-upi')?.value || '').trim(),
             accountHolder: String(document.getElementById('adm-bill-holder')?.value || '').trim(),
@@ -901,6 +952,7 @@
             updatedAt: new Date().toISOString()
         };
 
+        currentBillingCfg = payload;
         try {
             localStorage.setItem('app_global_billing_config', JSON.stringify(payload));
         } catch (_) {}
@@ -932,7 +984,8 @@
 
         if (btn) { btn.disabled = false; btn.textContent = '💾 Save Payment Settings'; }
         closeAdminBillingModal();
-        alert('✅ Payment & QR Settings save ho gayi! Ab sabhi clients ko yahi details dikhengi.');
+        renderAdminUsersTable();
+        alert(`✅ Settings save ho gayi! Rate: ₹${payload.perKarigerRate} / Kariger`);
     }
 
     window.openAdminModule = openAdminModule;
