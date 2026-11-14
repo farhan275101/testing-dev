@@ -13,11 +13,17 @@
         anonKey: "sb_publishable_NhTU4xzRMi0gtKH4CzVf_Q_lRfzjg3c"
     });
 
+    const PULL_COOLDOWN_MS = 45000; // 45 sec cooldown for focus/visibility pulls
+
     let supabaseClient = null;
     let isConnectedToCloud = false;
     let renderDebounceTimer = null;
     let realtimeChannel = null;
     let isSyncingInProgress = false;
+    let lastFullPullAt = 0;
+    let lastFullPullUid = null;
+    const recentSelfWrites = {};
+    const tablePullTimers = {};
 
     try {
         if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
@@ -31,17 +37,20 @@
 
     const getSafeUserId = () => {
         try {
+            if (window.currentUserId && String(window.currentUserId).trim() && window.currentUserId !== 'app') {
+                return String(window.currentUserId).trim();
+            }
             if (window.currentUserProfile && window.currentUserProfile.id) {
                 return String(window.currentUserProfile.id).trim();
             }
             const authData = localStorage.getItem('app_active_session_auth');
             if (authData) {
                 const parsed = JSON.parse(authData);
-                if (parsed.id) return String(parsed.id).trim();
+                if (parsed && parsed.id) return String(parsed.id).trim();
             }
             if (typeof window.getEffectiveUserId === 'function') {
                 const id = window.getEffectiveUserId();
-                if (id && id !== 'app') return id;
+                if (id && id !== 'app' && id !== '10001') return String(id).trim();
             }
             const stored = localStorage.getItem('app_current_user_id') || localStorage.getItem('currentUserId');
             if (stored) {
@@ -49,7 +58,7 @@
                 if (clean && clean !== 'app') return clean;
             }
         } catch (_) {}
-        return '10001';
+        return null;
     };
 
     const getSafeTenantId = () => {
@@ -67,8 +76,10 @@
                 return window.getActiveFinancialSession();
             }
             const uId = getSafeUserId();
-            const stored = localStorage.getItem(`${uId}_app_active_session`) || localStorage.getItem('app_active_session');
-            if (stored) return String(stored).replace(/['"]+/g, '').trim();
+            if (uId) {
+                const stored = localStorage.getItem(`${uId}_app_active_session`) || localStorage.getItem('app_active_session');
+                if (stored) return String(stored).replace(/['"]+/g, '').trim();
+            }
         } catch (_) {}
         return '2026-2027';
     };
@@ -79,6 +90,8 @@
     const autoPushKarkhanasToSupabase = async () => {
         if (!supabaseClient || !navigator.onLine) return;
         const uid = getSafeUserId();
+        if (!uid) return;
+        const sess = getActiveSessionVal();
 
         let list = [];
         try {
@@ -86,7 +99,16 @@
                 list = window.getKarkhanasSafe();
             }
             if (!Array.isArray(list) || list.length === 0) {
-                list = JSON.parse(localStorage.getItem('karkhana_list') || localStorage.getItem(`${uid}_karkhana_list`) || '[]');
+                const rawPrefixed =
+                    localStorage.getItem(`${uid}_${sess}_karkhana_list`) ||
+                    localStorage.getItem(`${uid}_karkhana_list`);
+                if (rawPrefixed) list = JSON.parse(rawPrefixed);
+            }
+            if (!Array.isArray(list) || list.length === 0) {
+                if (typeof window.getStore === 'function') {
+                    const st = window.getStore('karkhana_list');
+                    if (Array.isArray(st) && st.length > 0) list = st;
+                }
             }
         } catch (_) {}
 
@@ -98,9 +120,10 @@
         }
 
         try {
+            recentSelfWrites['karkhanas'] = Date.now();
             await supabaseClient.from('karkhanas').delete().eq('user_id', uid);
 
-            const rows = list.map((k, idx) => ({
+            const rows = list.map((k) => ({
                 user_id: uid,
                 karkhana_name: String(k.name || 'Karkhana').trim(),
                 is_default: Boolean(k.isDefault || k.id === 'k_main'),
@@ -253,9 +276,10 @@
         if (!targetKey || rowData === undefined || rowData === null) return false;
 
         const uid = getSafeUserId();
+        if (!uid) return false;
         const sess = getActiveSessionVal();
 
-        let shortKey = targetKey;
+        let shortKey = String(targetKey);
         const prefix = `${uid}_${sess}_`;
         if (shortKey.startsWith(prefix)) {
             shortKey = shortKey.replace(prefix, '');
@@ -266,18 +290,30 @@
             : `${uid}_${sess}_${shortKey}`;
 
         try {
-            const currentStr = localStorage.getItem(fullStorageKey);
             const newStr = JSON.stringify(rowData);
+            let currentStr = null;
+
+            if (window.APP_MEMORY_CACHE && window.APP_MEMORY_CACHE[fullStorageKey] !== undefined) {
+                try { currentStr = JSON.stringify(window.APP_MEMORY_CACHE[fullStorageKey]); } catch (_) {}
+            }
+            if (currentStr === null) {
+                try { currentStr = localStorage.getItem(fullStorageKey); } catch (_) {}
+            }
+
             if (currentStr === newStr) return false;
 
             if (window.APP_MEMORY_CACHE) {
                 window.APP_MEMORY_CACHE[fullStorageKey] = rowData;
                 window.APP_MEMORY_CACHE[shortKey] = rowData;
             }
-            localStorage.setItem(fullStorageKey, newStr);
-            localStorage.setItem(shortKey, newStr);
             if (typeof window.idbPut === 'function') {
                 window.idbPut(fullStorageKey, rowData);
+            }
+            try {
+                localStorage.setItem(fullStorageKey, newStr);
+                localStorage.setItem(shortKey, newStr);
+            } catch (_) {
+                // localStorage 5MB quota full hone par bhi IndexedDB & Memory Cache safe rahega
             }
             return true;
         } catch (_) {
@@ -291,22 +327,28 @@
         const targetTable = resolveTargetTable(fullKey);
         if (!targetTable) return false;
 
-        if (targetTable === 'KARKHANA_ACTION') {
-            await autoPushKarkhanasToSupabase();
-            return true;
-        }
-
         const uid = getSafeUserId();
         const tid = getSafeTenantId();
         const sess = getActiveSessionVal();
 
         if (!uid) return false;
+
+        if (targetTable === 'KARKHANA_ACTION') {
+            await autoPushKarkhanasToSupabase();
+            return true;
+        }
+
         showSyncStatus('syncing');
 
         try {
             // ⭐ 1. WORKERS LIST SYNC
             if (targetTable === 'WORKERS_ACTION') {
                 const workersList = Array.isArray(data) ? data : [];
+                const nowMs = Date.now();
+                recentSelfWrites['app_store'] = nowMs;
+                recentSelfWrites['embroidery'] = nowMs;
+                recentSelfWrites['cutting'] = nowMs;
+                recentSelfWrites['calender'] = nowMs;
 
                 try {
                     await supabaseClient.from('app_store').upsert({
@@ -356,6 +398,7 @@
 
             const cleanKey = String(fullKey).replace(`${uid}_${sess}_`, '').replace(`${uid}_`, '');
             const recordId = `${uid}_${sess}_${cleanKey}`;
+            recentSelfWrites[targetTable] = Date.now();
 
             if (targetTable === 'app_store') {
                 await supabaseClient.from('app_store').delete().eq('id', recordId);
@@ -401,6 +444,7 @@
                         groupedStock = window.groupSareeStockByTab(data, 'fresh', 'all') || [];
                     }
                     if (groupedStock.length > 0) {
+                        recentSelfWrites['saree_stock'] = Date.now();
                         await supabaseClient.from('saree_stock').upsert({
                             id: `${uid}_${sess}_saree_stock`,
                             user_id: uid, tenant_id: tid, session: sess,
@@ -418,6 +462,7 @@
                         return t === 'embroidery' || lbl.includes('embroidery') || p.includes('embroidery') || lbl.includes('कढ़ाई');
                     });
                     if (embHistory.length > 0) {
+                        recentSelfWrites['embroidery_history'] = Date.now();
                         await supabaseClient.from('embroidery_history').upsert({
                             id: `${uid}_${sess}_embroidery_history`,
                             user_id: uid, tenant_id: tid, session: sess,
@@ -435,6 +480,7 @@
                         return t === 'cutting' || lbl.includes('cutting') || p.includes('cutting') || lbl.includes('कटिंग');
                     });
                     if (cutHistory.length > 0) {
+                        recentSelfWrites['cutting_history'] = Date.now();
                         await supabaseClient.from('cutting_history').upsert({
                             id: `${uid}_${sess}_cutting_history`,
                             user_id: uid, tenant_id: tid, session: sess,
@@ -452,6 +498,7 @@
                         return t === 'finished' || lbl.includes('calender') || p.includes('calender') || lbl.includes('कैलेंडर');
                     });
                     if (calHistory.length > 0) {
+                        recentSelfWrites['calender_history'] = Date.now();
                         await supabaseClient.from('calender_history').upsert({
                             id: `${uid}_${sess}_calender_history`,
                             user_id: uid, tenant_id: tid, session: sess,
@@ -471,10 +518,81 @@
         }
     };
 
-    const pullAllCloudData = async (silent = true) => {
+    const applyRowsFromTable = (tbl, data, uid) => {
+        if (!Array.isArray(data) || data.length === 0) return false;
+        let hasNewData = false;
+        const sess = getActiveSessionVal();
+        const prefix = `${uid}_${sess}_`;
+
+        data.forEach((row) => {
+            let localKey = row.id || row.key;
+            if (localKey && String(localKey).startsWith(prefix)) {
+                localKey = String(localKey).replace(prefix, '');
+            }
+
+            const mappedLocalKey = mapCloudKeyToLocalKey(localKey, tbl);
+            const rowData = row.data !== undefined ? row.data : (row.value !== undefined ? row.value : row);
+
+            if (mappedLocalKey && rowData !== undefined) {
+                if (mappedLocalKey === 'embroidery_workers' || mappedLocalKey === 'cutting_workers' || mappedLocalKey === 'calender_workers') {
+                    const existing = (typeof window.getStore === 'function') 
+                        ? (window.getStore('jobwork_workers') || []) 
+                        : JSON.parse(localStorage.getItem('jobwork_workers') || '[]');
+                    const incomingType = mappedLocalKey.replace('_workers', '');
+                    const others = existing.filter(w => String(w?.type || '').toLowerCase() !== incomingType);
+                    const merged = [...others, ...(Array.isArray(rowData) ? rowData : [])];
+                    if (smartApplyRemoteData('jobwork_workers', merged)) hasNewData = true;
+                } else {
+                    if (smartApplyRemoteData(mappedLocalKey, rowData)) hasNewData = true;
+                }
+            }
+        });
+        return hasNewData;
+    };
+
+    const pullSingleTable = async (tbl) => {
+        if (!supabaseClient || !navigator.onLine || !tbl) return;
+        const uid = getSafeUserId();
+        if (!uid) return;
+
+        try {
+            if (tbl === 'karkhanas') {
+                const { data: kData } = await supabaseClient.from('karkhanas').select('*').eq('user_id', uid);
+                if (Array.isArray(kData) && kData.length > 0) {
+                    const kList = kData.map(row => ({
+                        id: row.is_default ? 'k_main' : `k_${row.id}`,
+                        name: row.karkhana_name,
+                        isDefault: Boolean(row.is_default)
+                    }));
+                    if (smartApplyRemoteData('karkhana_list', kList)) {
+                        triggerSmartUIRepaint();
+                    }
+                }
+                return;
+            }
+
+            const { data, error } = await supabaseClient
+                .from(tbl)
+                .select('*')
+                .eq('user_id', uid);
+
+            if (!error && data && data.length > 0) {
+                if (applyRowsFromTable(tbl, data, uid)) {
+                    triggerSmartUIRepaint();
+                }
+            }
+        } catch (_) {}
+    };
+
+    const pullAllCloudData = async (silent = true, force = false) => {
         if (!supabaseClient || !navigator.onLine || isSyncingInProgress) return;
         const uid = getSafeUserId();
         if (!uid) return;
+
+        const now = Date.now();
+        if (!force && lastFullPullUid === uid && (now - lastFullPullAt) < PULL_COOLDOWN_MS) {
+            return;
+        }
 
         isSyncingInProgress = true;
         if (!silent) showSyncStatus('syncing');
@@ -520,38 +638,15 @@
                     .eq('user_id', uid);
 
                 if (!error && data && data.length > 0) {
-                    data.forEach((row) => {
-                        let localKey = row.id || row.key;
-                        const sess = getActiveSessionVal();
-                        const prefix = `${uid}_${sess}_`;
-
-                        if (localKey && localKey.startsWith(prefix)) {
-                            localKey = localKey.replace(prefix, '');
-                        }
-
-                        const mappedLocalKey = mapCloudKeyToLocalKey(localKey, tbl);
-                        const rowData = row.data !== undefined ? row.data : (row.value !== undefined ? row.value : row);
-
-                        if (mappedLocalKey && rowData !== undefined) {
-                            if (mappedLocalKey === 'embroidery_workers' || mappedLocalKey === 'cutting_workers' || mappedLocalKey === 'calender_workers') {
-                                const existing = (typeof window.getStore === 'function') 
-                                    ? (window.getStore('jobwork_workers') || []) 
-                                    : JSON.parse(localStorage.getItem('jobwork_workers') || '[]');
-                                const incomingType = mappedLocalKey.replace('_workers', '');
-                                const others = existing.filter(w => String(w?.type || '').toLowerCase() !== incomingType);
-                                const merged = [...others, ...(Array.isArray(rowData) ? rowData : [])];
-                                const updated = smartApplyRemoteData('jobwork_workers', merged);
-                                if (updated) hasNewData = true;
-                            } else {
-                                const updated = smartApplyRemoteData(mappedLocalKey, rowData);
-                                if (updated) hasNewData = true;
-                            }
-                        }
-                    });
+                    if (applyRowsFromTable(tbl, data, uid)) {
+                        hasNewData = true;
+                    }
                 }
             } catch (_) {}
         }
 
+        lastFullPullAt = Date.now();
+        lastFullPullUid = uid;
         isSyncingInProgress = false;
 
         if (hasNewData || !silent) {
@@ -562,22 +657,26 @@
 
     const initSupabaseRealtime = () => {
         if (!supabaseClient) return;
-        detachSupabaseRealtime();
         const uid = getSafeUserId();
+        if (!uid) return; // Login se pehle sync mat chalao
+
+        detachSupabaseRealtime();
 
         try {
-            realtimeChannel = supabaseClient.channel('public_db_realtime')
+            realtimeChannel = supabaseClient.channel(`public_db_realtime_${uid}`)
                 .on(
                     'postgres_changes',
                     { event: '*', schema: 'public' },
                     (payload) => {
                         if (typeof window.isBackupPreviewMode !== 'undefined' && window.isBackupPreviewMode) return;
-                        const row = payload.new;
+                        const row = payload.new || payload.old;
                         if (!row || row.user_id !== uid) return;
 
+                        const tbl = payload.table;
                         const rKey = String(row.key || row.id || '');
-                        if (rKey.includes('app_active_session')) {
-                            const cloudActiveSess = String(row.data !== undefined ? row.data : row.value).replace(/['"]+/g, '').trim();
+                        if (rKey.includes('app_active_session') && payload.new) {
+                            const rawVal = payload.new.data !== undefined ? payload.new.data : payload.new.value;
+                            const cloudActiveSess = String(rawVal || '').replace(/['"]+/g, '').trim();
                             const currentLocalSess = getActiveSessionVal();
 
                             if (/^\d{4}-\d{4}$/.test(cloudActiveSess) && cloudActiveSess !== currentLocalSess) {
@@ -587,8 +686,17 @@
                             }
                         }
 
-                        if (!isSyncingInProgress) {
-                            pullAllCloudData(true);
+                        // Apne khud ke abhi-abhi kiye gaye write ka echo skip karein
+                        if (tbl && recentSelfWrites[tbl] && (Date.now() - recentSelfWrites[tbl]) < 3000) {
+                            return;
+                        }
+
+                        // Sirf wahi 1 table refresh karein jisme badlav aaya (23 tables nahi!)
+                        if (tbl && !isSyncingInProgress) {
+                            if (tablePullTimers[tbl]) clearTimeout(tablePullTimers[tbl]);
+                            tablePullTimers[tbl] = setTimeout(() => {
+                                pullSingleTable(tbl);
+                            }, 350);
                         }
                     }
                 )
@@ -599,7 +707,7 @@
                     }
                 });
 
-            pullAllCloudData(false);
+            pullAllCloudData(false, true);
         } catch (err) {
             console.warn('[CloudEngine] Realtime setup:', err);
         }
@@ -607,6 +715,10 @@
 
     const detachSupabaseRealtime = () => {
         try {
+            Object.keys(tablePullTimers).forEach((t) => {
+                clearTimeout(tablePullTimers[t]);
+                delete tablePullTimers[t];
+            });
             if (realtimeChannel && supabaseClient) {
                 supabaseClient.removeChannel(realtimeChannel);
                 realtimeChannel = null;
@@ -614,14 +726,18 @@
         } catch (_) {}
     };
 
-    const switchSessionListeners = () => { pullAllCloudData(false); };
+    const switchSessionListeners = () => { pullAllCloudData(false, true); };
 
     document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && navigator.onLine) pullAllCloudData(false);
+        if (!document.hidden && navigator.onLine && getSafeUserId()) {
+            pullAllCloudData(true, false);
+        }
     });
 
     window.addEventListener('focus', () => {
-        if (navigator.onLine) pullAllCloudData(false);
+        if (navigator.onLine && getSafeUserId()) {
+            pullAllCloudData(true, false);
+        }
     });
 
     const publicCloudAPI = {
@@ -650,7 +766,7 @@
     window.addEventListener('online', () => {
         isConnectedToCloud = true;
         showSyncStatus('online');
-        initSupabaseRealtime();
+        if (getSafeUserId()) initSupabaseRealtime();
     });
 
     window.addEventListener('offline', () => {
@@ -659,9 +775,11 @@
     });
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => setTimeout(initSupabaseRealtime, 200));
+        document.addEventListener('DOMContentLoaded', () => {
+            if (getSafeUserId()) setTimeout(initSupabaseRealtime, 200);
+        });
     } else {
-        setTimeout(initSupabaseRealtime, 200);
+        if (getSafeUserId()) setTimeout(initSupabaseRealtime, 200);
     }
 
     if (typeof module !== 'undefined' && module.exports) {
