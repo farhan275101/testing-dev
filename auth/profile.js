@@ -4,7 +4,7 @@
    Features:
    - Hidden Password + Requires Old Password to set New Password
    - Live Cloud Storage Usage (KB / MB / GB) via Supabase RPC
-   - Auto Per-Kariger Billing Modal (Karigers x ₹15 + QR + Bank + WhatsApp)
+   - Auto Per-Kariger Billing Modal (Safe UPI Copy + QR + Bank + WhatsApp)
 ============================================================================ */
 
 (() => {
@@ -21,7 +21,7 @@
         upiId: 'farhan275101-2@oksbi',
         whatsappNo: '917065572191',
         qrImageBase64: '',
-        note: 'Payment karne ke baad screenshot WhatsApp par bhej dein.'
+        note: 'Upar diye UPI ID ko Copy karke GPay/PhonePe/Paytm se pay karein aur screenshot WhatsApp par bhej dein.'
     });
 
     /* ========================================================================
@@ -186,7 +186,7 @@
         const done = () => {
             if (btnEl) {
                 btnEl.textContent = '✅ Copied!';
-                setTimeout(() => { btnEl.textContent = origText; }, 1500);
+                setTimeout(() => { btnEl.textContent = origText; }, 1600);
             }
         };
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -276,7 +276,7 @@
     };
 
     /* ========================================================================
-       3. CLIENT PAYMENT / QR CODE MODAL (KARIGER x ₹15)
+       3. CLIENT PAYMENT / QR CODE MODAL (KARIGER x ₹15 — SAFE UPI COPY + QR)
        ------------------------------------------------------------------------
     ======================================================================== */
     const openClientPaymentModal = async (customUser = null) => {
@@ -317,11 +317,11 @@
         const ifsc = cfg.ifscCode || '';
         const waNo = (cfg.whatsappNo || '917065572191').replace(/[^0-9]/g, '');
 
-        const amountPart = totalAmount > 0 ? `&am=${encodeURIComponent(String(totalAmount))}` : '';
-        const upiDeepLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(holder)}${amountPart}&cu=INR&tn=${encodeURIComponent('Simplicity ERP ' + targetUid)}`;
+        // Static UPI QR without &am= so personal UPI IDs don't hit NPCI intent/amount risk block
+        const staticUpiUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(holder)}&cu=INR`;
         const qrSrc = cfg.qrImageBase64
             ? cfg.qrImageBase64
-            : `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiDeepLink)}`;
+            : `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(staticUpiUri)}`;
 
         const waMsg = `Hello Farhan Bhai, maine Simplicity ERP ka payment kar diya hai.\n` +
             `• User ID: ${targetUid || '-'}\n` +
@@ -355,22 +355,25 @@
                         </div>
                         <div style="border-top:1px dashed #86efac; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
                             <span style="font-size:13px; font-weight:800; color:#0f172a;">Kul Payment (${karigerCount} × ₹${rate}):</span>
-                            <strong style="color:#0f766e; font-size:19px; font-weight:900;">₹ ${totalAmount.toLocaleString('en-IN')}</strong>
+                            <strong style="color:#0f766e; font-size:20px; font-weight:900;">₹ ${totalAmount.toLocaleString('en-IN')}</strong>
                         </div>
                         ${minCharge > rawBill ? `<div style="font-size:10.5px; color:#64748b; margin-top:3px;">*(Minimum bill ₹${minCharge} applicable)*</div>` : ''}
                     </div>
 
-                    <!-- QR Code Box -->
+                    <!-- Safe Copy UPI + QR Box -->
                     <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:12px; padding:14px; margin-bottom:12px;">
-                        <div style="font-size:12px; font-weight:800; color:#0f172a; margin-bottom:8px;">Scan QR Code (GPay / PhonePe / Paytm)</div>
-                        <img src="${qrSrc}" alt="Payment QR Code" style="width:185px; height:185px; object-fit:contain; border-radius:10px; border:1px solid #cbd5e1; background:#ffffff; padding:6px;">
-                        <div style="margin-top:10px; display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap;">
-                            <code id="cl-pay-upi-text" style="background:#eff6ff; color:#1d4ed8; padding:5px 10px; border-radius:6px; font-size:12.5px; font-weight:800; border:1px solid #bfdbfe;">${esc(upiId)}</code>
-                            <button type="button" id="cl-copy-upi-btn" style="background:#0f172a; color:#fff; border:none; padding:6px 10px; border-radius:6px; font-size:11.5px; font-weight:700; cursor:pointer;">📋 Copy UPI</button>
+                        <div style="font-size:12px; font-weight:800; color:#0f172a; margin-bottom:8px;">QR Scan Karein Ya UPI ID Copy Karke Pay Karein</div>
+                        <img src="${qrSrc}" alt="Payment QR Code" style="width:180px; height:180px; object-fit:contain; border-radius:10px; border:1px solid #cbd5e1; background:#ffffff; padding:6px;">
+
+                        <div style="margin-top:10px; background:#eff6ff; border:1.5px solid #93c5fd; border-radius:10px; padding:10px;">
+                            <div style="font-size:11px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">UPI ID (Sabse Aasaan — Kabhi Fail Nahi Hoga):</div>
+                            <div style="font-size:14px; font-weight:900; color:#1d4ed8; word-break:break-all; margin-bottom:8px;">${esc(upiId)}</div>
+                            <button type="button" id="cl-copy-upi-btn" style="width:100%; background:#2563eb; color:#fff; border:none; padding:9px; border-radius:7px; font-size:13px; font-weight:800; cursor:pointer;">📋 Copy UPI ID (${esc(upiId)})</button>
                         </div>
-                        <a href="${upiDeepLink}" style="display:inline-block; margin-top:10px; width:100%; box-sizing:border-box; background:#2563eb; color:#ffffff; padding:10px; border-radius:8px; font-size:13px; font-weight:800; text-decoration:none;">
-                            ⚡ UPI App Se Pay Karein${totalAmount > 0 ? ` (₹${totalAmount})` : ''}
-                        </a>
+
+                        <div style="font-size:11px; color:#475569; margin-top:8px; line-height:1.4; text-align:left; background:#fffbeb; border:1px solid #fde68a; padding:7px 9px; border-radius:7px;">
+                            💡 <strong>Payment Tarika:</strong> Upar <strong>Copy UPI ID</strong> dabayein → GPay / PhonePe / Paytm me <em>"Pay UPI ID"</em> me paste karke <strong>₹${totalAmount.toLocaleString('en-IN')}</strong> bhejein (ya dusre phone se QR scan karein).
+                        </div>
                     </div>
 
                     <!-- Bank Details Box -->
@@ -398,7 +401,8 @@
 
         const copyUpiBtn = document.getElementById('cl-copy-upi-btn');
         if (copyUpiBtn) {
-            copyUpiBtn.onclick = () => copyTextWithFeedback(upiId, copyUpiBtn, '📋 Copy UPI');
+            const origLabel = copyUpiBtn.textContent;
+            copyUpiBtn.onclick = () => copyTextWithFeedback(upiId, copyUpiBtn, origLabel);
         }
         const copyAcBtn = document.getElementById('cl-copy-ac-btn');
         if (copyAcBtn && acNo) {
