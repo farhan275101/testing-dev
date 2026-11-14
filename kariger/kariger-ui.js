@@ -40,8 +40,28 @@
         return isNaN(n) || !isFinite(n) ? fallback : n;
     };
 
+    const toIsoDate = (d) => {
+        if (!d) return new Date().toISOString().split('T')[0];
+        const s = String(d).trim();
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+        const parts = s.split(/[-/]/);
+        if (parts.length === 3 && parts[0].length === 2 && parts[2].length === 4) {
+            return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+        return new Date().toISOString().split('T')[0];
+    };
+
     const sanitizeKarigerList = () => {
-        const raw = (typeof window.getStore === 'function') ? window.getStore('kariger_list') : localStorage.getItem('kariger_list');
+        let raw = (typeof window.getStore === 'function') ? window.getStore('kariger_list') : null;
+        if (raw === null || raw === undefined) {
+            try {
+                const uid = window.currentUserId || localStorage.getItem('app_current_user_id') || '';
+                const lsRaw = (uid ? localStorage.getItem(`${uid}_kariger_list`) : null) || localStorage.getItem('kariger_list');
+                raw = lsRaw ? JSON.parse(lsRaw) : [];
+            } catch (_) {
+                raw = [];
+            }
+        }
         const list = window.safeArray ? window.safeArray(raw) : (Array.isArray(raw) ? raw : []);
         return list.filter((k) => k && k.name && String(k.name).trim() !== '');
     };
@@ -49,22 +69,24 @@
     const getKarigerAbsentDays = (kId, joinDate) => {
         if (!kId) return 0;
         const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(kId) : [];
-        let lastDate = joinDate || ((typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0]);
+        const todayIso = toIsoDate((typeof window.getTodayDate === 'function') ? window.getTodayDate() : null);
+        let lastIso = toIsoDate(joinDate || todayIso);
 
         sheets.forEach((sh) => {
             const rows = window.safeArray ? window.safeArray(sh.rows) : [];
             rows.forEach((r) => {
-                if (r && r.date && r.date > lastDate) {
-                    lastDate = r.date;
+                if (r && r.date) {
+                    const rowIso = toIsoDate(r.date);
+                    if (rowIso > lastIso) lastIso = rowIso;
                 }
             });
         });
 
-        const today = new Date((typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0]);
-        const last = new Date(lastDate);
+        const today = new Date(todayIso);
+        const last = new Date(lastIso);
         const diffTime = today - last;
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays > 0 ? diffDays : 0;
+        return (!isNaN(diffDays) && diffDays > 0) ? diffDays : 0;
     };
 
     /* ========================================================================
@@ -591,7 +613,16 @@
             ? window.calculateSheetTotals(cur)
             : { remainingBana: 0, remainingZari: 0, remainingAmt: 0 };
 
-        const nextNum = sheets.length + 1;
+        // Unique sheet number (beech ki sheet delete karne par bhi duplicate ID na bane)
+        let maxNum = sheets.length;
+        sheets.forEach((s) => {
+            if (!s) return;
+            const m1 = String(s.id || '').match(/(\d+)$/);
+            const m2 = String(s.title || '').match(/(\d+)$/);
+            if (m1) maxNum = Math.max(maxNum, parseInt(m1[1], 10) || 0);
+            if (m2) maxNum = Math.max(maxNum, parseInt(m2[1], 10) || 0);
+        });
+        const nextNum = maxNum + 1;
 
         // 2. Naye ready taane ke 8 colors extract karein (purani sheet se copy nahi hoga!)
         const newColors = [];
@@ -779,27 +810,31 @@
         sh.chukkaWazan = newChukkaWazan;
 
         // Manual Tani Wazan stock deduction
-        if (sh.taniItem && (newTaniWazan !== oldTaniWazan || sh.taniItem !== oldTaniItem)) {
-            const sList = window.safeArray ? window.safeArray(window.getStore('sancha_items')) : [];
-            if (oldTaniItem && oldTaniItem !== sh.taniItem && oldTaniWazan > 0) {
+        const taniItemChanged = oldTaniItem.toLowerCase() !== sh.taniItem.toLowerCase();
+        if (newTaniWazan !== oldTaniWazan || taniItemChanged) {
+            if (oldTaniItem && taniItemChanged && oldTaniWazan > 0) {
                 revertSanchaStock(oldTaniItem, 'tani', oldTaniWazan);
             }
-            const tFound = sList.find((x) => {
-                const matchKid = (!x.karkhanaId && kGodown === 'k_main') || String(x.karkhanaId) === String(kGodown);
-                return x && x.name && x.name.toLowerCase() === sh.taniItem.toLowerCase() && (x.category || 'tani').toLowerCase() === 'tani' && matchKid;
-            });
-            if (tFound) {
-                const diffT = newTaniWazan - oldTaniWazan;
-                tFound.gaya = Math.max(0, safeNum((safeNum(tFound.gaya) + diffT).toFixed(2)));
-                tFound.bacha = safeNum((safeNum(tFound.aaya) - tFound.gaya).toFixed(2));
-                if (typeof window.setStore === 'function') window.setStore('sancha_items', sList);
+
+            if (sh.taniItem) {
+                const sList = window.safeArray ? window.safeArray(window.getStore('sancha_items')) : [];
+                const tFound = sList.find((x) => {
+                    const matchKid = (!x.karkhanaId && kGodown === 'k_main') || String(x.karkhanaId) === String(kGodown);
+                    return x && x.name && x.name.toLowerCase() === sh.taniItem.toLowerCase() && (x.category || 'tani').toLowerCase() === 'tani' && matchKid;
+                });
+                if (tFound) {
+                    const diffT = (oldTaniItem && taniItemChanged) ? newTaniWazan : (newTaniWazan - oldTaniWazan);
+                    tFound.gaya = Math.max(0, safeNum((safeNum(tFound.gaya) + diffT).toFixed(2)));
+                    tFound.bacha = safeNum((safeNum(tFound.aaya) - tFound.gaya).toFixed(2));
+                    if (typeof window.setStore === 'function') window.setStore('sancha_items', sList);
+                }
             }
 
             let sHist = window.safeArray ? window.safeArray(window.getStore('sancha_history')) : [];
             const refKey = `${window.activeKarigerId}_${sh.id}_tani`;
             sHist = sHist.filter((h) => !h || h.refId !== refKey);
 
-            if (newTaniWazan > 0) {
+            if (sh.taniItem && newTaniWazan > 0) {
                 sHist.push({
                     id: `shist_${Date.now()}_t`,
                     refId: refKey,
@@ -818,27 +853,31 @@
         }
 
         // Manual Chukka Wazan stock deduction
-        if (sh.chukkaItem && (newChukkaWazan !== oldChukkaWazan || sh.chukkaItem !== oldChukkaItem)) {
-            const sList2 = window.safeArray ? window.safeArray(window.getStore('sancha_items')) : [];
-            if (oldChukkaItem && oldChukkaItem !== sh.chukkaItem && oldChukkaWazan > 0) {
+        const chukkaItemChanged = oldChukkaItem.toLowerCase() !== sh.chukkaItem.toLowerCase();
+        if (newChukkaWazan !== oldChukkaWazan || chukkaItemChanged) {
+            if (oldChukkaItem && chukkaItemChanged && oldChukkaWazan > 0) {
                 revertSanchaStock(oldChukkaItem, 'chukka', oldChukkaWazan);
             }
-            const cFound = sList2.find((x) => {
-                const matchKid = (!x.karkhanaId && kGodown === 'k_main') || String(x.karkhanaId) === String(kGodown);
-                return x && x.name && x.name.toLowerCase() === sh.chukkaItem.toLowerCase() && (x.category || '').toLowerCase() === 'chukka' && matchKid;
-            });
-            if (cFound) {
-                const diffC = newChukkaWazan - oldChukkaWazan;
-                cFound.gaya = Math.max(0, safeNum((safeNum(cFound.gaya) + diffC).toFixed(2)));
-                cFound.bacha = safeNum((safeNum(cFound.aaya) - cFound.gaya).toFixed(2));
-                if (typeof window.setStore === 'function') window.setStore('sancha_items', sList2);
+
+            if (sh.chukkaItem) {
+                const sList2 = window.safeArray ? window.safeArray(window.getStore('sancha_items')) : [];
+                const cFound = sList2.find((x) => {
+                    const matchKid = (!x.karkhanaId && kGodown === 'k_main') || String(x.karkhanaId) === String(kGodown);
+                    return x && x.name && x.name.toLowerCase() === sh.chukkaItem.toLowerCase() && (x.category || '').toLowerCase() === 'chukka' && matchKid;
+                });
+                if (cFound) {
+                    const diffC = (oldChukkaItem && chukkaItemChanged) ? newChukkaWazan : (newChukkaWazan - oldChukkaWazan);
+                    cFound.gaya = Math.max(0, safeNum((safeNum(cFound.gaya) + diffC).toFixed(2)));
+                    cFound.bacha = safeNum((safeNum(cFound.aaya) - cFound.gaya).toFixed(2));
+                    if (typeof window.setStore === 'function') window.setStore('sancha_items', sList2);
+                }
             }
 
             let sHist2 = window.safeArray ? window.safeArray(window.getStore('sancha_history')) : [];
             const refKey2 = `${window.activeKarigerId}_${sh.id}_chukka`;
             sHist2 = sHist2.filter((h) => !h || h.refId !== refKey2);
 
-            if (newChukkaWazan > 0) {
+            if (sh.chukkaItem && newChukkaWazan > 0) {
                 sHist2.push({
                     id: `shist_${Date.now()}_c`,
                     refId: refKey2,
@@ -1574,7 +1613,7 @@
     window.KarigerUIEngine = karigerUIAPI;
 })();
 /* ============================================================================
-   KARIGER MOBILE PORTAL ADMIN MODAL (NO index.html EDIT NEEDED)
+   KARIGER MOBILE PORTAL ADMIN MODAL (STRICT TENANT LOCKED)
 ============================================================================ */
 (() => {
     'use strict';
@@ -1585,6 +1624,7 @@
 
     let sbClient = null;
     const getSb = () => {
+        if (window.supabaseClient) return window.supabaseClient;
         if (sbClient) return sbClient;
         if (window.supabase && typeof window.supabase.createClient === 'function') {
             sbClient = window.supabase.createClient(SB_URL, SB_KEY);
@@ -1593,29 +1633,35 @@
     };
 
     const detectTenantId = () => {
-        if (window.currentTenantId) return String(window.currentTenantId);
-        if (window.tenantId) return String(window.tenantId);
-        if (window.CloudEngine && typeof window.CloudEngine.getTenantId === 'function') {
-            const t = window.CloudEngine.getTenantId();
-            if (t) return String(t);
+        if (window.currentUserId && String(window.currentUserId).trim()) {
+            return String(window.currentUserId).trim();
         }
-        const directKeys = ['tenant_id', 'erp_tenant_id', 'current_tenant_id', 'user_id', 'kariger_portal_tenant_id'];
-        for (const k of directKeys) {
-            const v = localStorage.getItem(k);
-            if (v && v.trim()) return v.trim();
+        if (window.currentTenantId && String(window.currentTenantId).trim()) {
+            return String(window.currentTenantId).trim();
         }
-        for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i);
-            if (k && k.endsWith('_kariger_list')) {
-                return k.split('_')[0];
+        const savedUid = localStorage.getItem('app_current_user_id');
+        if (savedUid && savedUid.trim()) return savedUid.trim();
+        try {
+            const rawAuth = localStorage.getItem('app_active_session_auth');
+            if (rawAuth) {
+                const parsed = JSON.parse(rawAuth);
+                if (parsed && parsed.id) return String(parsed.id).trim();
             }
-        }
-        const manual = prompt('Apna Karkhana / User ID daalein (jaise: farhan):', localStorage.getItem('kariger_portal_tenant_id') || 'farhan');
-        if (manual && manual.trim()) {
-            localStorage.setItem('kariger_portal_tenant_id', manual.trim());
-            return manual.trim();
-        }
-        return 'farhan';
+        } catch (_) {}
+        return null;
+    };
+
+    const getDefaultFirmName = (tenantId) => {
+        const saved = tenantId ? localStorage.getItem(`${tenantId}_kariger_portal_firm_name`) : null;
+        if (saved && saved.trim()) return saved.trim();
+        try {
+            const rawAuth = localStorage.getItem('app_active_session_auth');
+            if (rawAuth) {
+                const parsed = JSON.parse(rawAuth);
+                if (parsed && parsed.name) return String(parsed.name).trim();
+            }
+        } catch (_) {}
+        return 'Simplicity ERP';
     };
 
     const escH = (s) => String(s || '').replace(/[&<>"']/g, (m) => ({
@@ -1629,6 +1675,10 @@
         if (!sb) return;
         const tenantId = detectTenantId();
         const tbody = document.getElementById('kp-accounts-tbody');
+        if (!tenantId) {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#dc2626; padding:12px;">Pehle apne account se login karein!</td></tr>';
+            return;
+        }
         if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:12px;">Loading... ⏳</td></tr>';
 
         const { data, error } = await sb.rpc('kariger_admin_list_accounts', { p_tenant_id: tenantId });
@@ -1683,6 +1733,8 @@
         const sb = getSb();
         if (!sb) return alert('Supabase library load nahi hui.');
         const tenantId = detectTenantId();
+        if (!tenantId) return alert('Pehle apne account se login karein!');
+
         const sel = document.getElementById('kp-kar-select');
         const karigerId = sel?.value || '';
         const karigerName = sel?.options[sel.selectedIndex]?.dataset?.name || 'Kariger';
@@ -1695,7 +1747,7 @@
         if (mobile.length !== 10) return alert('10-digit Mobile Number daalein!');
         if (pin.length !== 4) return alert('4-digit PIN daalein!');
 
-        localStorage.setItem('kariger_portal_firm_name', firm);
+        localStorage.setItem(`${tenantId}_kariger_portal_firm_name`, firm);
 
         const btn = document.getElementById('kp-save-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Saving... ⏳'; }
@@ -1722,9 +1774,10 @@
     window.kpDeleteAcc = async (karigerId) => {
         if (!confirm('Is Kariger ka Mobile Portal login delete karein?')) return;
         const sb = getSb();
-        if (!sb) return;
+        const tenantId = detectTenantId();
+        if (!sb || !tenantId) return;
         await sb.rpc('kariger_admin_delete_account', {
-            p_tenant_id: detectTenantId(),
+            p_tenant_id: tenantId,
             p_kariger_id: karigerId
         });
         await loadKarigerPortalAccounts();
@@ -1753,6 +1806,9 @@
     };
 
     window.openKarigerPortalLoginModal = (preselectKarigerId = null) => {
+        const tenantId = detectTenantId();
+        if (!tenantId) return alert('Pehle apne account se login karein!');
+
         const old = document.getElementById('kariger-portal-admin-modal');
         if (old) old.remove();
 
@@ -1761,7 +1817,7 @@
             `<option value="${escH(k.id)}" data-name="${escH(k.name)}">${escH(k.name)}${k.mobile ? ' (' + escH(k.mobile) + ')' : ''}</option>`
         ).join('');
 
-        const savedFirm = localStorage.getItem('kariger_portal_firm_name') || 'Farhan jawed';
+        const savedFirm = getDefaultFirmName(tenantId);
 
         const html = `
         <div id="kariger-portal-admin-modal" style="position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:999999; display:flex; align-items:center; justify-content:center; padding:12px;">
