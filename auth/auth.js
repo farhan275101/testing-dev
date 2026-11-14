@@ -14,6 +14,7 @@
     ======================================================================== */
     window.currentUserId = null;
     window.currentUserRole = null;
+    window.currentTenantId = null;
     window.activeKarigerId = null;
     window.activeSheetId = null;
     window.currentDayBookTab = 'bana';
@@ -22,20 +23,6 @@
     window.activeSanchaItemId = null;
 
     let _activeSessionAuthCache = null;
-
-    // Default Fallback Admin (Bootstrap & Offline Safety)
-    const DEFAULT_BOOTSTRAP_ADMIN = Object.freeze({
-        id: 'farhan',
-        name: 'Farhan jawed',
-        pass: '97438090641154',
-        mobile: '7065572191',
-        email: 'farhanjawed@gmail.com',
-        pin: '9743',
-        role: 'admin',
-        status: 'active',
-        date: '2026-01-01',
-        expiryDate: ''
-    });
 
     /* ========================================================================
        2. DEFENSIVE UTILITY HELPERS
@@ -64,7 +51,7 @@
     };
 
     const getSupabase = () => {
-        return window.supabaseClient || window.supabase || (typeof window.supabase !== 'undefined' ? window.supabase : null);
+        return window.supabaseClient || (window.CloudEngine && window.CloudEngine.supabase) || null;
     };
 
     const sanitizeId = (id) => String(id || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
@@ -79,6 +66,36 @@
         return todayIso > user.expiryDate;
     };
 
+    const clearUnprefixedLocalData = (keepUserId = null) => {
+        try {
+            const unprefixedKeys = [
+                'karkhana_list', 'kariger_list', 'tani_orders_list', 'tani_learned_colors',
+                'tani_learned_rangi', 'sancha_items', 'sancha_history', 'bana_stock',
+                'bana_history', 'zari_stock', 'zari_history', 'saree_stock', 'saree_history',
+                'payments', 'payment_list', 'material_transfers', 'dukan_challans',
+                'jobwork_workers', 'jw_bills_list', 'jw_payments_list',
+                'kariger_portal_tenant_id', 'kariger_portal_firm_name',
+                'app_active_session', 'app_current_tenant_id', 'tenantId',
+                'tenant_id', 'erp_tenant_id', 'current_tenant_id', 'user_id', 'currentUserId'
+            ];
+            unprefixedKeys.forEach((k) => localStorage.removeItem(k));
+
+            // Agar naya user pichle user se alag hai to pichle user ke cached keys bhi saaf karein
+            if (keepUserId) {
+                const toRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (!k) continue;
+                    if (k === 'app_current_user_id' || k === 'app_active_session_auth' || k === 'app_last_user_id') continue;
+                    if (!k.startsWith(`${keepUserId}_`)) {
+                        toRemove.push(k);
+                    }
+                }
+                toRemove.forEach((k) => localStorage.removeItem(k));
+            }
+        } catch (_) {}
+    };
+
     /* ========================================================================
        3. USER LOOKUP (SUPABASE)
        ------------------------------------------------------------------------
@@ -91,7 +108,7 @@
         if (sb) {
             try {
                 // Check by user_id
-                let { data, error } = await sb
+                let { data } = await sb
                     .from('karkhana_users')
                     .select('*')
                     .eq('user_id', cleanQuery)
@@ -127,10 +144,6 @@
             }
         }
 
-        if (cleanQuery === 'farhan' || cleanQuery === '7065572191') {
-            return DEFAULT_BOOTSTRAP_ADMIN;
-        }
-
         return getCachedUserLocal(cleanQuery);
     };
 
@@ -149,8 +162,6 @@
                     return parsed;
                 }
             }
-
-            if (identifier === 'farhan' || identifier === '7065572191') return DEFAULT_BOOTSTRAP_ADMIN;
         } catch (_) {}
         return null;
     };
@@ -213,53 +224,50 @@
                 return;
             }
 
-            // 🔍 5-POINT EXACT MATCH CHECK IN SUPABASE
-            const { data: allUsers, error: fetchErr } = await sb
-                .from('karkhana_users')
-                .select('user_id, full_name, mobile, email, pin');
+            // 🔍 5-POINT CHECK WITHOUT DOWNLOADING ALL USERS' DATA
+            const [nameRes, idRes, mobRes, emailRes, pinRes] = await Promise.all([
+                sb.from('karkhana_users').select('user_id').ilike('full_name', name).limit(1),
+                sb.from('karkhana_users').select('user_id').eq('user_id', id).limit(1),
+                sb.from('karkhana_users').select('user_id').eq('mobile', mobile).limit(1),
+                email ? sb.from('karkhana_users').select('user_id').ilike('email', email).limit(1) : Promise.resolve({ data: [] }),
+                sb.from('karkhana_users').select('user_id').eq('pin', pin).limit(1)
+            ]);
 
-            if (fetchErr) throw fetchErr;
+            if (nameRes.error) throw nameRes.error;
+            if (idRes.error) throw idRes.error;
+            if (mobRes.error) throw mobRes.error;
+            if (emailRes.error) throw emailRes.error;
+            if (pinRes.error) throw pinRes.error;
 
-            if (allUsers && allUsers.length > 0) {
-                // 1. Name Check
-                if (allUsers.some(u => String(u.full_name || '').trim().toLowerCase() === name.toLowerCase())) {
-                    msg.textContent = '⚠️ Koi aur name select karein';
-                    msg.className = 'message error';
-                    msg.style.display = 'block';
-                    return;
-                }
-
-                // 2. User ID Check
-                if (allUsers.some(u => String(u.user_id || '').trim().toLowerCase() === id.toLowerCase())) {
-                    msg.textContent = '⚠️ Koi aur user ID select karein';
-                    msg.className = 'message error';
-                    msg.style.display = 'block';
-                    return;
-                }
-
-                // 3. Mobile Check
-                if (allUsers.some(u => String(u.mobile || '').trim() === mobile)) {
-                    msg.textContent = '⚠️ Koi aur mobile number select karein';
-                    msg.className = 'message error';
-                    msg.style.display = 'block';
-                    return;
-                }
-
-                // 4. Gmail Check
-                if (email && allUsers.some(u => String(u.email || '').trim().toLowerCase() === email)) {
-                    msg.textContent = '⚠️ Koi aur gmail select karein';
-                    msg.className = 'message error';
-                    msg.style.display = 'block';
-                    return;
-                }
-
-                // 5. Secret PIN Check
-                if (allUsers.some(u => String(u.pin || '').trim() === pin)) {
-                    msg.textContent = '⚠️ Koi aur secret PIN select karein';
-                    msg.className = 'message error';
-                    msg.style.display = 'block';
-                    return;
-                }
+            if (nameRes.data && nameRes.data.length > 0) {
+                msg.textContent = '⚠️ Koi aur name select karein';
+                msg.className = 'message error';
+                msg.style.display = 'block';
+                return;
+            }
+            if (idRes.data && idRes.data.length > 0) {
+                msg.textContent = '⚠️ Koi aur user ID select karein';
+                msg.className = 'message error';
+                msg.style.display = 'block';
+                return;
+            }
+            if (mobRes.data && mobRes.data.length > 0) {
+                msg.textContent = '⚠️ Koi aur mobile number select karein';
+                msg.className = 'message error';
+                msg.style.display = 'block';
+                return;
+            }
+            if (email && emailRes.data && emailRes.data.length > 0) {
+                msg.textContent = '⚠️ Koi aur gmail select karein';
+                msg.className = 'message error';
+                msg.style.display = 'block';
+                return;
+            }
+            if (pinRes.data && pinRes.data.length > 0) {
+                msg.textContent = '⚠️ Koi aur secret PIN select karein';
+                msg.className = 'message error';
+                msg.style.display = 'block';
+                return;
             }
 
             // सारे 5 चेक पास होने पर 30-दिन की रिक्वेस्ट सबमिट करें
@@ -389,7 +397,9 @@
                 email: user.email || '',
                 pass: user.pass,
                 pin: user.pin,
-                role: user.role || 'owner'
+                role: user.role || 'owner',
+                status: user.status || 'active',
+                expiryDate: user.expiryDate || ''
             };
 
             _activeSessionAuthCache = authPayload;
@@ -419,7 +429,17 @@
             window.clearMemoryCache();
         }
 
+        // Agar same phone par doosra user login kar raha hai to pichle user ka local cache clean karein
+        const lastUid = localStorage.getItem('app_last_user_id');
+        if (lastUid && lastUid !== user.id) {
+            clearUnprefixedLocalData(user.id);
+        } else {
+            clearUnprefixedLocalData(null);
+        }
+        localStorage.setItem('app_last_user_id', user.id);
+
         window.currentUserId = user.id;
+        window.currentTenantId = user.id;
         window.currentUserRole = user.role || (user.id === 'farhan' ? 'admin' : 'owner');
 
         const err = document.getElementById('login-error');
@@ -479,6 +499,31 @@
 
             if (savedSession && savedSession.id && !isUserExpired(savedSession)) {
                 executeSuccessfulLogin(savedSession);
+
+                // Online hone par background me check karein ki user blocked ya expired to nahi hua
+                if (navigator.onLine) {
+                    fetchUserByIdentifier(savedSession.id).then((freshUser) => {
+                        if (!freshUser) return;
+                        const st = String(freshUser.status || '').toLowerCase().trim();
+                        if (st === 'blocked' || st === 'pending' || isUserExpired(freshUser)) {
+                            alert('⛔ Aapka account block ya expire ho chuka hai! Admin se contact karein.');
+                            logout();
+                        } else {
+                            // Updated expiry/status cache karein
+                            try {
+                                const updated = {
+                                    ...savedSession,
+                                    name: freshUser.name,
+                                    role: freshUser.role || savedSession.role,
+                                    status: freshUser.status || 'active',
+                                    expiryDate: freshUser.expiryDate || ''
+                                };
+                                _activeSessionAuthCache = updated;
+                                localStorage.setItem('app_active_session_auth', JSON.stringify(updated));
+                            } catch (_) {}
+                        }
+                    }).catch(() => {});
+                }
             } else {
                 showLogin();
             }
@@ -500,12 +545,14 @@
 
         window.currentUserId = null;
         window.currentUserRole = null;
+        window.currentTenantId = null;
         window.activeKarigerId = null;
         window.activeSheetId = null;
         _activeSessionAuthCache = null;
 
         localStorage.removeItem('app_current_user_id');
         localStorage.removeItem('app_active_session_auth');
+        clearUnprefixedLocalData(null);
 
         const idInput = document.getElementById('login-id');
         const passInput = document.getElementById('login-pass');
