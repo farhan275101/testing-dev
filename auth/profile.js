@@ -1,10 +1,10 @@
 /* ============================================================================
-   SIMPLICITY ERP - SECURE USER PROFILE, STORAGE & RENEWAL PAYMENT ENGINE
+   SIMPLICITY ERP - SECURE USER PROFILE, STORAGE & PER-KARIGER PAYMENT ENGINE
    File: auth/profile.js • Developed by Farhan Jawed
    Features:
    - Hidden Password + Requires Old Password to set New Password
    - Live Cloud Storage Usage (KB / MB / GB) via Supabase RPC
-   - Client Renewal / Payment Modal (Admin QR + UPI + Bank Details + WhatsApp)
+   - Auto Per-Kariger Billing Modal (Karigers x ₹15 + QR + Bank + WhatsApp)
 ============================================================================ */
 
 (() => {
@@ -12,7 +12,8 @@
 
     const BILLING_CONFIG_ID = 'farhan_global_billing_config';
     const DEFAULT_BILLING_CONFIG = Object.freeze({
-        planPrice: '299',
+        perKarigerRate: '15',
+        minCharge: '0',
         accountHolder: 'FARHAN JAWED',
         bankName: 'State Bank of India',
         accountNumber: '',
@@ -120,6 +121,39 @@
         return estimateLocalStorageBytes(uid);
     };
 
+    const getLocalMasterKarigerCount = () => {
+        try {
+            if (typeof window.sanitizeKarigerList === 'function') {
+                return window.sanitizeKarigerList().length;
+            }
+            if (typeof window.getStore === 'function') {
+                const raw = window.getStore('kariger_list');
+                const arr = window.safeArray ? window.safeArray(raw) : (Array.isArray(raw) ? raw : []);
+                return arr.filter((k) => k && k.name && String(k.name).trim() !== '').length;
+            }
+        } catch (_) {}
+        return 0;
+    };
+
+    const fetchUserMasterKarigerCount = async (uid, isLoggedInCurrent) => {
+        if (isLoggedInCurrent) {
+            const localCnt = getLocalMasterKarigerCount();
+            if (localCnt > 0) return localCnt;
+        }
+
+        const sb = getSupabase();
+        if (sb && navigator.onLine && uid) {
+            try {
+                const { data, error } = await sb.rpc('get_single_user_kariger_count', { p_uid: uid });
+                if (!error && data !== null && data !== undefined) {
+                    return Number(data) || 0;
+                }
+            } catch (_) {}
+        }
+
+        return isLoggedInCurrent ? getLocalMasterKarigerCount() : 0;
+    };
+
     const fetchBillingConfigForClient = async () => {
         let cfg = { ...DEFAULT_BILLING_CONFIG };
         try {
@@ -192,7 +226,7 @@
                         </div>
 
                         <button type="button" onclick="openClientPaymentModal()" style="width:100%; background:linear-gradient(135deg, #2563eb, #0f766e); color:#fff; border:none; padding:10px; border-radius:9px; font-size:13px; font-weight:800; cursor:pointer; margin-bottom:14px;">
-                            💳 Plan Renew / QR Code & Bank Details Dekhein
+                            💳 Kariger Bill (₹15/Kariger) • QR & Bank Details
                         </button>
 
                         <div style="margin-bottom:10px;">
@@ -242,30 +276,40 @@
     };
 
     /* ========================================================================
-       3. CLIENT PAYMENT / QR CODE MODAL (FOR RENEWALS)
+       3. CLIENT PAYMENT / QR CODE MODAL (KARIGER x ₹15)
        ------------------------------------------------------------------------
     ======================================================================== */
     const openClientPaymentModal = async (customUser = null) => {
         closeClientPaymentModal();
 
+        const activeUid = getActiveUid();
+        const isLoggedInCurrent = Boolean(!customUser && activeUid);
         const user = customUser || (await getCurrentUserRecord()) || {
-            id: getActiveUid() || 'User',
+            id: activeUid || 'User',
             name: 'Karkhana Client',
             expiryDate: ''
         };
+        const targetUid = String(user.id || activeUid || '').trim();
 
         const loadingHtml = `
         <div id="client-payment-modal" style="position:fixed; inset:0; background:rgba(15,23,42,0.82); z-index:9999999; display:flex; align-items:center; justify-content:center; padding:12px; box-sizing:border-box;">
             <div style="background:#fff; padding:24px 30px; border-radius:14px; font-family:sans-serif; font-weight:700; color:#0f172a;">
-                Payment QR Load Ho Raha Hai... ⏳
+                Karigers & Payment Hisab Load Ho Raha Hai... ⏳
             </div>
         </div>`;
         document.body.insertAdjacentHTML('beforeend', loadingHtml);
 
-        const cfg = await fetchBillingConfigForClient();
+        const [cfg, karigerCount] = await Promise.all([
+            fetchBillingConfigForClient(),
+            fetchUserMasterKarigerCount(targetUid, isLoggedInCurrent)
+        ]);
         closeClientPaymentModal();
 
-        const price = cfg.planPrice || '299';
+        const rate = Math.max(0, Number(cfg.perKarigerRate ?? 15) || 0);
+        const minCharge = Math.max(0, Number(cfg.minCharge ?? 0) || 0);
+        const rawBill = karigerCount * rate;
+        const totalAmount = Math.max(minCharge, rawBill);
+
         const upiId = cfg.upiId || 'farhan275101-2@oksbi';
         const holder = cfg.accountHolder || 'FARHAN JAWED';
         const bank = cfg.bankName || 'State Bank of India';
@@ -273,15 +317,18 @@
         const ifsc = cfg.ifscCode || '';
         const waNo = (cfg.whatsappNo || '917065572191').replace(/[^0-9]/g, '');
 
-        const upiDeepLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(holder)}${price ? `&am=${encodeURIComponent(price)}` : ''}&cu=INR&tn=${encodeURIComponent('Simplicity ERP ' + (user.id || ''))}`;
+        const amountPart = totalAmount > 0 ? `&am=${encodeURIComponent(String(totalAmount))}` : '';
+        const upiDeepLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(holder)}${amountPart}&cu=INR&tn=${encodeURIComponent('Simplicity ERP ' + targetUid)}`;
         const qrSrc = cfg.qrImageBase64
             ? cfg.qrImageBase64
             : `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiDeepLink)}`;
 
         const waMsg = `Hello Farhan Bhai, maine Simplicity ERP ka payment kar diya hai.\n` +
-            `• User ID: ${user.id || '-'}\n` +
+            `• User ID: ${targetUid || '-'}\n` +
             `• Naam: ${user.name || '-'}\n` +
-            `• Amount: ₹${price}\n` +
+            `• Master Sheet Karigers: ${karigerCount}\n` +
+            `• Rate: ₹${rate} / Kariger\n` +
+            `• Total Payment: ₹${totalAmount}\n` +
             `(Screenshot saath bhej raha hoon, kripya validity badha dein)`;
 
         const html = `
@@ -289,28 +336,40 @@
             <div style="background:#ffffff; width:100%; max-width:420px; border-radius:16px; overflow:hidden; box-shadow:0 25px 50px rgba(0,0,0,0.45); font-family:sans-serif; max-height:95vh; display:flex; flex-direction:column;">
                 <div style="background:#0f172a; color:#ffffff; padding:14px 18px; display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <h3 style="margin:0; font-size:16px; font-weight:800;">💳 Plan Renewal & Payment</h3>
-                        <div style="font-size:11.5px; color:#94a3b8;">User ID: ${esc(user.id || '-')} • Monthly: ₹${esc(price)}</div>
+                        <h3 style="margin:0; font-size:16px; font-weight:800;">💳 Plan Payment (Kariger Hisab)</h3>
+                        <div style="font-size:11.5px; color:#94a3b8;">User ID: ${esc(targetUid || '-')} • Rate: ₹${esc(rate)} / Kariger</div>
                     </div>
                     <button type="button" onclick="closeClientPaymentModal()" style="background:transparent; border:none; color:#fff; font-size:24px; cursor:pointer; line-height:1;">&times;</button>
                 </div>
 
                 <div style="padding:16px 18px; overflow-y:auto; flex:1; text-align:center;">
-                    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:8px 12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; font-size:12px;">
-                        <span style="color:#166534; font-weight:700;">Monthly Charge:</span>
-                        <strong style="color:#0f766e; font-size:16px;">₹ ${esc(price)}</strong>
+                    <!-- Per-Kariger Bill Calculation Card -->
+                    <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:10px 14px; margin-bottom:12px; text-align:left;">
+                        <div style="display:flex; justify-content:space-between; font-size:12.5px; color:#166534; margin-bottom:4px;">
+                            <span>🧵 Master Sheet Karigers:</span>
+                            <strong>${karigerCount} Kariger</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; font-size:12.5px; color:#166534; margin-bottom:6px;">
+                            <span>💵 Rate (1 Kariger):</span>
+                            <strong>₹ ${esc(rate)}</strong>
+                        </div>
+                        <div style="border-top:1px dashed #86efac; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:13px; font-weight:800; color:#0f172a;">Kul Payment (${karigerCount} × ₹${rate}):</span>
+                            <strong style="color:#0f766e; font-size:19px; font-weight:900;">₹ ${totalAmount.toLocaleString('en-IN')}</strong>
+                        </div>
+                        ${minCharge > rawBill ? `<div style="font-size:10.5px; color:#64748b; margin-top:3px;">*(Minimum bill ₹${minCharge} applicable)*</div>` : ''}
                     </div>
 
                     <!-- QR Code Box -->
                     <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:12px; padding:14px; margin-bottom:12px;">
                         <div style="font-size:12px; font-weight:800; color:#0f172a; margin-bottom:8px;">Scan QR Code (GPay / PhonePe / Paytm)</div>
-                        <img src="${qrSrc}" alt="Payment QR Code" style="width:190px; height:190px; object-fit:contain; border-radius:10px; border:1px solid #cbd5e1; background:#ffffff; padding:6px;">
+                        <img src="${qrSrc}" alt="Payment QR Code" style="width:185px; height:185px; object-fit:contain; border-radius:10px; border:1px solid #cbd5e1; background:#ffffff; padding:6px;">
                         <div style="margin-top:10px; display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap;">
                             <code id="cl-pay-upi-text" style="background:#eff6ff; color:#1d4ed8; padding:5px 10px; border-radius:6px; font-size:12.5px; font-weight:800; border:1px solid #bfdbfe;">${esc(upiId)}</code>
                             <button type="button" id="cl-copy-upi-btn" style="background:#0f172a; color:#fff; border:none; padding:6px 10px; border-radius:6px; font-size:11.5px; font-weight:700; cursor:pointer;">📋 Copy UPI</button>
                         </div>
                         <a href="${upiDeepLink}" style="display:inline-block; margin-top:10px; width:100%; box-sizing:border-box; background:#2563eb; color:#ffffff; padding:10px; border-radius:8px; font-size:13px; font-weight:800; text-decoration:none;">
-                            ⚡ UPI App Se Pay Karein (GPay / PhonePe)
+                            ⚡ UPI App Se Pay Karein${totalAmount > 0 ? ` (₹${totalAmount})` : ''}
                         </a>
                     </div>
 
@@ -398,7 +457,6 @@
                 passEl.value = '';
             }
 
-            // Validity Display
             const valEl = document.getElementById('prof-validity-val');
             if (valEl) {
                 const isAdmin = (String(user.role || '').toLowerCase() === 'admin' || String(uid).toLowerCase() === 'farhan');
@@ -414,7 +472,6 @@
                 }
             }
 
-            // Storage Display (live from Supabase RPC)
             const stgEl = document.getElementById('prof-storage-val');
             if (stgEl) {
                 stgEl.textContent = 'Checking...';
