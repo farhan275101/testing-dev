@@ -2,27 +2,45 @@
    SIMPLICITY ERP - ENTERPRISE MULTI-KARKHANA & GODOWN ENGINE
    File: core/karkhana.js • Developed by Farhan Jawed
    Architecture: High-Performance Multi-Branch Logistics & Inter-Transfer Ledger
-   Scale: Multi-Tenant | Offline-First | Race-Condition Safe (400,000+ Users)
+   Scale: Multi-Tenant | Offline-First | Race-Condition Safe
 ============================================================================ */
 
 (() => {
     'use strict';
 
-    /* ========================================================================
-       1. CONSTANTS, MEMORY CACHING & FAST LOOKUPS
-       ------------------------------------------------------------------------
-       Loop ke dauran baar-baar storage se read karne par UI lag hoti hai.
-       L1 memory memoization ensure karti hai ki tab switches aur ledger filters
-       par instant O(1) execution speed mile.
-    ======================================================================== */
     const DEFAULT_MAIN_KARKHANA_ID = 'k_main';
     const STORAGE_KEY_KARKHANAS = 'karkhana_list';
     const STORAGE_KEY_ACTIVE = 'active_karkhana_id';
     const STORAGE_KEY_TRANSFERS = 'karkhana_transfers';
 
-    // In-memory hot caches
+    // In-memory hot caches (user-scoped)
     let _cachedKarkhanaList = null;
     let _cachedActiveId = null;
+    let _cachedOwnerUid = null;
+
+    const getCurrentUid = () => {
+        return String(
+            window.currentUserId ||
+            localStorage.getItem('app_current_user_id') ||
+            ''
+        ).trim();
+    };
+
+    const ensureSameUserCache = () => {
+        const uid = getCurrentUid();
+        if (uid !== _cachedOwnerUid) {
+            _cachedKarkhanaList = null;
+            _cachedActiveId = null;
+            _cachedOwnerUid = uid;
+        }
+    };
+
+    const escHtml = (s) => {
+        if (typeof window.sanitizeHTML === 'function') return window.sanitizeHTML(s);
+        return String(s || '').replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+    };
 
     /**
      * Cache invalidator - jab bhi karkhana add, update ya delete ho
@@ -33,8 +51,7 @@
     };
 
     /**
-     * Crytographically safe high-entropy transaction ID generator
-     * Race conditions aur concurrent branch writes me collision ko 100% rokta hai.
+     * Cryptographically safe high-entropy transaction ID generator
      */
     const generateUniqueId = (prefix = 'k') => {
         const timeHex = Date.now().toString(36);
@@ -61,14 +78,9 @@
        2. CORE MULTI-BRANCH REGISTRY (CRUD OPERATIONS)
        ------------------------------------------------------------------------
     ======================================================================== */
-
-    /**
-     * Safe retrieval of all registered branches.
-     * Guaranteed never to return null or overwrite cloud data on empty initial state.
-     *
-     * @returns {Array<Object>} List of karkhanas
-     */
     const getKarkhanasSafe = () => {
+        ensureSameUserCache();
+
         if (_cachedKarkhanaList && Array.isArray(_cachedKarkhanaList) && _cachedKarkhanaList.length > 0) {
             return _cachedKarkhanaList;
         }
@@ -86,26 +98,20 @@
             list = [];
         }
 
-        // 🔒 CLOUD-SAFE FALLBACK: Agar storage khali ho toh memory me default Main Godown return karein
-        // setStore() call nahi karte taaki kisi doosre active device ka cloud data accidentally wipe na ho
+        // Fallback ko cache me lock nahi karte taaki cloud sync aate hi naye karkhane turant dikhein
         if (!Array.isArray(list) || list.length === 0) {
-            _cachedKarkhanaList = [getDefaultMainKarkhana()];
-            return _cachedKarkhanaList;
+            return [getDefaultMainKarkhana()];
         }
 
         _cachedKarkhanaList = list;
         return _cachedKarkhanaList;
     };
 
-    /**
-     * Saves karkhana registry to persistence & cloud sync
-     * @param {Array<Object>} list - Updated branches array
-     */
     const saveKarkhanas = (list) => {
         try {
+            ensureSameUserCache();
             const cleanList = window.safeArray ? window.safeArray(list) : (Array.isArray(list) ? list : []);
 
-            // Ensure Main Godown exists and is properly flagged as default
             const hasDefault = cleanList.some((k) => k.isDefault || k.id === DEFAULT_MAIN_KARKHANA_ID);
             if (!hasDefault && cleanList.length > 0) {
                 cleanList[0].isDefault = true;
@@ -119,7 +125,6 @@
                 localStorage.setItem(STORAGE_KEY_KARKHANAS, JSON.stringify(cleanList));
             }
 
-            // Sync with global navigation components
             if (typeof window.populateNavbarKarkhanaDropdown === 'function') {
                 window.populateNavbarKarkhanaDropdown();
             }
@@ -128,14 +133,6 @@
         }
     };
 
-    /**
-     * Creates and registers a new Karkhana branch
-     * @param {string} name - Branch name (e.g. 'Mau Unit', 'Mubarakpur')
-     * @param {string} location - Physical location
-     * @param {string} incharge - Munshi or Supervisor name
-     * @param {string} phone - Contact number
-     * @returns {Object|null}
-     */
     const addNewKarkhana = (name, location, incharge, phone) => {
         const cleanName = String(name || '').trim();
         if (!cleanName) {
@@ -143,7 +140,7 @@
             return null;
         }
 
-        const list = getKarkhanasSafe().slice(); // Clone array
+        const list = getKarkhanasSafe().slice();
         const newId = generateUniqueId('k');
 
         const newKarkhana = {
@@ -161,12 +158,6 @@
         return newKarkhana;
     };
 
-    /**
-     * Updates an existing karkhana's metadata
-     * @param {string} kId - Karkhana ID
-     * @param {Object} updateData - Updated fields
-     * @returns {boolean} Success status
-     */
     const updateKarkhana = (kId, updateData) => {
         if (!kId || !updateData) return false;
 
@@ -174,7 +165,6 @@
         const index = list.findIndex((k) => String(k.id) === String(kId));
         if (index === -1) return false;
 
-        // Main Godown ID immutable hai, sirf metadata update hoga
         if (list[index].id === DEFAULT_MAIN_KARKHANA_ID) {
             list[index].name = updateData.name ? String(updateData.name).trim() : list[index].name;
             list[index].location = updateData.location ? String(updateData.location).trim() : list[index].location;
@@ -188,11 +178,6 @@
         return true;
     };
 
-    /**
-     * Deletes a branch (Main Godown deletion strictly blocked)
-     * @param {string} kId - Target Karkhana ID
-     * @returns {boolean}
-     */
     const deleteKarkhana = (kId) => {
         if (kId === DEFAULT_MAIN_KARKHANA_ID) {
             alert('Main Godown ko delete nahi kiya ja sakta!');
@@ -206,18 +191,12 @@
         const list = getKarkhanasSafe().filter((k) => String(k.id) !== String(kId));
         saveKarkhanas(list);
 
-        // Agar active filter yahi branch thi, toh 'all' par reset kardo
         if (getActiveKarkhanaId() === kId) {
             setActiveKarkhanaId('all');
         }
         return true;
     };
 
-    /**
-     * Ultra-fast O(1) cached lookup for branch name
-     * @param {string} kId - Branch ID
-     * @returns {string} Branch Name
-     */
     const getKarkhanaNameById = (kId) => {
         if (!kId || kId === 'all') return 'Sabhi Karkhana (Total)';
         if (kId === DEFAULT_MAIN_KARKHANA_ID) return 'Main Godown';
@@ -231,12 +210,8 @@
        3. ACTIVE STATE & MULTI-TENANT CONTEXT SWITCHING
        ------------------------------------------------------------------------
     ======================================================================== */
-
-    /**
-     * Resolves the currently selected active branch filter
-     * @returns {string} 'all' | 'k_main' | 'k_...'
-     */
     const getActiveKarkhanaId = () => {
+        ensureSameUserCache();
         if (_cachedActiveId) return _cachedActiveId;
 
         let activeId = 'all';
@@ -252,12 +227,8 @@
         return _cachedActiveId;
     };
 
-    /**
-     * Sets active branch filter and dispatches reactive UI updates
-     * @param {string} kId - Target Branch ID
-     * @param {Function} [callback] - Optional post-update callback
-     */
     const setActiveKarkhanaId = (kId, callback) => {
+        ensureSameUserCache();
         const targetId = kId ? String(kId).trim() : 'all';
         _cachedActiveId = targetId;
 
@@ -280,9 +251,6 @@
         }
     };
 
-    /**
-     * Synchronizes active visual state across top tab buttons
-     */
     const updateTabButtonActiveUI = (targetId) => {
         const buttons = document.querySelectorAll('.karkhana-tab-btn');
         buttons.forEach((btn) => {
@@ -298,12 +266,6 @@
         });
     };
 
-    /**
-     * High-speed array filter based on active branch selection
-     * @param {Array<Object>} arrayData - Raw dataset
-     * @param {string} [karkhanaIdKey='karkhanaId'] - Branch key identifier
-     * @returns {Array<Object>} Filtered dataset
-     */
     const filterByCurrentKarkhana = (arrayData, karkhanaIdKey = 'karkhanaId') => {
         const list = window.safeArray ? window.safeArray(arrayData) : (Array.isArray(arrayData) ? arrayData : []);
         const activeId = getActiveKarkhanaId();
@@ -319,12 +281,7 @@
     /* ========================================================================
        4. CONCURRENT-SAFE INTER-BRANCH TRANSFER ENGINE
        ------------------------------------------------------------------------
-       Atomic checks, balance verification, aur cryptographic audit logging.
     ======================================================================== */
-
-    /**
-     * Safely reads the persistent inter-karkhana transfer ledger
-     */
     const getAllTransfersSafe = () => {
         try {
             if (typeof window.getStore === 'function') {
@@ -337,11 +294,6 @@
         }
     };
 
-    /**
-     * Atomic transfer entry logger
-     * @param {Object} transferData - Transfer transaction details
-     * @returns {Object} Final committed transaction record
-     */
     const recordTransferEntry = (transferData) => {
         const transfers = getAllTransfersSafe();
         const dateStr = (typeof window.getTodayDate === 'function') 
@@ -362,7 +314,6 @@
             ...transferData
         };
 
-        // Prepend record for LIFO chronological ordering
         transfers.unshift(record);
 
         if (typeof window.setStore === 'function') {
@@ -374,9 +325,6 @@
         return record;
     };
 
-    /**
-     * Transfers finished Sarees from a branch into the Main Godown
-     */
     const transferSareesToMainGodown = (fromKarkhanaId, sareeQty, sareeType = 'Standard', remarks = '') => {
         const qty = parseInt(sareeQty, 10) || 0;
         if (qty <= 0) {
@@ -393,16 +341,13 @@
             type: 'saree',
             fromKarkhanaId,
             toKarkhanaId: DEFAULT_MAIN_KARKHANA_ID,
-            targetStock: 'fresh', // Main Godam ke Fresh Stock me add hogi
+            targetStock: 'fresh',
             sareeType,
             quantity: qty,
             remarks: remarks.trim() || 'Karkhana se Main Godown Fresh Saree aamad'
         });
     };
 
-    /**
-     * Transfers Raw Materials (Bana, Zari, Tana) between branches
-     */
     const transferRawMaterial = (type, fromKarkhanaId, toKarkhanaId, qty, itemName, remarks = '') => {
         const q = parseFloat(qty) || 0;
         if (q <= 0) {
@@ -425,9 +370,6 @@
         });
     };
 
-    /**
-     * Transfers Cash/Funds between branches (Inter-account transfer)
-     */
     const transferCashBetweenKarkhana = (fromKarkhanaId, toKarkhanaId, amount, remarks = '') => {
         const amt = parseFloat(amount) || 0;
         if (amt <= 0) {
@@ -452,13 +394,7 @@
     /* ========================================================================
        5. HIGH-SPEED UI TAB BUILDER (EVENT DELEGATION & ZERO REFLOW)
        ------------------------------------------------------------------------
-       Inline onclick strings hata kar DocumentFragment aur Event Delegation
-       se render kiya jata hai taaki hazaron branches par memory leak na ho.
     ======================================================================== */
-
-    /**
-     * Renders scrollable branch filter tabs
-     */
     const renderKarkhanaTabs = (containerId, onSelectCallback, options = {}) => {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -466,7 +402,6 @@
         const showAll = options.showAllBtn !== false;
         const list = getKarkhanasSafe();
         const currentActive = getActiveKarkhanaId();
-        const esc = window.sanitizeHTML || ((s) => s);
 
         let html = '<div class="karkhana-tabs-scroller" style="display:flex; gap:8px; align-items:center; overflow-x:auto; padding:6px 2px; margin-bottom:12px; -webkit-overflow-scrolling:touch;">';
 
@@ -484,10 +419,10 @@
             const isActive = currentActive === String(k.id);
             const icon = k.id === DEFAULT_MAIN_KARKHANA_ID ? '🏢' : '🏭';
             html += `<button type="button" class="karkhana-tab-btn ${isActive ? 'active-karkhana-tab' : ''}" 
-                        data-karkhana-id="${esc(k.id)}" 
+                        data-karkhana-id="${escHtml(k.id)}" 
                         style="padding:6px 14px; font-size:13px; font-weight:600; border-radius:20px; border:1px solid ${isActive ? '#1d4ed8' : '#d1d5db'}; 
                         background:${isActive ? '#2563eb' : '#ffffff'}; color:${isActive ? '#ffffff' : '#374151'}; cursor:pointer; white-space:nowrap; transition:all 0.2s;">
-                        ${icon} ${esc(k.name)}
+                        ${icon} ${escHtml(k.name)}
                     </button>`;
         });
 
@@ -500,7 +435,6 @@
         html += '</div>';
         container.innerHTML = html;
 
-        // Clean event delegation setup
         const scroller = container.querySelector('.karkhana-tabs-scroller');
         if (scroller) {
             scroller.onclick = (e) => {
@@ -522,26 +456,24 @@
        6. MODAL POPUP & BRANCH MANAGEMENT UI
        ------------------------------------------------------------------------
     ======================================================================== */
-
     const openKarkhanaManageModal = () => {
         closeKarkhanaManageModal();
 
         const list = getKarkhanasSafe();
-        const esc = window.sanitizeHTML || ((s) => s);
 
         const listRows = list.map((k) => {
             const isMain = k.id === DEFAULT_MAIN_KARKHANA_ID;
             return `<tr style="border-bottom:1px solid #e5e7eb;">
                 <td style="padding:8px; font-weight:600;">
-                    ${isMain ? '🏢 ' : '🏭 '}${esc(k.name)} 
+                    ${isMain ? '🏢 ' : '🏭 '}${escHtml(k.name)} 
                     ${isMain ? '<span style="font-size:10px; color:#2563eb; background:#eff6ff; padding:2px 6px; border-radius:10px;">Default</span>' : ''}
                 </td>
-                <td style="padding:8px; color:#4b5563;">${esc(k.location || '-')}</td>
-                <td style="padding:8px; color:#4b5563;">${esc(k.incharge || '-')}</td>
+                <td style="padding:8px; color:#4b5563;">${escHtml(k.location || '-')}</td>
+                <td style="padding:8px; color:#4b5563;">${escHtml(k.incharge || '-')}</td>
                 <td style="padding:8px; text-align:center;">
                     ${isMain 
                         ? '<span style="color:#9ca3af; font-size:12px;">Fixed</span>' 
-                        : `<button type="button" class="karkhana-delete-btn" data-kid="${esc(k.id)}" style="background:#fee2e2; color:#dc2626; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Delete</button>`
+                        : `<button type="button" class="karkhana-delete-btn" data-kid="${escHtml(k.id)}" style="background:#fee2e2; color:#dc2626; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Delete</button>`
                     }
                 </td>
             </tr>`;
@@ -593,16 +525,13 @@
         const modalEl = document.getElementById('karkhana-manager-modal');
         if (!modalEl) return;
 
-        // Modal Action Bindings
         document.getElementById('close_k_modal_x').onclick = closeKarkhanaManageModal;
         document.getElementById('submit_new_k_btn').onclick = submitNewKarkhanaForm;
 
-        // Backdrop click to close
         modalEl.onclick = (e) => {
             if (e.target === modalEl) closeKarkhanaManageModal();
         };
 
-        // Table Action Delegation (Delete Button)
         modalEl.querySelector('table').onclick = (e) => {
             const delBtn = e.target.closest('.karkhana-delete-btn');
             if (delBtn) {
@@ -685,15 +614,12 @@
         invalidateKarkhanaCache
     };
 
-    // Attach functions directly to window for seamless backwards compatibility
     Object.keys(publicKarkhanaAPI).forEach((fnName) => {
         window[fnName] = publicKarkhanaAPI[fnName];
     });
 
-    // Namespace wrapper
     window.KarkhanaEngine = publicKarkhanaAPI;
 
-    // Unit test export
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = publicKarkhanaAPI;
     }
