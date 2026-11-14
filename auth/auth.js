@@ -1,705 +1,662 @@
 /* ============================================================================
-   SIMPLICITY ERP - HIGH-SCALE ENTERPRISE AUTHENTICATION & SECURITY ENGINE
-   File: auth/auth.js • Developed by Farhan Jawed
-   Architecture: Supabase PostgreSQL Auth | 5-Point Strict Check | Farhan Shield
-   Scale: 1,000,000+ Concurrent Active Users | Offline-First & Resilient
+   SIMPLICITY ERP - LIVE ADMIN CONTROL & REALTIME USER APPROVAL
+   File: admin/admin.js • Developed by Farhan Jawed
+   Architecture: Supabase PostgreSQL Realtime Engine • Modern Slate UI + Gmail
 ============================================================================ */
 
 (() => {
     'use strict';
 
-    /* ========================================================================
-       1. GLOBAL STATE & SESSION CONTEXT
-       ------------------------------------------------------------------------
-    ======================================================================== */
-    window.currentUserId = null;
-    window.currentUserRole = null;
-    window.currentTenantId = null;
-    window.activeKarigerId = null;
-    window.activeSheetId = null;
-    window.currentDayBookTab = 'bana';
-    window.targetResetUser = null;
-    window.currentPassbookContext = null;
-    window.activeSanchaItemId = null;
+    const GMAIL_ENGINE_URL = 'https://script.google.com/macros/s/AKfycbzuHcuZf6gS4jIP2fS4Y7kGLw6MG2k_h9BDEdO2HOsredwvuJeys3m0Y-zCRlIX060bYQ/exec';
+    const GMAIL_ENGINE_SECRET = 'simplicity_erp_mail_2026';
 
-    let _activeSessionAuthCache = null;
+    window.adminUsersData = [];
+    let supabaseAdminChannel = null;
+    let currentAdminFilter = 'all';
+    let currentAdminSearch = '';
 
-    /* ========================================================================
-       2. DEFENSIVE UTILITY HELPERS
-       ------------------------------------------------------------------------
-    ======================================================================== */
-    const _setDisplay = (id, val) => {
-        if (typeof window.setDisplay === 'function') {
-            window.setDisplay(id, val);
-        } else {
-            const el = document.getElementById(id);
-            if (el) el.style.display = val;
-        }
+    const getSupabaseAdmin = () => {
+        return window.supabaseClient || (window.CloudEngine && window.CloudEngine.supabase) || null;
     };
 
-    const _getTodayDate = () => {
-        if (typeof window.getTodayDate === 'function') return window.getTodayDate();
-        const d = new Date();
-        return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+    const esc = (s) => {
+        if (typeof window.sanitizeHTML === 'function') return window.sanitizeHTML(s);
+        return String(s || '').replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
     };
 
-    const _formatDateDisplay = (d) => {
+    const formatDate = (d) => {
         if (typeof window.formatDateDisplay === 'function') return window.formatDateDisplay(d);
         if (!d) return '-';
         const p = String(d).split('-');
         return (p.length === 3 && p[0].length === 4) ? `${p[2]}-${p[1]}-${p[0]}` : d;
     };
 
-    const getSupabase = () => {
-        return window.supabaseClient || (window.CloudEngine && window.CloudEngine.supabase) || null;
-    };
-
-    const sanitizeId = (id) => String(id || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-    const sanitizeMobile = (mob) => String(mob || '').trim().replace(/[^0-9]/g, '');
-    const sanitizePin = (pin) => String(pin || '').trim().replace(/[^0-9]/g, '').slice(0, 4);
-
-    const isUserExpired = (user) => {
-        if (!user || user.role === 'admin' || user.id === 'farhan' || !user.expiryDate) {
-            return false;
-        }
-        const todayIso = new Date().toISOString().split('T')[0];
-        return todayIso > user.expiryDate;
-    };
-
-    const clearUnprefixedLocalData = (keepUserId = null) => {
+    const sendAdminApprovalEmail = async (payload) => {
         try {
-            const unprefixedKeys = [
-                'karkhana_list', 'kariger_list', 'tani_orders_list', 'tani_learned_colors',
-                'tani_learned_rangi', 'sancha_items', 'sancha_history', 'bana_stock',
-                'bana_history', 'zari_stock', 'zari_history', 'saree_stock', 'saree_history',
-                'payments', 'payment_list', 'material_transfers', 'dukan_challans',
-                'jobwork_workers', 'jw_bills_list', 'jw_payments_list',
-                'kariger_portal_tenant_id', 'kariger_portal_firm_name',
-                'app_active_session', 'app_current_tenant_id', 'tenantId',
-                'tenant_id', 'erp_tenant_id', 'current_tenant_id', 'user_id', 'currentUserId'
-            ];
-            unprefixedKeys.forEach((k) => localStorage.removeItem(k));
-
-            // Agar naya user pichle user se alag hai to pichle user ke cached keys bhi saaf karein
-            if (keepUserId) {
-                const toRemove = [];
-                for (let i = 0; i < localStorage.length; i++) {
-                    const k = localStorage.key(i);
-                    if (!k) continue;
-                    if (k === 'app_current_user_id' || k === 'app_active_session_auth' || k === 'app_last_user_id') continue;
-                    if (!k.startsWith(`${keepUserId}_`)) {
-                        toRemove.push(k);
-                    }
-                }
-                toRemove.forEach((k) => localStorage.removeItem(k));
-            }
-        } catch (_) {}
+            const res = await fetch(GMAIL_ENGINE_URL, {
+                method: 'POST',
+                body: JSON.stringify({ secret: GMAIL_ENGINE_SECRET, ...payload })
+            });
+            return await res.json();
+        } catch (_) {
+            return { ok: false };
+        }
     };
 
-    /* ========================================================================
-       3. USER LOOKUP (SUPABASE)
-       ------------------------------------------------------------------------
-    ======================================================================== */
-    const fetchUserByIdentifier = async (identifier) => {
-        const cleanQuery = String(identifier || '').trim().toLowerCase();
-        if (!cleanQuery) return null;
+    const buildModernAdminShell = () => {
+        const adminSec = document.getElementById('admin-section');
+        if (!adminSec || adminSec.dataset.modernBuilt === 'true') return;
 
-        const sb = getSupabase();
-        if (sb) {
-            try {
-                // Check by user_id
-                let { data } = await sb
-                    .from('karkhana_users')
-                    .select('*')
-                    .eq('user_id', cleanQuery)
-                    .limit(1);
-
-                // If not found by user_id, check by mobile
-                if ((!data || data.length === 0) && /^\d+$/.test(cleanQuery)) {
-                    const mobRes = await sb
-                        .from('karkhana_users')
-                        .select('*')
-                        .eq('mobile', cleanQuery)
-                        .limit(1);
-                    data = mobRes.data;
+        adminSec.dataset.modernBuilt = 'true';
+        adminSec.innerHTML = `
+            <style>
+                .adm-wrap { font-family: sans-serif; max-width: 1150px; margin: 0 auto; }
+                .adm-topbar {
+                    background: #0f172a; color: #ffffff; padding: 14px 18px; border-radius: 14px;
+                    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+                    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25); margin-bottom: 14px;
                 }
+                .adm-stats {
+                    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                    gap: 10px; margin-bottom: 14px;
+                }
+                .adm-stat-card {
+                    background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 12px;
+                    padding: 12px 14px; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+                }
+                .adm-stat-card small { font-size: 11px; font-weight: 700; display: block; margin-bottom: 4px; }
+                .adm-stat-card h3 { margin: 0; font-size: 22px; font-weight: 900; }
+                .adm-toolbar {
+                    background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px;
+                    padding: 10px 12px; margin-bottom: 14px; display: flex;
+                    justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+                }
+                .adm-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+                .adm-tab-btn {
+                    background: #ffffff; color: #334155; border: 1px solid #cbd5e1;
+                    padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+                }
+                .adm-tab-btn.active {
+                    background: #0f172a; color: #ffffff; border-color: #0f172a;
+                }
+                .adm-search {
+                    padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+                    font-size: 13px; min-width: 220px; flex: 1; max-width: 320px; box-sizing: border-box;
+                }
+                .adm-table-card {
+                    background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 12px;
+                    overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+                }
+                .adm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+                .adm-table thead tr { background: #0f172a; color: #ffffff; text-align: left; }
+                .adm-table th { padding: 11px 10px; font-weight: 700; font-size: 12px; white-space: nowrap; }
+                .adm-table td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+                .adm-table tbody tr:hover { background: #f8fafc; }
+                @media (max-width: 640px) {
+                    .adm-topbar { padding: 12px 14px; }
+                    .adm-search { max-width: 100%; width: 100%; }
+                }
+            </style>
 
-                if (data && data.length > 0) {
-                    const row = data[0];
-                    return {
+            <div class="adm-wrap">
+                <div class="adm-topbar">
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <button type="button" onclick="backToDashboard()" style="background:#1e293b; color:#ffffff; border:1px solid #334155; padding:7px 12px; border-radius:8px; font-size:12.5px; font-weight:700; cursor:pointer;">← Dashboard</button>
+                        <div>
+                            <h2 style="margin:0; font-size:17px; font-weight:800; color:#ffffff;">👑 Master Admin Control</h2>
+                            <div style="font-size:11.5px; color:#94a3b8;">Users Approval, Validity & Security Panel</div>
+                        </div>
+                    </div>
+                    <button type="button" id="admin-refresh-users-btn" onclick="refreshAdminUsersList()" style="background:#0f766e; color:#ffffff; border:none; padding:8px 14px; border-radius:8px; font-size:12.5px; font-weight:800; cursor:pointer;">🔄 Refresh List</button>
+                </div>
+
+                <div class="adm-stats">
+                    <div class="adm-stat-card">
+                        <small style="color:#64748b;">👥 Kul Users</small>
+                        <h3 id="adm-stat-total" style="color:#0f172a;">0</h3>
+                    </div>
+                    <div class="adm-stat-card" style="background:#ecfdf5; border-color:#a7f3d0;">
+                        <small style="color:#047857;">🟢 Active</small>
+                        <h3 id="adm-stat-active" style="color:#047857;">0</h3>
+                    </div>
+                    <div class="adm-stat-card" style="background:#fffbeb; border-color:#fde68a;">
+                        <small style="color:#b45309;">⏳ Approval Pending</small>
+                        <h3 id="adm-stat-pending" style="color:#b45309;">0</h3>
+                    </div>
+                    <div class="adm-stat-card" style="background:#fef2f2; border-color:#fecaca;">
+                        <small style="color:#b91c1c;">⛔ Blocked / Expired</small>
+                        <h3 id="adm-stat-blocked" style="color:#b91c1c;">0</h3>
+                    </div>
+                </div>
+
+                <div id="admin-pending-approval-banner" style="display:none;"></div>
+
+                <div class="adm-toolbar">
+                    <div class="adm-tabs">
+                        <button type="button" class="adm-tab-btn active" id="adm-tab-all" onclick="setAdminUsersFilter('all')">Sabhi</button>
+                        <button type="button" class="adm-tab-btn" id="adm-tab-pending" onclick="setAdminUsersFilter('pending')">⏳ Pending</button>
+                        <button type="button" class="adm-tab-btn" id="adm-tab-active" onclick="setAdminUsersFilter('active')">🟢 Active</button>
+                        <button type="button" class="adm-tab-btn" id="adm-tab-blocked" onclick="setAdminUsersFilter('blocked')">⛔ Blocked / Expired</button>
+                    </div>
+                    <input type="text" id="admin-search-input" class="adm-search" placeholder="🔍 Naam, User ID ya Mobile search..." oninput="handleAdminUserSearch(this.value)">
+                </div>
+
+                <div class="adm-table-card">
+                    <div class="table-responsive" style="overflow-x:auto;">
+                        <table class="adm-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px; text-align:center;">#</th>
+                                    <th>Karkhana / Naam</th>
+                                    <th>Mobile & ID</th>
+                                    <th>Password</th>
+                                    <th>Join & Validity</th>
+                                    <th>Status</th>
+                                    <th style="text-align:center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-users-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
+    function openAdminModule() {
+        const uid = String(window.currentUserId || localStorage.getItem('app_current_user_id') || '').trim().toLowerCase();
+        const role = String(window.currentUserRole || '').trim().toLowerCase();
+
+        if (role !== 'admin' && uid !== 'farhan') {
+            return alert('⛔ Sirf Master Admin (Farhan) is panel ko access kar sakte hain!');
+        }
+
+        if (typeof window.hideAllSections === 'function') {
+            window.hideAllSections();
+        } else {
+            document.querySelectorAll('.module-section').forEach((s) => { s.style.display = 'none'; });
+            const dView = document.getElementById('dashboard-view');
+            if (dView) dView.style.display = 'none';
+        }
+
+        const adminSec = document.getElementById('admin-section');
+        if (adminSec) adminSec.style.display = 'block';
+
+        buildModernAdminShell();
+        renderAdminUsersTable();
+        fetchAndListenAdminUsers();
+    }
+
+    async function fetchAndListenAdminUsers(callback) {
+        const sb = getSupabaseAdmin();
+        if (!sb) {
+            if (typeof callback === 'function') callback(false, 'Supabase DB not connected');
+            return;
+        }
+
+        try {
+            const { data, error } = await sb
+                .from('karkhana_users')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            const arr = [];
+            if (data && Array.isArray(data)) {
+                data.forEach((row) => {
+                    arr.push({
                         id: row.user_id,
-                        name: row.full_name,
-                        pass: row.password,
-                        mobile: row.mobile,
+                        name: row.full_name || row.user_id,
+                        mobile: row.mobile || '-',
                         email: row.email || '',
-                        pin: row.pin,
+                        pass: row.password || '-',
+                        pin: row.pin || '',
                         role: row.role || 'owner',
                         status: row.status || 'active',
-                        date: row.created_at ? row.created_at.split('T')[0] : _getTodayDate(),
+                        date: row.created_at ? row.created_at.split('T')[0] : '-',
                         expiryDate: row.validity_date || ''
-                    };
-                }
-            } catch (netErr) {
-                console.warn('[Auth:Supabase] Remote fetch error:', netErr);
-            }
-        }
-
-        return getCachedUserLocal(cleanQuery);
-    };
-
-    const getCachedUserLocal = (identifier) => {
-        try {
-            if (_activeSessionAuthCache) {
-                const s = _activeSessionAuthCache;
-                if (s.id === identifier || s.mobile === identifier || s.email === identifier) return s;
+                    });
+                });
             }
 
-            const localRaw = localStorage.getItem('app_active_session_auth');
-            if (localRaw) {
-                const parsed = JSON.parse(localRaw);
-                if (parsed && (parsed.id === identifier || parsed.mobile === identifier || parsed.email === identifier)) {
-                    _activeSessionAuthCache = parsed;
-                    return parsed;
-                }
-            }
-        } catch (_) {}
-        return null;
-    };
+            window.adminUsersData = arr;
+            renderAdminUsersTable();
+            if (typeof callback === 'function') callback(true, arr);
 
-    /* ========================================================================
-       4. BULLETPROOF REGISTRATION (5-POINT STRICT CHECK & FARHAN SHIELD)
-       ------------------------------------------------------------------------
-    ======================================================================== */
-    const handleRegister = async () => {
-        const nameEl = document.getElementById('reg-name');
-        const mobEl = document.getElementById('reg-mobile');
-        const idEl = document.getElementById('reg-id');
-        const passEl = document.getElementById('reg-pass');
-        const pinEl = document.getElementById('reg-pin');
-        const emailEl = document.getElementById('reg-email');
-        const msg = document.getElementById('signup-msg');
-
-        const name = String(nameEl ? nameEl.value : '').trim();
-        const mobile = sanitizeMobile(mobEl ? mobEl.value : '');
-        const id = sanitizeId(idEl ? idEl.value : '');
-        const pass = String(passEl ? passEl.value : '').trim();
-        const pin = sanitizePin(pinEl ? pinEl.value : '');
-        const email = String(emailEl ? emailEl.value : '').trim().toLowerCase();
-
-        if (!msg) return;
-
-        // 1. बुनियादी वैलिडेशन
-        if (!name || !id || !pass || !mobile || pin.length !== 4) {
-            msg.textContent = 'Sabhi details bharein (4-digit PIN zaroori hai)!';
-            msg.className = 'message error';
-            msg.style.display = 'block';
-            return;
-        }
-
-        if (mobile.length !== 10) {
-            msg.textContent = 'Kripya 10-digit ka valid mobile number darj karein!';
-            msg.className = 'message error';
-            msg.style.display = 'block';
-            return;
-        }
-
-        // 🛑 FARHAN STRICT BLOCK (Farhan नाम या ID से कोई दूसरा खाता न बने)
-        const cleanNameLower = name.toLowerCase().replace(/\s+/g, '');
-        if (id.includes('farhan') || cleanNameLower.includes('farhan')) {
-            msg.innerHTML = '⛔ <strong>Farhan</strong> naam ya ID se naya account banana strictly block hai!';
-            msg.className = 'message error';
-            msg.style.display = 'block';
-            return;
-        }
-
-        msg.textContent = 'Details verify ho rahi hain... ⏳';
-        msg.className = 'message';
-        msg.style.display = 'block';
-
-        try {
-            const sb = getSupabase();
-            if (!sb) {
-                alert('⚠️ Supabase connection nahi mila! Page ko Refresh karein.');
-                msg.textContent = 'Connection error! Page refresh karein.';
-                return;
-            }
-
-            // 🔍 5-POINT CHECK WITHOUT DOWNLOADING ALL USERS' DATA
-            const [nameRes, idRes, mobRes, emailRes, pinRes] = await Promise.all([
-                sb.from('karkhana_users').select('user_id').ilike('full_name', name).limit(1),
-                sb.from('karkhana_users').select('user_id').eq('user_id', id).limit(1),
-                sb.from('karkhana_users').select('user_id').eq('mobile', mobile).limit(1),
-                email ? sb.from('karkhana_users').select('user_id').ilike('email', email).limit(1) : Promise.resolve({ data: [] }),
-                sb.from('karkhana_users').select('user_id').eq('pin', pin).limit(1)
-            ]);
-
-            if (nameRes.error) throw nameRes.error;
-            if (idRes.error) throw idRes.error;
-            if (mobRes.error) throw mobRes.error;
-            if (emailRes.error) throw emailRes.error;
-            if (pinRes.error) throw pinRes.error;
-
-            if (nameRes.data && nameRes.data.length > 0) {
-                msg.textContent = '⚠️ Koi aur name select karein';
-                msg.className = 'message error';
-                msg.style.display = 'block';
-                return;
-            }
-            if (idRes.data && idRes.data.length > 0) {
-                msg.textContent = '⚠️ Koi aur user ID select karein';
-                msg.className = 'message error';
-                msg.style.display = 'block';
-                return;
-            }
-            if (mobRes.data && mobRes.data.length > 0) {
-                msg.textContent = '⚠️ Koi aur mobile number select karein';
-                msg.className = 'message error';
-                msg.style.display = 'block';
-                return;
-            }
-            if (email && emailRes.data && emailRes.data.length > 0) {
-                msg.textContent = '⚠️ Koi aur gmail select karein';
-                msg.className = 'message error';
-                msg.style.display = 'block';
-                return;
-            }
-            if (pinRes.data && pinRes.data.length > 0) {
-                msg.textContent = '⚠️ Koi aur secret PIN select karein';
-                msg.className = 'message error';
-                msg.style.display = 'block';
-                return;
-            }
-
-            // सारे 5 चेक पास होने पर 30-दिन की रिक्वेस्ट सबमिट करें
-            const exp = new Date();
-            exp.setDate(exp.getDate() + 30);
-
-            const payload = {
-                user_id: id,
-                full_name: name,
-                mobile: mobile,
-                email: email || null,
-                password: pass,
-                pin: pin,
-                role: 'owner',
-                status: 'pending',
-                validity_date: exp.toISOString().split('T')[0]
-            };
-
-            const { error: insertErr } = await sb
-                .from('karkhana_users')
-                .insert([payload]);
-
-            if (insertErr) throw insertErr;
-
-            // Default Main Godown
-            await sb.from('karkhanas').insert([{
-                user_id: id,
-                karkhana_name: 'Main Godown',
-                is_default: true
-            }]);
-
-            // सफलता का संदेश
-            msg.innerHTML = `⏳ <strong>Account Request Admin ke paas bhej di gayi hai!</strong><br>Admin (Farhan) ke Approve karte hi aap login kar sakenge.<br>📞 Admin: <a href='tel:+917065572191' style='color:#2563eb; font-weight:bold;'>+91 70655 72191</a>`;
-            msg.className = 'message success';
-            msg.style.display = 'block';
-
-            setTimeout(() => {
-                showLogin();
-                if (nameEl) nameEl.value = '';
-                if (mobEl) mobEl.value = '';
-                if (idEl) idEl.value = '';
-                if (passEl) passEl.value = '';
-                if (pinEl) pinEl.value = '';
-                if (emailEl) emailEl.value = '';
-                msg.style.display = 'none';
-            }, 4500);
-
-        } catch (err) {
-            console.error('[Auth:Register] Error:', err);
-            msg.textContent = 'Registration Error: ' + err.message;
-            msg.className = 'message error';
-            msg.style.display = 'block';
-        }
-    };
-
-    /* ========================================================================
-       5. LOGIN WITH APPROVAL GATEKEEPER
-       ------------------------------------------------------------------------
-    ======================================================================== */
-    const handleLogin = async () => {
-        const idInput = document.getElementById('login-id');
-        const passInput = document.getElementById('login-pass');
-        const err = document.getElementById('login-error');
-
-        const inputVal = (idInput ? idInput.value : '').trim().toLowerCase();
-        const pass = (passInput ? passInput.value : '').trim();
-
-        if (!inputVal || !pass) {
-            if (err) {
-                err.textContent = 'Kripya User ID aur Password dono bharein!';
-                err.style.display = 'block';
-            }
-            return;
-        }
-
-        if (err) {
-            err.textContent = 'Checking credentials... ⏳';
-            err.style.display = 'block';
-            err.style.color = '#2563eb';
-        }
-
-        try {
-            const user = await fetchUserByIdentifier(inputVal);
-
-            if (!user || String(user.pass).trim() !== String(pass).trim()) {
-                if (err) {
-                    err.textContent = 'Galat User ID ya Password!';
-                    err.style.color = '#dc2626';
-                    err.style.display = 'block';
-                }
-                return;
-            }
-
-            const userStatus = String(user.status || '').toLowerCase().trim();
-
-            if (userStatus === 'pending') {
-                if (err) {
-                    err.innerHTML = `⏳ <strong>Account Approval Pending Hai!</strong><br>Admin (Farhan) se approve karwayein:<br>📞 <a href='tel:+917065572191' style='color:#2563eb; font-weight:800;'>+91 70655 72191</a>`;
-                    err.style.color = '#dc2626';
-                    err.style.display = 'block';
-                }
-                return;
-            }
-
-            if (userStatus === 'blocked') {
-                if (err) {
-                    err.innerHTML = '⛔ Account Block hai! Admin se contact karein.';
-                    err.style.color = '#dc2626';
-                    err.style.display = 'block';
-                }
-                return;
-            }
-
-            if (isUserExpired(user)) {
-                if (err) {
-                    err.innerHTML = `⌛ Account Expired (${_formatDateDisplay(user.expiryDate)})!`;
-                    err.style.color = '#dc2626';
-                    err.style.display = 'block';
-                }
-                return;
-            }
-
-            const authPayload = {
-                id: user.id,
-                name: user.name,
-                mobile: user.mobile,
-                email: user.email || '',
-                pass: user.pass,
-                pin: user.pin,
-                role: user.role || 'owner',
-                status: user.status || 'active',
-                expiryDate: user.expiryDate || ''
-            };
-
-            _activeSessionAuthCache = authPayload;
-            localStorage.setItem('app_current_user_id', user.id);
-            localStorage.setItem('app_active_session_auth', JSON.stringify(authPayload));
-
-            if (passInput) passInput.value = '';
-
-            executeSuccessfulLogin(user);
-
-        } catch (authErr) {
-            console.error('[Auth:Login] Exception:', authErr);
-            if (err) {
-                err.textContent = 'Login error: ' + (authErr.message || 'Check connection');
-                err.style.color = '#dc2626';
-                err.style.display = 'block';
-            }
-        }
-    };
-
-    /* ========================================================================
-       6. SUCCESSFUL LOGIN DISPATCHER
-       ------------------------------------------------------------------------
-    ======================================================================== */
-    const executeSuccessfulLogin = (user) => {
-        if (typeof window.clearMemoryCache === 'function') {
-            window.clearMemoryCache();
-        }
-
-        // Agar same phone par doosra user login kar raha hai to pichle user ka local cache clean karein
-        const lastUid = localStorage.getItem('app_last_user_id');
-        if (lastUid && lastUid !== user.id) {
-            clearUnprefixedLocalData(user.id);
-        } else {
-            clearUnprefixedLocalData(null);
-        }
-        localStorage.setItem('app_last_user_id', user.id);
-
-        window.currentUserId = user.id;
-        window.currentTenantId = user.id;
-        window.currentUserRole = user.role || (user.id === 'farhan' ? 'admin' : 'owner');
-
-        const err = document.getElementById('login-error');
-        if (err) err.style.display = 'none';
-
-        _setDisplay('login-wrapper', 'none');
-        _setDisplay('desktop-screen', 'flex');
-
-        const welcomeEl = document.getElementById('welcome-text');
-        if (welcomeEl) {
-            welcomeEl.textContent = (window.currentUserRole === 'admin')
-                ? `👑 Swagat hai Admin, ${user.name}!`
-                : `Swagat hai, ${user.name}!`;
-        }
-
-        _setDisplay('nav-admin-btn', window.currentUserRole === 'admin' ? 'inline-block' : 'none');
-
-        const finishLoginInit = () => {
-            if (typeof window.initSupabaseRealtime === 'function') {
-                window.initSupabaseRealtime();
-            } else if (typeof window.initFirebaseLiveListeners === 'function') {
-                window.initFirebaseLiveListeners();
-            }
-            if (typeof window.populateNavbarKarkhanaDropdown === 'function') {
-                window.populateNavbarKarkhanaDropdown();
-            }
-            if (typeof window.populateSessionDropdown === 'function') {
-                window.populateSessionDropdown();
-            }
-            if (typeof window.backToDashboard === 'function') {
-                window.backToDashboard();
-            }
-            if (typeof window.showSyncStatus === 'function') {
-                window.showSyncStatus('online');
-            }
-        };
-
-        if (typeof window.initIndexedDBPreload === 'function') {
-            window.initIndexedDBPreload(finishLoginInit);
-        } else {
-            finishLoginInit();
-        }
-    };
-
-    const checkAutoLogin = () => {
-        try {
-            const savedUid = localStorage.getItem('app_current_user_id');
-            const savedSessionRaw = localStorage.getItem('app_active_session_auth');
-
-            if (!savedUid || !savedSessionRaw) {
-                showLogin();
-                return;
-            }
-
-            const savedSession = JSON.parse(savedSessionRaw);
-            _activeSessionAuthCache = savedSession;
-
-            if (savedSession && savedSession.id && !isUserExpired(savedSession)) {
-                executeSuccessfulLogin(savedSession);
-
-                // Online hone par background me check karein ki user blocked ya expired to nahi hua
-                if (navigator.onLine) {
-                    fetchUserByIdentifier(savedSession.id).then((freshUser) => {
-                        if (!freshUser) return;
-                        const st = String(freshUser.status || '').toLowerCase().trim();
-                        if (st === 'blocked' || st === 'pending' || isUserExpired(freshUser)) {
-                            alert('⛔ Aapka account block ya expire ho chuka hai! Admin se contact karein.');
-                            logout();
-                        } else {
-                            // Updated expiry/status cache karein
-                            try {
-                                const updated = {
-                                    ...savedSession,
-                                    name: freshUser.name,
-                                    role: freshUser.role || savedSession.role,
-                                    status: freshUser.status || 'active',
-                                    expiryDate: freshUser.expiryDate || ''
-                                };
-                                _activeSessionAuthCache = updated;
-                                localStorage.setItem('app_active_session_auth', JSON.stringify(updated));
-                            } catch (_) {}
+            if (!supabaseAdminChannel) {
+                supabaseAdminChannel = sb.channel('admin-users-live')
+                    .on(
+                        'postgres_changes',
+                        { event: '*', schema: 'public', table: 'karkhana_users' },
+                        () => {
+                            const sec = document.getElementById('admin-section');
+                            if (sec && sec.style.display !== 'none') {
+                                fetchAndListenAdminUsers();
+                            }
                         }
-                    }).catch(() => {});
-                }
-            } else {
-                showLogin();
+                    )
+                    .subscribe();
             }
-        } catch (_) {
-            showLogin();
+        } catch (err) {
+            console.error('[Admin] Supabase fetch error:', err);
+            if (typeof callback === 'function') callback(false, err.message);
         }
-    };
+    }
 
-    const logout = () => {
-        if (typeof window.detachSupabaseRealtime === 'function') {
-            window.detachSupabaseRealtime();
-        } else if (typeof window.detachFirebaseLiveListeners === 'function') {
-            window.detachFirebaseLiveListeners();
+    function setAdminUsersFilter(tab) {
+        currentAdminFilter = tab || 'all';
+        ['all', 'pending', 'active', 'blocked'].forEach((t) => {
+            const btn = document.getElementById(`adm-tab-${t}`);
+            if (btn) btn.classList.toggle('active', t === currentAdminFilter);
+        });
+        renderAdminUsersTable();
+    }
+
+    function handleAdminUserSearch(val) {
+        currentAdminSearch = String(val || '').trim().toLowerCase();
+        renderAdminUsersTable();
+    }
+
+    function toggleAdminRowPass(btn) {
+        if (!btn) return;
+        const wrap = btn.parentElement;
+        const span = wrap ? wrap.querySelector('.adm-pass-val') : null;
+        if (!span) return;
+        const isHidden = span.dataset.shown !== 'true';
+        if (isHidden) {
+            span.textContent = decodeURIComponent(span.dataset.raw || '');
+            span.dataset.shown = 'true';
+            btn.textContent = '🙈';
+        } else {
+            span.textContent = '••••••';
+            span.dataset.shown = 'false';
+            btn.textContent = '👁️';
+        }
+    }
+
+    function renderAdminUsersTable() {
+        buildModernAdminShell();
+
+        const users = Array.isArray(window.adminUsersData) ? window.adminUsersData : [];
+        const tbody = document.getElementById('admin-users-table-body');
+        if (!tbody) return;
+
+        let tot = 0, act = 0, blk = 0, pnd = 0;
+        const pendingUsersList = [];
+        const todayIso = new Date().toISOString().split('T')[0];
+
+        const enriched = users.filter(Boolean).map((u) => {
+            const uIdStr = String(u.id || '').trim();
+            const isOwner = (uIdStr.toLowerCase() === 'farhan' || String(u.role || '').toLowerCase() === 'admin');
+            const st = String(u.status || '').toLowerCase().trim();
+            const isPending = !isOwner && (st === 'pending' || st === 'pending_approval' || st === 'waiting');
+            const isBlocked = !isOwner && (st === 'blocked');
+            const isExpired = !isOwner && Boolean(u.expiryDate && u.expiryDate < todayIso);
+
+            tot++;
+            if (isPending) {
+                pnd++;
+                pendingUsersList.push(u);
+            } else if (isBlocked || isExpired) {
+                blk++;
+            } else {
+                act++;
+            }
+
+            return { u, uIdStr, isOwner, isPending, isBlocked, isExpired };
+        });
+
+        const elTot = document.getElementById('adm-stat-total');
+        const elAct = document.getElementById('adm-stat-active');
+        const elPnd = document.getElementById('adm-stat-pending');
+        const elBlk = document.getElementById('adm-stat-blocked');
+        if (elTot) elTot.textContent = tot;
+        if (elAct) elAct.textContent = act;
+        if (elPnd) elPnd.textContent = pnd;
+        if (elBlk) elBlk.textContent = blk;
+
+        const filtered = enriched.filter((item) => {
+            if (currentAdminFilter === 'pending' && !item.isPending) return false;
+            if (currentAdminFilter === 'active' && (item.isPending || item.isBlocked || item.isExpired)) return false;
+            if (currentAdminFilter === 'blocked' && !(item.isBlocked || item.isExpired)) return false;
+            if (currentAdminSearch) {
+                const hay = `${item.u.name || ''} ${item.uIdStr} ${item.u.mobile || ''} ${item.u.email || ''}`.toLowerCase();
+                if (!hay.includes(currentAdminSearch)) return false;
+            }
+            return true;
+        });
+
+        if (!filtered.length) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748b; font-weight:600;">${users.length ? 'Koi user filter se match nahi hua.' : 'Users load ho rahe hain ya koi user nahi mila...'}</td></tr>`;
+        } else {
+            let rowsHtml = '';
+            filtered.forEach((item, idx) => {
+                const { u, uIdStr, isOwner, isPending, isBlocked, isExpired } = item;
+                const safeIdAttr = esc(uIdStr);
+
+                let stBadge = '';
+                if (isOwner) {
+                    stBadge = `<span style="background:#0f172a; color:#38bdf8; padding:4px 10px; border-radius:20px; font-weight:800; font-size:11px; white-space:nowrap;">👑 Owner</span>`;
+                } else if (isPending) {
+                    stBadge = `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:4px 10px; border-radius:20px; font-weight:800; font-size:11px; white-space:nowrap;">⏳ Pending</span>`;
+                } else if (isBlocked) {
+                    stBadge = `<span style="background:#fee2e2; color:#b91c1c; padding:4px 10px; border-radius:20px; font-weight:800; font-size:11px; white-space:nowrap;">⛔ Blocked</span>`;
+                } else if (isExpired) {
+                    stBadge = `<span style="background:#ffedd5; color:#c2410c; padding:4px 10px; border-radius:20px; font-weight:800; font-size:11px; white-space:nowrap;">⌛ Expired</span>`;
+                } else {
+                    stBadge = `<span style="background:#dcfce7; color:#15803d; padding:4px 10px; border-radius:20px; font-weight:800; font-size:11px; white-space:nowrap;">🟢 Active</span>`;
+                }
+
+                let actionBtns = '';
+                if (isPending) {
+                    actionBtns = `
+                        <button type="button" onclick="approveUserByAdmin('${safeIdAttr}')" style="background:#0f766e; color:#fff; border:none; font-weight:700; padding:6px 10px; border-radius:6px; font-size:11.5px; cursor:pointer;">✅ Approve</button>
+                        <button type="button" onclick="deleteUserByAdmin('${safeIdAttr}')" style="background:#dc2626; color:#fff; border:none; font-weight:700; padding:6px 10px; border-radius:6px; font-size:11.5px; cursor:pointer;">🗑️ Reject</button>
+                    `;
+                } else if (!isOwner) {
+                    actionBtns = `
+                        <button type="button" onclick="toggleUserBlockStatus('${safeIdAttr}')" style="background:${isBlocked ? '#0f766e' : '#f59e0b'}; color:#fff; border:none; font-weight:700; padding:5px 9px; border-radius:6px; font-size:11px; cursor:pointer;">${isBlocked ? 'Unblock' : 'Block'}</button>
+                        <button type="button" onclick="resetUserPasswordByAdmin('${safeIdAttr}')" style="background:#0284c7; color:#fff; border:none; font-weight:700; padding:5px 9px; border-radius:6px; font-size:11px; cursor:pointer;">🔑 Pass</button>
+                        <button type="button" onclick="deleteUserByAdmin('${safeIdAttr}')" style="background:#dc2626; color:#fff; border:none; font-weight:700; padding:5px 8px; border-radius:6px; font-size:11px; cursor:pointer;">🗑️</button>
+                    `;
+                } else {
+                    actionBtns = `<span style="color:#0f766e; font-weight:800; font-size:11.5px;">Full Control</span>`;
+                }
+
+                let expiryDisplay = '';
+                if (isOwner) {
+                    expiryDisplay = `<div style="font-size:11px; color:#64748b;">Join: ${esc(formatDate(u.date))}</div><strong style="color:#0f766e; font-size:12px;">Lifetime</strong>`;
+                } else if (isPending) {
+                    expiryDisplay = `<div style="font-size:11px; color:#64748b;">Req: ${esc(formatDate(u.date))}</div><span style="color:#b45309; font-weight:700; font-size:11.5px;">Approval Ka Intezar</span>`;
+                } else {
+                    expiryDisplay = `
+                        <div style="font-size:11px; color:#64748b; margin-bottom:3px;">Join: ${esc(formatDate(u.date))}</div>
+                        <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+                            <input type="date" value="${esc(u.expiryDate || '')}" onchange="updateUserExpiryDate('${safeIdAttr}', this.value)" style="padding:3px 5px; font-size:11px; border-radius:5px; border:1px solid #cbd5e1;">
+                            <button type="button" onclick="extendValidity('${safeIdAttr}', 30)" style="padding:4px 7px; font-size:10.5px; font-weight:700; border-radius:5px; border:none; background:#2563eb; color:#fff; cursor:pointer;">+30D</button>
+                        </div>
+                    `;
+                }
+
+                const encodedPass = encodeURIComponent(String(u.pass || '-'));
+
+                rowsHtml += `
+                    <tr>
+                        <td style="text-align:center; font-weight:700; color:#64748b;">${idx + 1}</td>
+                        <td>
+                            <strong style="color:#0f172a; font-size:13px;">${esc(u.name || '-')}</strong>
+                            ${u.email ? `<div style="font-size:11px; color:#64748b;">${esc(u.email)}</div>` : ''}
+                        </td>
+                        <td>
+                            <div style="font-weight:600; color:#334155;">📞 ${esc(u.mobile || '-')}</div>
+                            <code style="background:#f1f5f9; color:#1e3a8a; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:700;">ID: ${esc(uIdStr)}</code>
+                        </td>
+                        <td>
+                            <div style="display:inline-flex; align-items:center; gap:6px; background:#f8fafc; border:1px solid #e2e8f0; padding:3px 8px; border-radius:6px;">
+                                <span class="adm-pass-val" data-raw="${encodedPass}" data-shown="false" style="font-weight:800; color:#1e3a8a; letter-spacing:1px;">••••••</span>
+                                <button type="button" onclick="toggleAdminRowPass(this)" style="background:transparent; border:none; cursor:pointer; font-size:13px; padding:0;" title="Show/Hide Password">👁️</button>
+                            </div>
+                        </td>
+                        <td>${expiryDisplay}</td>
+                        <td>${stBadge}</td>
+                        <td style="text-align:center; white-space:nowrap;">${actionBtns}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = rowsHtml;
         }
 
-        if (typeof window.clearMemoryCache === 'function') {
-            window.clearMemoryCache();
+        const pendingBanner = document.getElementById('admin-pending-approval-banner');
+        if (pendingBanner) {
+            if (pendingUsersList.length > 0) {
+                let pHtml = `
+                    <div style="background:#fffbeb; border:1.5px solid #f59e0b; border-radius:12px; padding:14px; margin-bottom:14px;">
+                        <div style="color:#b45309; font-size:14px; font-weight:800; margin-bottom:10px;">🔔 Naye Account Approval Requests (${pendingUsersList.length}):</div>
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                `;
+                pendingUsersList.forEach((pu) => {
+                    const pId = esc(String(pu.id || '').trim());
+                    pHtml += `
+                        <div style="background:#ffffff; border:1px solid #fde68a; border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                            <div>
+                                <strong style="color:#0f172a; font-size:13.5px;">👤 ${esc(pu.name || '-')}</strong>
+                                &bull; <code style="background:#f1f5f9; padding:2px 6px; border-radius:4px;">ID: ${pId}</code>
+                                &bull; <span style="font-size:12.5px;">📞 ${esc(pu.mobile || '-')}</span>
+                                <div style="font-size:11px; color:#64748b; margin-top:2px;">Request Date: ${esc(formatDate(pu.date))}</div>
+                            </div>
+                            <div style="display:flex; gap:8px;">
+                                <button type="button" onclick="approveUserByAdmin('${pId}')" style="background:#0f766e; color:#fff; border:none; font-weight:800; padding:8px 14px; border-radius:8px; font-size:12px; cursor:pointer;">✅ Approve Karein</button>
+                                <button type="button" onclick="deleteUserByAdmin('${pId}')" style="background:#dc2626; color:#fff; border:none; font-weight:800; padding:8px 12px; border-radius:8px; font-size:12px; cursor:pointer;">🗑️ Reject</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                pHtml += `</div></div>`;
+                pendingBanner.innerHTML = pHtml;
+                pendingBanner.style.display = 'block';
+            } else {
+                pendingBanner.style.display = 'none';
+            }
         }
+    }
 
-        window.currentUserId = null;
-        window.currentUserRole = null;
-        window.currentTenantId = null;
-        window.activeKarigerId = null;
-        window.activeSheetId = null;
-        _activeSessionAuthCache = null;
+    async function refreshAdminUsersList() {
+        const btn = document.getElementById('admin-refresh-users-btn');
+        if (btn) btn.textContent = '⏳ Syncing...';
 
-        localStorage.removeItem('app_current_user_id');
-        localStorage.removeItem('app_active_session_auth');
-        clearUnprefixedLocalData(null);
-
-        const idInput = document.getElementById('login-id');
-        const passInput = document.getElementById('login-pass');
-        const err = document.getElementById('login-error');
-        if (idInput) idInput.value = '';
-        if (passInput) passInput.value = '';
-        if (err) err.style.display = 'none';
-
-        _setDisplay('desktop-screen', 'none');
-        _setDisplay('login-wrapper', 'flex');
-        showLogin();
-    };
-
-    /* ========================================================================
-       7. FORGOT PASSWORD & SCREEN NAVIGATION
-       ------------------------------------------------------------------------
-    ======================================================================== */
-    const showSignup = () => {
-        _setDisplay('login-box', 'none');
-        _setDisplay('forgot-box', 'none');
-        _setDisplay('signup-box', 'block');
-    };
-
-    const showLogin = () => {
-        _setDisplay('signup-box', 'none');
-        _setDisplay('forgot-box', 'none');
-        _setDisplay('login-box', 'block');
-    };
-
-    const showForgotPassword = () => {
-        _setDisplay('login-box', 'none');
-        _setDisplay('signup-box', 'none');
-        _setDisplay('forgot-box', 'block');
-        _setDisplay('forgot-step-1', 'block');
-        _setDisplay('forgot-step-2', 'none');
-    };
-
-    const verifyForgotPin = async () => {
-        const queryEl = document.getElementById('forgot-query');
-        const pinEl = document.getElementById('forgot-pin');
-        const msg = document.getElementById('forgot-msg');
-
-        const q = String(queryEl ? queryEl.value : '').trim().toLowerCase();
-        const pin = sanitizePin(pinEl ? pinEl.value : '');
-
-        if (!msg) return;
-
-        if (!q || !pin) {
-            msg.textContent = 'Kripya User ID aur PIN dono darj karein!';
-            msg.className = 'message error';
-            msg.style.display = 'block';
-            return;
+        const sb = getSupabaseAdmin();
+        if (!sb) {
+            if (btn) btn.textContent = '🔄 Refresh List';
+            return alert('⚠️ Supabase connect nahi hai!');
         }
-
-        msg.textContent = 'Details verify ho rahi hain... ⏳';
-        msg.className = 'message';
-        msg.style.display = 'block';
-
-        const user = await fetchUserByIdentifier(q);
-
-        if (!user || sanitizePin(user.pin) !== pin) {
-            msg.textContent = 'Galat User details ya PIN!';
-            msg.className = 'message error';
-            msg.style.display = 'block';
-            return;
-        }
-
-        window.targetResetUser = user;
-        _setDisplay('forgot-step-1', 'none');
-        _setDisplay('forgot-step-2', 'block');
-        msg.textContent = '✅ PIN Verified! Naya password banayein.';
-        msg.className = 'message success';
-        msg.style.display = 'block';
-    };
-
-    const saveNewPassword = async () => {
-        const p1El = document.getElementById('forgot-new-pass');
-        const p2El = document.getElementById('forgot-confirm-pass');
-        const msg = document.getElementById('forgot-msg');
-
-        const p1 = String(p1El ? p1El.value : '').trim();
-        const p2 = String(p2El ? p2El.value : '').trim();
-
-        if (!msg) return;
-
-        if (!p1 || p1 !== p2) {
-            msg.textContent = 'Dono password match hone chahiye!';
-            msg.className = 'message error';
-            msg.style.display = 'block';
-            return;
-        }
-
-        if (!window.targetResetUser) return;
 
         try {
-            window.targetResetUser.pass = p1;
+            const { data, error } = await sb
+                .from('karkhana_users')
+                .select('*')
+                .order('created_at', { ascending: false });
 
-            const sb = getSupabase();
-            if (sb) {
-                const { error } = await sb
-                    .from('karkhana_users')
-                    .update({ password: p1 })
-                    .eq('user_id', window.targetResetUser.id);
+            if (error) throw error;
 
-                if (error) throw error;
+            const arr = [];
+            let pendingCount = 0;
+
+            if (data && Array.isArray(data)) {
+                data.forEach((row) => {
+                    const st = String(row.status || '').toLowerCase().trim();
+                    if (st === 'pending' || st === 'pending_approval' || st === 'waiting') {
+                        pendingCount++;
+                    }
+                    arr.push({
+                        id: row.user_id,
+                        name: row.full_name || row.user_id,
+                        mobile: row.mobile || '-',
+                        email: row.email || '',
+                        pass: row.password || '-',
+                        pin: row.pin || '',
+                        role: row.role || 'owner',
+                        status: row.status || 'active',
+                        date: row.created_at ? row.created_at.split('T')[0] : '-',
+                        expiryDate: row.validity_date || ''
+                    });
+                });
             }
 
-            msg.textContent = '✅ Password update ho gaya! Login karein.';
-            msg.className = 'message success';
-            msg.style.display = 'block';
+            window.adminUsersData = arr;
+            renderAdminUsersTable();
+            if (btn) btn.textContent = '🔄 Refresh List';
 
-            setTimeout(() => {
-                showLogin();
-                if (p1El) p1El.value = '';
-                if (p2El) p2El.value = '';
-                msg.style.display = 'none';
-            }, 1200);
+            alert(`✅ Refresh Ho Gaya!\n\n📊 Kul Users: ${arr.length}\n⏳ Approval Pending: ${pendingCount}\n🟢 Active/Others: ${arr.length - pendingCount}`);
         } catch (err) {
-            console.error('[Auth:saveNewPassword] Error:', err);
-            msg.textContent = 'Password save nahi ho paya!';
-            msg.className = 'message error';
-            msg.style.display = 'block';
+            if (btn) btn.textContent = '🔄 Refresh List';
+            alert('❌ Refresh Error: ' + err.message);
         }
-    };
-
-    // Public API Object
-    const authAPI = {
-        showSignup,
-        showLogin,
-        showForgotPassword,
-        handleRegister,
-        handleLogin,
-        executeSuccessfulLogin,
-        checkAutoLogin,
-        logout,
-        verifyForgotPin,
-        saveNewPassword,
-        fetchUserByIdentifier
-    };
-
-    Object.keys(authAPI).forEach((fnName) => {
-        window[fnName] = authAPI[fnName];
-    });
-
-    window.AuthEngine = authAPI;
-
-    if (typeof module !== 'undefined' && module.exports) {
-        module.exports = authAPI;
     }
+
+    async function approveUserByAdmin(uid) {
+        const exp = new Date();
+        exp.setDate(exp.getDate() + 30);
+        const formattedExp = exp.toISOString().split('T')[0];
+
+        const sb = getSupabaseAdmin();
+        if (!sb) return alert('Supabase connect nahi hai!');
+
+        try {
+            const targetUser = (window.adminUsersData || []).find((x) => String(x.id) === String(uid));
+
+            const { error } = await sb
+                .from('karkhana_users')
+                .update({
+                    status: 'active',
+                    validity_date: formattedExp
+                })
+                .eq('user_id', uid);
+
+            if (error) throw error;
+
+            let mailNote = '';
+            if (targetUser && targetUser.email && targetUser.email.includes('@')) {
+                const mailRes = await sendAdminApprovalEmail({
+                    type: 'approved_notice',
+                    toEmail: targetUser.email,
+                    name: targetUser.name || uid,
+                    userId: uid,
+                    validityDate: formatDate(formattedExp),
+                    appUrl: window.location.origin + window.location.pathname
+                });
+                if (mailRes && mailRes.ok) {
+                    mailNote = '\n📧 Client ke Gmail par Welcome Email bhi bhej diya gaya!';
+                }
+            }
+
+            alert(`🎉 User '${uid}' APPROVE ho gaya!\nAb wo turant login kar sakta hai.${mailNote}`);
+            refreshAdminUsersList();
+        } catch (err) {
+            alert('Approve error: ' + err.message);
+        }
+    }
+
+    async function updateUserExpiryDate(uid, dateVal) {
+        const sb = getSupabaseAdmin();
+        if (!sb) return;
+
+        try {
+            const { error } = await sb
+                .from('karkhana_users')
+                .update({ validity_date: dateVal })
+                .eq('user_id', uid);
+            if (error) throw error;
+        } catch (err) {
+            console.error('Expiry update error:', err);
+        }
+    }
+
+    async function extendValidity(uid, days) {
+        const u = (window.adminUsersData || []).find((x) => String(x.id) === String(uid));
+        const base = (u && u.expiryDate && new Date(u.expiryDate) > new Date()) ? new Date(u.expiryDate) : new Date();
+        base.setDate(base.getDate() + days);
+        const formatted = base.toISOString().split('T')[0];
+
+        const sb = getSupabaseAdmin();
+        if (!sb) return alert('Supabase connect nahi hai!');
+
+        try {
+            const { error } = await sb
+                .from('karkhana_users')
+                .update({
+                    validity_date: formatted,
+                    status: 'active'
+                })
+                .eq('user_id', uid);
+
+            if (error) throw error;
+
+            alert(`✅ Validity ${days} din badh gayi!`);
+            refreshAdminUsersList();
+        } catch (err) {
+            alert('Validity update error: ' + err.message);
+        }
+    }
+
+    async function resetUserPasswordByAdmin(uid) {
+        const newPass = prompt('Naya password daalein:', Math.floor(100000 + Math.random() * 900000).toString());
+        if (!newPass || !newPass.trim()) return;
+
+        const sb = getSupabaseAdmin();
+        if (!sb) return alert('Supabase connect nahi hai!');
+
+        try {
+            const { error } = await sb
+                .from('karkhana_users')
+                .update({ password: newPass.trim() })
+                .eq('user_id', uid);
+
+            if (error) throw error;
+
+            alert('✅ Password update ho gaya!');
+            refreshAdminUsersList();
+        } catch (err) {
+            alert('Password reset error: ' + err.message);
+        }
+    }
+
+    async function toggleUserBlockStatus(uid) {
+        if (String(uid).toLowerCase() === 'farhan') return alert('⛔ Master Admin block nahi ho sakta!');
+        const u = (window.adminUsersData || []).find((x) => String(x.id) === String(uid));
+        const nextStatus = (u && u.status === 'blocked') ? 'active' : 'blocked';
+
+        const sb = getSupabaseAdmin();
+        if (!sb) return alert('Supabase connect nahi hai!');
+
+        try {
+            const { error } = await sb
+                .from('karkhana_users')
+                .update({ status: nextStatus })
+                .eq('user_id', uid);
+
+            if (error) throw error;
+
+            refreshAdminUsersList();
+        } catch (err) {
+            alert('Block/Unblock error: ' + err.message);
+        }
+    }
+
+    async function deleteUserByAdmin(uid) {
+        if (String(uid).toLowerCase() === 'farhan') return alert('⛔ Master Admin delete nahi ho sakta!');
+        if (!confirm('Kya aap sach me is User ko delete/reject karna chahte hain?')) return;
+
+        const sb = getSupabaseAdmin();
+        if (!sb) return alert('Supabase connect nahi hai!');
+
+        try {
+            const { error } = await sb
+                .from('karkhana_users')
+                .delete()
+                .eq('user_id', uid);
+
+            if (error) throw error;
+
+            alert('🗑️ User delete ho gaya!');
+            refreshAdminUsersList();
+        } catch (err) {
+            alert('Delete error: ' + err.message);
+        }
+    }
+
+    window.openAdminModule = openAdminModule;
+    window.renderAdminUsersTable = renderAdminUsersTable;
+    window.approveUserByAdmin = approveUserByAdmin;
+    window.updateUserExpiryDate = updateUserExpiryDate;
+    window.extendValidity = extendValidity;
+    window.resetUserPasswordByAdmin = resetUserPasswordByAdmin;
+    window.toggleUserBlockStatus = toggleUserBlockStatus;
+    window.deleteUserByAdmin = deleteUserByAdmin;
+    window.refreshAdminUsersList = refreshAdminUsersList;
+    window.setAdminUsersFilter = setAdminUsersFilter;
+    window.handleAdminUserSearch = handleAdminUserSearch;
+    window.toggleAdminRowPass = toggleAdminRowPass;
 })();
