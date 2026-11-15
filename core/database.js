@@ -1014,6 +1014,66 @@
                     note: row.note || ''
                 };
             }
+        },
+
+        material_transfers: {
+            defaultSourceKey: 'material_transfers',
+            resolveSourceKey: () => 'material_transfers',
+            sortList: (arr) => arr.sort((a, b) => (Number(a.timestamp) || 0) - (Number(b.timestamp) || 0)),
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'date', 'type', 'itemName',
+                    'fromKarkhanaId', 'toKarkhanaId',
+                    'qty', 'quantity', 'note', 'timestamp'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                const q = Number(item.qty !== undefined && item.qty !== null ? item.qty : (item.quantity || 0)) || 0;
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    date: item.date || null,
+                    type: String(item.type || 'bana').toLowerCase(),
+                    item_name: item.itemName || item.name || '',
+                    from_karkhana_id: item.fromKarkhanaId || 'k_main',
+                    to_karkhana_id: item.toKarkhanaId || '',
+                    qty: q,
+                    note: item.note || '',
+                    client_ts: item.timestamp ? Number(item.timestamp) : null,
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                const q = Number(row.qty) || 0;
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    date: row.date || '',
+                    type: row.type || 'bana',
+                    itemName: row.item_name || '',
+                    fromKarkhanaId: row.from_karkhana_id || 'k_main',
+                    toKarkhanaId: row.to_karkhana_id || '',
+                    qty: q,
+                    quantity: q,
+                    note: row.note || '',
+                    timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
+                };
+            }
         }
         // === ADD NEW ROW-BY-ROW MODULES HERE IN FUTURE ===
     };
@@ -1232,6 +1292,7 @@
         if (tableName === 'job_work_bills' && k.includes('jw_payments_list')) return 'jw_payments_list';
         if (tableName === 'tani_orders' || k.includes('tani_orders')) return 'tani_orders_list';
         if (tableName === 'dukan_challans' || k.includes('dukan_transfer')) return 'dukan_transfer_history';
+        if (tableName === 'material_transfers' || k.includes('material_transfer')) return 'material_transfers';
         return cloudKey;
     };
 
@@ -1248,7 +1309,7 @@
             case 'sancha_history': return 'Sancha (Tani & Chukka • Delta Sync) load ho raha hai...';
             case 'karigers':
             case 'tani_sheets': return 'Sabhi Karigers & Tani Sheets (Delta Sync) load ho rahi hain...';
-            case 'material_transfers': return 'Material Transfers load ho rahe hain...';
+            case 'material_transfers': return 'Material Transfers (Delta Sync) load ho rahe hain...';
             case 'dukan_challans': return 'Dukan Challans (Delta Sync) load ho rahe hain...';
             case 'payments': return 'Payments & Bakaya Hisab (Delta Sync) load ho raha hai...';
             case 'cutting_history':
