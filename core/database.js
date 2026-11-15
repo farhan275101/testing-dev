@@ -146,7 +146,13 @@
         const k = String(fullKey).toLowerCase();
 
         if (k.includes('karkhana_list')) return 'KARKHANA_ACTION';
-        if (k.includes('session') || k.includes('app_store') || k.includes('info_ledger')) return 'app_store';
+        if (k.includes('session') || k.includes('app_store')) return 'app_store';
+
+        // ⭐ Nayi dedicated tables
+        if (k.includes('info_ledger')) return 'info_ledger';
+        if (k.includes('billing_config')) return 'billing_config';
+        if (k.includes('tani_learned')) return 'tani_learned';
+
         if (k.includes('saree_history')) return 'saree_history';
         if (k.includes('saree_stock') || k.includes('saree_items') || k.includes('saree')) return 'saree_stock';
         if (k.includes('zari_history')) return 'zari_history';
@@ -168,7 +174,7 @@
         if (k.includes('material_transfer') || k.includes('transfer')) return 'material_transfers';
         if (k.includes('dukan')) return 'dukan_challans';
 
-        // ⭐ 13. TANI ORDERS & RANGAI TABLE ROUTING
+        // ⭐ TANI ORDERS & RANGAI TABLE ROUTING
         if (k.includes('tani_order') || k.includes('tani_parchi') || k.includes('tani_rangai')) return 'tani_orders';
 
         if (k.includes('embroidery_history')) return 'embroidery_history';
@@ -200,6 +206,8 @@
             return 'job_work_bills';
         }
 
+        // Fallback: Agar kisi nayi/bina-table wali key ka data aaye toh app_store me safe sync ho
+        console.warn('[CloudEngine] Unmapped key synced to app_store fallback:', fullKey);
         return 'app_store';
     };
 
@@ -350,22 +358,20 @@
         showSyncStatus('syncing');
 
         try {
-            // ⭐ 1. WORKERS LIST SYNC
+            // ⭐ 1. WORKERS LIST SYNC (Dedicated jobwork_workers + department tables)
             if (targetTable === 'WORKERS_ACTION') {
                 const workersList = Array.isArray(data) ? data : [];
                 const nowMs = Date.now();
-                recentSelfWrites['app_store'] = nowMs;
+                recentSelfWrites['jobwork_workers'] = nowMs;
                 recentSelfWrites['embroidery'] = nowMs;
                 recentSelfWrites['cutting'] = nowMs;
                 recentSelfWrites['calender'] = nowMs;
 
                 try {
-                    await supabaseClient.from('app_store').upsert({
+                    await supabaseClient.from('jobwork_workers').upsert({
                         id: `${uid}_${sess}_jobwork_workers`,
                         user_id: uid, tenant_id: tid, session: sess,
-                        key: 'jobwork_workers',
                         data: workersList,
-                        value: workersList,
                         updated_at: new Date().toISOString()
                     }, { onConflict: 'id' });
                 } catch (_) {}
@@ -625,7 +631,6 @@
             }
         } catch (_) {}
 
-        // ⭐ Sabhi Tables (Ab isme 'tani_orders' bhi juda hai)
         const tables = [
             'app_store',
             'saree_stock', 'saree_history',
@@ -639,7 +644,11 @@
             'embroidery', 'embroidery_history',
             'calender', 'calender_history',
             'job_work_bills',
-            'tani_orders'
+            'tani_orders',
+            'info_ledger',
+            'billing_config',
+            'jobwork_workers',
+            'tani_learned'
         ];
 
         let hasNewData = false;
@@ -705,7 +714,7 @@
                             return;
                         }
 
-                        // Sirf wahi 1 table refresh karein jisme badlav aaya (23 tables nahi!)
+                        // Sirf wahi 1 table refresh karein jisme badlav aaya
                         if (tbl && !isSyncingInProgress) {
                             if (tablePullTimers[tbl]) clearTimeout(tablePullTimers[tbl]);
                             tablePullTimers[tbl] = setTimeout(() => {
