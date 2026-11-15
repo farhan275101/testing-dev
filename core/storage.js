@@ -1,7 +1,7 @@
 /* ============================================================================
    SIMPLICITY ERP - HIGH-PERFORMANCE OFFLINE-FIRST STORAGE & TALLY LOADER ENGINE
    File: core/storage.js • Developed by Farhan Jawed
-   Architecture: L1-RAM / L2-Tiny-LS (<50KB) / L3-IndexedDB (GBs) / L4-Cloud Queue
+   Architecture: L1-RAM / L2-Tiny-LS (<50KB) / L3-IndexedDB (GBs) / L4-Delta Cloud Queue
 ============================================================================ */
 
 (() => {
@@ -16,6 +16,10 @@
     const SYNC_DEBOUNCE_TIMERS = new Map();
     const DEBOUNCE_DELAY_MS = 300;
     let isSyncQueueFlushing = false;
+
+    // Generic Row-Level Diff & Delta Buffers (Permanent for all Row-by-Row modules)
+    const LAST_SYNCED_SNAPSHOTS = new Map(); // fullKey -> Map<rowId, jsonString>
+    const PENDING_ROW_DELTAS = new Map();    // fullKey -> { upserts: Map<rowId, obj>, deletes: Set<rowId> }
 
     const GLOBAL_APP_KEYS = Object.freeze([
         'app_sessions_list',
@@ -67,6 +71,76 @@
             }
         } catch (_) {}
         return false;
+    };
+
+    /* ========================================================================
+       ROW-SYNC SNAPSHOT & GENERIC DIFF HELPERS
+    ======================================================================== */
+    const isRowSyncKey = (fullKey) => {
+        try {
+            return typeof window.CloudEngine?.isRowSyncKey === 'function' && window.CloudEngine.isRowSyncKey(fullKey);
+        } catch (_) {
+            return false;
+        }
+    };
+
+    const getRowIdentity = (item) => {
+        if (!item || typeof item !== 'object') return null;
+        if (item.id !== undefined && item.id !== null && String(item.id).trim() !== '') {
+            return String(item.id).trim();
+        }
+        return null;
+    };
+
+    const buildSnapshotMap = (arr) => {
+        const map = new Map();
+        if (!Array.isArray(arr)) return map;
+        for (let i = 0; i < arr.length; i++) {
+            const item = arr[i];
+            const rid = getRowIdentity(item);
+            if (!rid) continue;
+            try {
+                map.set(rid, JSON.stringify(item));
+            } catch (_) {}
+        }
+        return map;
+    };
+
+    const updateRowSnapshot = (fullKey, arr) => {
+        if (!fullKey || !Array.isArray(arr)) return;
+        LAST_SYNCED_SNAPSHOTS.set(fullKey, buildSnapshotMap(arr));
+    };
+
+    const computeAndAdvanceRowDiff = (fullKey, nextArr) => {
+        const prevSnap = LAST_SYNCED_SNAPSHOTS.get(fullKey) || new Map();
+        const nextSnap = new Map();
+        const upserts = [];
+        const deletes = [];
+
+        if (Array.isArray(nextArr)) {
+            for (let i = 0; i < nextArr.length; i++) {
+                const item = nextArr[i];
+                const rid = getRowIdentity(item);
+                if (!rid) continue;
+                let str = '';
+                try { str = JSON.stringify(item); } catch (_) { continue; }
+                nextSnap.set(rid, str);
+
+                const oldStr = prevSnap.get(rid);
+                if (oldStr === undefined || oldStr !== str) {
+                    upserts.push(item);
+                }
+            }
+        }
+
+        prevSnap.forEach((_, rid) => {
+            if (!nextSnap.has(rid)) {
+                deletes.push(rid);
+            }
+        });
+
+        LAST_SYNCED_SNAPSHOTS.set(fullKey, nextSnap);
+        return { upserts, deletes };
     };
 
     /* ========================================================================
@@ -312,6 +386,8 @@
     const clearMemoryCache = () => {
         APP_MEMORY_CACHE = Object.create(null);
         window.APP_MEMORY_CACHE = APP_MEMORY_CACHE;
+        LAST_SYNCED_SNAPSHOTS.clear();
+        PENDING_ROW_DELTAS.clear();
         SYNC_DEBOUNCE_TIMERS.forEach((timer) => clearTimeout(timer));
         SYNC_DEBOUNCE_TIMERS.clear();
     };
@@ -418,10 +494,57 @@
         } catch (_) {}
     };
 
+    // Offline delta queue ko merge karke safe rakhein taaki purani offline edits overwrite na hon
     const enqueueSyncMutation = async (mutation) => {
         try {
             const dbase = await getIndexedDBPromise();
             if (!dbase) return;
+
+            if (mutation.mode === 'ROW_DELTA') {
+                await new Promise((resolve) => {
+                    const tx = dbase.transaction(DB_CONFIG.STORE_QUEUE, 'readwrite');
+                    const store = tx.objectStore(DB_CONFIG.STORE_QUEUE);
+                    const getReq = store.get(mutation.id);
+
+                    getReq.onsuccess = () => {
+                        const existing = getReq.result;
+                        if (existing && existing.mode === 'ROW_DELTA') {
+                            const upsertMap = new Map();
+                            const deleteSet = new Set(existing.deletes || []);
+
+                            (existing.upserts || []).forEach((it) => {
+                                const rid = getRowIdentity(it);
+                                if (rid) upsertMap.set(rid, it);
+                            });
+
+                            (mutation.upserts || []).forEach((it) => {
+                                const rid = getRowIdentity(it);
+                                if (rid) {
+                                    deleteSet.delete(rid);
+                                    upsertMap.set(rid, it);
+                                }
+                            });
+
+                            (mutation.deletes || []).forEach((rid) => {
+                                const idStr = String(rid || '').trim();
+                                if (idStr) {
+                                    upsertMap.delete(idStr);
+                                    deleteSet.add(idStr);
+                                }
+                            });
+
+                            mutation.upserts = Array.from(upsertMap.values());
+                            mutation.deletes = Array.from(deleteSet.values());
+                        }
+                        store.put(mutation);
+                    };
+
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                });
+                return;
+            }
+
             const tx = dbase.transaction(DB_CONFIG.STORE_QUEUE, 'readwrite');
             tx.objectStore(DB_CONFIG.STORE_QUEUE).put(mutation);
         } catch (_) {}
@@ -430,7 +553,7 @@
     const flushSyncQueue = async () => {
         if (isSyncQueueFlushing || !navigator.onLine) return;
         const sb = getSupabase();
-        if (!sb) return;
+        if (!sb || !window.CloudEngine) return;
 
         isSyncQueueFlushing = true;
         try {
@@ -446,19 +569,38 @@
 
                 if (typeof window.showSyncStatus === 'function') window.showSyncStatus('syncing');
 
+                let hadError = false;
                 for (const item of queue) {
                     try {
-                        if (typeof window.CloudEngine?.cloudWrite === 'function') {
-                            await window.CloudEngine.cloudWrite(item.targetKey, item.data);
+                        let ok = false;
+                        if (item.mode === 'ROW_DELTA') {
+                            if (typeof window.CloudEngine?.cloudWriteDelta === 'function') {
+                                ok = await window.CloudEngine.cloudWriteDelta(
+                                    item.targetKey,
+                                    item.upserts || [],
+                                    item.deletes || []
+                                );
+                            }
+                        } else if (typeof window.CloudEngine?.cloudWrite === 'function') {
+                            ok = await window.CloudEngine.cloudWrite(item.targetKey, item.data);
                         }
+
+                        if (!ok) {
+                            hadError = true;
+                            break;
+                        }
+
                         const deleteTx = dbase.transaction(DB_CONFIG.STORE_QUEUE, 'readwrite');
                         deleteTx.objectStore(DB_CONFIG.STORE_QUEUE).delete(item.id);
                     } catch (_) {
+                        hadError = true;
                         break;
                     }
                 }
 
-                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('online');
+                if (typeof window.showSyncStatus === 'function') {
+                    window.showSyncStatus(hadError ? 'error' : 'online');
+                }
                 isSyncQueueFlushing = false;
             };
             req.onerror = () => { isSyncQueueFlushing = false; };
@@ -470,7 +612,99 @@
     window.addEventListener('online', () => { flushSyncQueue(); });
 
     /**
-     * Supabase Cloud Sync Engine (Debounced)
+     * Generic Row-Delta Cloud Sync Dispatcher (For Row-by-Row Modules)
+     */
+    const dispatchRowDeltaSync = (fullKey, upserts, deletes) => {
+        const uid = getEffectiveUserId();
+        if (isRemoteUpdating || !uid) return;
+        if ((!upserts || upserts.length === 0) && (!deletes || deletes.length === 0)) return;
+
+        let pending = PENDING_ROW_DELTAS.get(fullKey);
+        if (!pending) {
+            pending = { upserts: new Map(), deletes: new Set() };
+            PENDING_ROW_DELTAS.set(fullKey, pending);
+        }
+
+        (upserts || []).forEach((it) => {
+            const rid = getRowIdentity(it);
+            if (rid) {
+                pending.deletes.delete(rid);
+                pending.upserts.set(rid, it);
+            }
+        });
+
+        (deletes || []).forEach((rid) => {
+            const idStr = String(rid || '').trim();
+            if (idStr) {
+                pending.upserts.delete(idStr);
+                pending.deletes.add(idStr);
+            }
+        });
+
+        const queueId = `delta_${uid}_${fullKey}`;
+
+        if (SYNC_DEBOUNCE_TIMERS.has(fullKey)) {
+            clearTimeout(SYNC_DEBOUNCE_TIMERS.get(fullKey));
+        }
+
+        const timer = setTimeout(async () => {
+            SYNC_DEBOUNCE_TIMERS.delete(fullKey);
+            const batch = PENDING_ROW_DELTAS.get(fullKey);
+            PENDING_ROW_DELTAS.delete(fullKey);
+            if (!batch) return;
+
+            const finalUpserts = Array.from(batch.upserts.values());
+            const finalDeletes = Array.from(batch.deletes.values());
+            if (!finalUpserts.length && !finalDeletes.length) return;
+
+            const sb = getSupabase();
+            if (!navigator.onLine || !sb || typeof window.CloudEngine?.cloudWriteDelta !== 'function') {
+                await enqueueSyncMutation({
+                    id: queueId,
+                    mode: 'ROW_DELTA',
+                    targetKey: fullKey,
+                    upserts: finalUpserts,
+                    deletes: finalDeletes,
+                    timestamp: Date.now()
+                });
+                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('offline');
+                return;
+            }
+
+            try {
+                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('syncing');
+                const ok = await window.CloudEngine.cloudWriteDelta(fullKey, finalUpserts, finalDeletes);
+                if (!ok) {
+                    await enqueueSyncMutation({
+                        id: queueId,
+                        mode: 'ROW_DELTA',
+                        targetKey: fullKey,
+                        upserts: finalUpserts,
+                        deletes: finalDeletes,
+                        timestamp: Date.now()
+                    });
+                    if (typeof window.showSyncStatus === 'function') window.showSyncStatus('error');
+                    return;
+                }
+                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('online');
+            } catch (_) {
+                await enqueueSyncMutation({
+                    id: queueId,
+                    mode: 'ROW_DELTA',
+                    targetKey: fullKey,
+                    upserts: finalUpserts,
+                    deletes: finalDeletes,
+                    timestamp: Date.now()
+                });
+                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('offline');
+            }
+        }, DEBOUNCE_DELAY_MS);
+
+        SYNC_DEBOUNCE_TIMERS.set(fullKey, timer);
+    };
+
+    /**
+     * Legacy JSONB Cloud Sync Engine (Debounced — for remaining JSONB modules)
      */
     const dispatchCloudSync = (fullKey, toSave, action = 'SET') => {
         const uid = getEffectiveUserId();
@@ -502,7 +736,18 @@
                 if (typeof window.showSyncStatus === 'function') window.showSyncStatus('syncing');
 
                 if (typeof window.CloudEngine?.cloudWrite === 'function') {
-                    await window.CloudEngine.cloudWrite(fullKey, toSave);
+                    const ok = await window.CloudEngine.cloudWrite(fullKey, toSave);
+                    if (ok === false) {
+                        await enqueueSyncMutation({
+                            id: queueId,
+                            action,
+                            targetKey: fullKey,
+                            data: toSave,
+                            timestamp: Date.now()
+                        });
+                        if (typeof window.showSyncStatus === 'function') window.showSyncStatus('error');
+                        return;
+                    }
                 }
 
                 if (typeof window.showSyncStatus === 'function') window.showSyncStatus('online');
@@ -542,6 +787,7 @@
                             val = raw;
                         }
                         APP_MEMORY_CACHE[k] = val;
+                        if (Array.isArray(val)) updateRowSnapshot(k, val);
                         await idbPut(k, val);
                     }
                     // Heavy keys ko IndexedDB me safe karne ke baad localStorage se hata dein
@@ -599,6 +845,9 @@
                     const k = String(cursor.key);
                     if (k.startsWith(`${uid}_`) || k === 'app_users') {
                         APP_MEMORY_CACHE[k] = cursor.value;
+                        if (Array.isArray(cursor.value)) {
+                            updateRowSnapshot(k, cursor.value);
+                        }
                     }
                     cursor.continue();
                 } else {
@@ -646,7 +895,12 @@
                 if (cachedVal !== null && typeof cachedVal === 'object' && !Array.isArray(cachedVal)) {
                     return cachedVal;
                 }
-                return safeArr(cachedVal);
+                const arrVal = safeArr(cachedVal);
+                // Ensure immutable snapshot exists before caller mutates array via .push() etc.
+                if (isRowSyncKey(fullKey) && !LAST_SYNCED_SNAPSHOTS.has(fullKey)) {
+                    updateRowSnapshot(fullKey, arrVal);
+                }
+                return arrVal;
             }
 
             const raw = localStorage.getItem(fullKey);
@@ -660,7 +914,11 @@
             if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
                 return parsed;
             }
-            return safeArr(parsed);
+            const arrParsed = safeArr(parsed);
+            if (isRowSyncKey(fullKey)) {
+                updateRowSnapshot(fullKey, arrParsed);
+            }
+            return arrParsed;
         } catch (_) {
             return [];
         }
@@ -672,6 +930,14 @@
         try {
             const fullKey = getStorageKey(key);
             const toSave = Array.isArray(data) ? safeArr(data) : data;
+            const useRowSync = isRowSyncKey(fullKey) && Array.isArray(toSave);
+
+            let diff = null;
+            if (useRowSync && !isRemoteUpdating) {
+                diff = computeAndAdvanceRowDiff(fullKey, toSave);
+            } else if (Array.isArray(toSave)) {
+                updateRowSnapshot(fullKey, toSave);
+            }
 
             APP_MEMORY_CACHE[fullKey] = toSave;
             window.APP_MEMORY_CACHE[fullKey] = toSave;
@@ -684,7 +950,13 @@
                 } catch (_) {}
             }
 
-            dispatchCloudSync(fullKey, toSave, 'SET');
+            if (useRowSync) {
+                if (diff && (diff.upserts.length > 0 || diff.deletes.length > 0)) {
+                    dispatchRowDeltaSync(fullKey, diff.upserts, diff.deletes);
+                }
+            } else {
+                dispatchCloudSync(fullKey, toSave, 'SET');
+            }
         } catch (fatalErr) {
             console.error('[Storage:setStore] Fatal write error:', fatalErr);
         }
@@ -693,6 +965,9 @@
     const setRemoteStore = (fullKey, cleanData) => {
         APP_MEMORY_CACHE[fullKey] = cleanData;
         if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = cleanData;
+        if (Array.isArray(cleanData)) {
+            updateRowSnapshot(fullKey, cleanData);
+        }
         if (isLightweightKey(fullKey)) {
             try {
                 localStorage.setItem(fullKey, JSON.stringify(cleanData));
@@ -704,11 +979,33 @@
     const deleteStoreKey = (key) => {
         try {
             const fullKey = getStorageKey(key);
+            const useRowSync = isRowSyncKey(fullKey);
+            let deletedIds = [];
+
+            if (useRowSync && !isRemoteUpdating) {
+                const prevSnap = LAST_SYNCED_SNAPSHOTS.get(fullKey);
+                if (prevSnap) {
+                    deletedIds = Array.from(prevSnap.keys());
+                } else if (Array.isArray(APP_MEMORY_CACHE[fullKey])) {
+                    deletedIds = APP_MEMORY_CACHE[fullKey].map(getRowIdentity).filter(Boolean);
+                }
+                LAST_SYNCED_SNAPSHOTS.set(fullKey, new Map());
+            } else {
+                LAST_SYNCED_SNAPSHOTS.delete(fullKey);
+            }
+
             delete APP_MEMORY_CACHE[fullKey];
             if (window.APP_MEMORY_CACHE) delete window.APP_MEMORY_CACHE[fullKey];
             idbDelete(fullKey);
             try { localStorage.removeItem(fullKey); } catch (_) {}
-            dispatchCloudSync(fullKey, null, 'REMOVE');
+
+            if (useRowSync) {
+                if (deletedIds.length > 0) {
+                    dispatchRowDeltaSync(fullKey, [], deletedIds);
+                }
+            } else {
+                dispatchCloudSync(fullKey, null, 'REMOVE');
+            }
         } catch (err) {
             console.error('[Storage:deleteStoreKey] Delete error:', err);
         }
@@ -719,6 +1016,7 @@
         setStore,
         setRemoteStore,
         deleteStoreKey,
+        updateRowSnapshot,
         clearMemoryCache,
         getStorageKey,
         getEffectiveUserId,
