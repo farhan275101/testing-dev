@@ -1,7 +1,7 @@
 /* ============================================================================
-   SIMPLICITY ERP - ENTERPRISE AUTO-POLLING & LIVE REALTIME ENGINE (ALL MODULES)
+   SIMPLICITY ERP - ENTERPRISE AUTO-POLLING, DELTA SYNC & LIVE REALTIME ENGINE
    File: core/database.js • Developed by Farhan Jawed
-   Modules: Multi-Godam + Jobwork + Tani Orders & Rangai + Tally Progress Sync
+   Modules: Multi-Godam + Jobwork + Tani Orders & Rangai + Row-by-Row Delta Sync
 ============================================================================ */
 
 (() => {
@@ -14,6 +14,8 @@
     });
 
     const PULL_COOLDOWN_MS = 45000; // 45 sec cooldown for focus/visibility pulls
+    const ROW_PAGE_SIZE = 1000;
+    const ROW_WRITE_CHUNK = 200;
 
     let supabaseClient = null;
     let isConnectedToCloud = false;
@@ -24,6 +26,7 @@
     let lastFullPullUid = null;
     const recentSelfWrites = {};
     const tablePullTimers = {};
+    const tablePullInFlight = {};
 
     try {
         if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
@@ -34,6 +37,79 @@
     } catch (initErr) {
         console.error('❌ [CloudEngine] Supabase Init failure:', initErr);
     }
+
+    /* ========================================================================
+       GENERIC ROW-BY-ROW & DELTA SYNC SCHEMA REGISTRY
+       (Naya module convert karte waqt bas yahin 1 block add karna hoga)
+    ======================================================================== */
+    const ROW_SYNC_SCHEMAS = {
+        payments: {
+            defaultSourceKey: 'payment_records',
+            resolveSourceKey: (shortKey) => {
+                const k = String(shortKey || '').toLowerCase();
+                if (k.includes('payment_history')) return 'payment_history';
+                return 'payment_records';
+            },
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'date', 'type', 'category', 'party',
+                    'karigerId', 'karkhanaId', 'amount', 'paymentMode',
+                    'remarks', 'refId', 'timestamp'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    date: item.date || null,
+                    type: item.type || null,
+                    category: item.category || null,
+                    party: item.party || null,
+                    kariger_id: item.karigerId || null,
+                    karkhana_id: item.karkhanaId || null,
+                    amount: Number(item.amount) || 0,
+                    payment_mode: item.paymentMode || 'Cash',
+                    remarks: item.remarks || null,
+                    ref_id: item.refId || null,
+                    client_ts: item.timestamp ? Number(item.timestamp) : null,
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    date: row.date || '',
+                    type: row.type || '',
+                    category: row.category || '',
+                    party: row.party || '',
+                    karigerId: row.kariger_id || '',
+                    karkhanaId: row.karkhana_id || '',
+                    amount: Number(row.amount) || 0,
+                    paymentMode: row.payment_mode || 'Cash',
+                    remarks: row.remarks || '',
+                    refId: row.ref_id || '',
+                    timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
+                };
+            }
+        }
+        // === ADD NEW ROW-BY-ROW MODULES HERE IN FUTURE ===
+    };
 
     const isLightweightLocalKey = (key) => {
         if (typeof window.StorageEngine?.isLightweightKey === 'function') {
@@ -186,7 +262,10 @@
             k.includes('payment_list') ||
             k.includes('payments')
         ) {
-            return 'payments';
+            // jw_payments_list ko job_work_bills me hi rakhna hai
+            if (!k.includes('jw_payment')) {
+                return 'payments';
+            }
         }
         if (k.includes('material_transfer') || k.includes('transfer')) return 'material_transfers';
         if (k.includes('dukan')) return 'dukan_challans';
@@ -228,6 +307,11 @@
         return 'app_store';
     };
 
+    const isRowSyncKey = (fullKey) => {
+        const tbl = resolveTargetTable(fullKey);
+        return Boolean(tbl && Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, tbl));
+    };
+
     const mapCloudKeyToLocalKey = (cloudKey, tableName) => {
         const k = String(cloudKey).toLowerCase();
         if (k.includes('sancha_list') || tableName === 'sancha_list') return 'sancha_items';
@@ -253,7 +337,7 @@
             case 'tani_sheets': return 'Sabhi Karigers & Tani Sheets load ho rahi hain...';
             case 'material_transfers':
             case 'dukan_challans': return 'Transfers & Dukan Challans load ho rahe hain...';
-            case 'payments': return 'Payments & Bakaya Hisab load ho raha hai...';
+            case 'payments': return 'Payments & Bakaya Hisab (Delta Sync) load ho raha hai...';
             case 'cutting':
             case 'cutting_history':
             case 'embroidery':
@@ -381,6 +465,9 @@
                 window.APP_MEMORY_CACHE[fullStorageKey] = rowData;
                 window.APP_MEMORY_CACHE[shortKey] = rowData;
             }
+            if (Array.isArray(rowData) && typeof window.StorageEngine?.updateRowSnapshot === 'function') {
+                window.StorageEngine.updateRowSnapshot(fullStorageKey, rowData);
+            }
             if (typeof window.idbPut === 'function') {
                 window.idbPut(fullStorageKey, rowData);
             }
@@ -397,11 +484,210 @@
         }
     };
 
+    /* ========================================================================
+       GENERIC ROW-BY-ROW WRITE ENGINE (UPSERT + SOFT DELETE)
+    ======================================================================== */
+    const cloudWriteDelta = async (fullKey, upserts = [], deletes = []) => {
+        if (!supabaseClient) return false;
+
+        const targetTable = resolveTargetTable(fullKey);
+        const schema = ROW_SYNC_SCHEMAS[targetTable];
+        if (!targetTable || !schema) return false;
+
+        const uid = getSafeUserId();
+        const tid = getSafeTenantId();
+        const sess = getActiveSessionVal();
+        if (!uid) return false;
+
+        const shortKey = String(fullKey).replace(`${uid}_${sess}_`, '').replace(`${uid}_`, '');
+        const sourceKey = schema.resolveSourceKey
+            ? schema.resolveSourceKey(shortKey)
+            : (schema.defaultSourceKey || shortKey);
+
+        recentSelfWrites[targetTable] = Date.now();
+        showSyncStatus('syncing');
+
+        try {
+            const ctx = { uid, tid, sess, sourceKey, shortKey };
+
+            // 1. Upsert sirf badli / nayi rows (chunked)
+            const validUpserts = (upserts || []).filter((it) => it && it.id !== undefined && it.id !== null);
+            for (let i = 0; i < validUpserts.length; i += ROW_WRITE_CHUNK) {
+                const chunk = validUpserts.slice(i, i + ROW_WRITE_CHUNK).map((it) => schema.toSqlRow(it, ctx));
+                const { error } = await supabaseClient
+                    .from(targetTable)
+                    .upsert(chunk, { onConflict: 'id' });
+
+                if (error) {
+                    console.error(`❌ [Supabase Row Upsert Error in ${targetTable}]:`, error.message);
+                    showSyncStatus('error');
+                    return false;
+                }
+            }
+
+            // 2. Soft Delete hataayi gayi rows (is_deleted = true)
+            const validDeleteIds = (deletes || [])
+                .map((rid) => String(rid || '').trim())
+                .filter(Boolean)
+                .map((rid) => `${uid}_${sess}_${sourceKey}_${rid}`);
+
+            for (let i = 0; i < validDeleteIds.length; i += ROW_WRITE_CHUNK) {
+                const idChunk = validDeleteIds.slice(i, i + ROW_WRITE_CHUNK);
+                const { error } = await supabaseClient
+                    .from(targetTable)
+                    .update({ is_deleted: true })
+                    .eq('user_id', uid)
+                    .eq('session', sess)
+                    .in('id', idChunk);
+
+                if (error) {
+                    console.error(`❌ [Supabase Soft Delete Error in ${targetTable}]:`, error.message);
+                    showSyncStatus('error');
+                    return false;
+                }
+            }
+
+            recentSelfWrites[targetTable] = Date.now();
+            isConnectedToCloud = true;
+            showSyncStatus('online');
+            return true;
+        } catch (err) {
+            console.error(`❌ [RowDelta Exception in ${targetTable}]:`, err);
+            showSyncStatus('error');
+            return false;
+        }
+    };
+
+    /* ========================================================================
+       GENERIC ROW-BY-ROW DELTA PULL ENGINE (updated_at > last_sync)
+    ======================================================================== */
+    const getDeltaSyncCursorKey = (tbl, uid, sess) => `erp_delta_sync_${tbl}_${uid}_${sess}`;
+
+    const pullRowSyncTable = async (tbl, uid) => {
+        const schema = ROW_SYNC_SCHEMAS[tbl];
+        if (!schema || !supabaseClient || !uid) return false;
+
+        if (tablePullInFlight[tbl]) return false;
+        tablePullInFlight[tbl] = true;
+
+        try {
+            const sess = getActiveSessionVal();
+            const cursorKey = getDeltaSyncCursorKey(tbl, uid, sess);
+            let lastSyncIso = null;
+            try { lastSyncIso = localStorage.getItem(cursorKey); } catch (_) {}
+
+            const isInitialPull = !lastSyncIso;
+            const fetchedRows = [];
+            let from = 0;
+
+            while (true) {
+                let query = supabaseClient
+                    .from(tbl)
+                    .select('*')
+                    .eq('user_id', uid)
+                    .eq('session', sess);
+
+                if (isInitialPull) {
+                    query = query.eq('is_deleted', false);
+                } else {
+                    query = query.gt('updated_at', lastSyncIso);
+                }
+
+                const { data, error } = await query
+                    .order('updated_at', { ascending: true })
+                    .order('id', { ascending: true })
+                    .range(from, from + ROW_PAGE_SIZE - 1);
+
+                if (error) {
+                    console.error(`❌ [Delta Pull Error in ${tbl}]:`, error.message);
+                    return false;
+                }
+
+                if (!Array.isArray(data) || data.length === 0) break;
+                fetchedRows.push(...data);
+
+                if (data.length < ROW_PAGE_SIZE) break;
+                from += ROW_PAGE_SIZE;
+            }
+
+            if (fetchedRows.length === 0) {
+                return false;
+            }
+
+            let maxUpdatedAt = lastSyncIso || '';
+            const groupedBySource = new Map();
+
+            for (let i = 0; i < fetchedRows.length; i++) {
+                const row = fetchedRows[i];
+                if (!row) continue;
+                if (row.updated_at && String(row.updated_at) > maxUpdatedAt) {
+                    maxUpdatedAt = String(row.updated_at);
+                }
+                const sKey = row.source_key || schema.defaultSourceKey;
+                if (!groupedBySource.has(sKey)) groupedBySource.set(sKey, []);
+                groupedBySource.get(sKey).push(row);
+            }
+
+            let hasNewData = false;
+
+            groupedBySource.forEach((rows, sKey) => {
+                const fullStorageKey = (typeof window.getStorageKey === 'function')
+                    ? window.getStorageKey(sKey)
+                    : `${uid}_${sess}_${sKey}`;
+
+                const currentArr = (!isInitialPull && window.APP_MEMORY_CACHE && Array.isArray(window.APP_MEMORY_CACHE[fullStorageKey]))
+                    ? window.APP_MEMORY_CACHE[fullStorageKey]
+                    : [];
+
+                const mergedMap = new Map();
+                for (let i = 0; i < currentArr.length; i++) {
+                    const item = currentArr[i];
+                    if (item && item.id !== undefined && item.id !== null) {
+                        mergedMap.set(String(item.id).trim(), item);
+                    }
+                }
+
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+                    const rid = String(row.record_id || row.id || '').trim();
+                    if (!rid) continue;
+
+                    if (row.is_deleted === true) {
+                        mergedMap.delete(rid);
+                    } else {
+                        mergedMap.set(rid, schema.fromSqlRow(row));
+                    }
+                }
+
+                const mergedArr = Array.from(mergedMap.values());
+                if (smartApplyRemoteData(sKey, mergedArr)) {
+                    hasNewData = true;
+                }
+            });
+
+            if (maxUpdatedAt) {
+                try { localStorage.setItem(cursorKey, maxUpdatedAt); } catch (_) {}
+            }
+
+            return hasNewData;
+        } catch (err) {
+            console.error(`❌ [pullRowSyncTable Exception in ${tbl}]:`, err);
+            return false;
+        } finally {
+            tablePullInFlight[tbl] = false;
+        }
+    };
+
     const cloudWrite = async (fullKey, data) => {
         if (!supabaseClient) return false;
 
         const targetTable = resolveTargetTable(fullKey);
         if (!targetTable) return false;
+
+        // Agar kisi caller ne direct cloudWrite call kiya ho Row-Sync table ke liye, toh delta engine me route karein
+        if (Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, targetTable) && Array.isArray(data)) {
+            return await cloudWriteDelta(fullKey, data, []);
+        }
 
         const uid = getSafeUserId();
         const tid = getSafeTenantId();
@@ -635,6 +921,14 @@
         if (!uid) return;
 
         try {
+            if (Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, tbl)) {
+                const updated = await pullRowSyncTable(tbl, uid);
+                if (updated) {
+                    triggerSmartUIRepaint();
+                }
+                return;
+            }
+
             if (tbl === 'karkhanas') {
                 const { data: kData } = await supabaseClient.from('karkhanas').select('*').eq('user_id', uid);
                 if (Array.isArray(kData) && kData.length > 0) {
@@ -743,6 +1037,13 @@
                     window.ERPLoader.setProgress(pct, getTableProgressLabel(tbl), `Module ${i + 1} / ${tables.length} (${tbl})`);
                 }
                 try {
+                    if (Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, tbl)) {
+                        if (await pullRowSyncTable(tbl, uid)) {
+                            hasNewData = true;
+                        }
+                        continue;
+                    }
+
                     const { data, error } = await supabaseClient
                         .from(tbl)
                         .select('*')
@@ -865,11 +1166,14 @@
         get db() { return supabaseClient; },
         get supabase() { return supabaseClient; },
         get isConnectedToCloud() { return isConnectedToCloud; },
+        ROW_SYNC_SCHEMAS,
+        isRowSyncKey,
         showSyncStatus,
         initSupabaseRealtime,
         detachSupabaseRealtime,
         switchSessionListeners,
         cloudWrite,
+        cloudWriteDelta,
         pullAllCloudData,
         autoPushKarkhanasToSupabase,
         triggerSmartUIRepaint
@@ -882,6 +1186,7 @@
     window.detachSupabaseRealtime = detachSupabaseRealtime;
     window.CloudEngine = publicCloudAPI;
     window.cloudWrite = cloudWrite;
+    window.cloudWriteDelta = cloudWriteDelta;
     window.pullAllCloudData = pullAllCloudData;
 
     window.addEventListener('online', () => {
