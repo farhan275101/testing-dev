@@ -771,6 +771,57 @@
                 if (row.client_updated_at) obj.updatedAt = Number(row.client_updated_at);
                 return obj;
             }
+        },
+
+        dukan_challans: {
+            defaultSourceKey: 'dukan_transfer_history',
+            resolveSourceKey: () => 'dukan_transfer_history',
+            sortList: (arr) => arr.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0)),
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'date', 'sareeName', 'karigerName', 'pcs', 'note', 'timestamp'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    date: item.date || null,
+                    saree_name: item.sareeName || 'Finished Saree',
+                    kariger_name: item.karigerName || '',
+                    pcs: parseInt(item.pcs || 0, 10) || 0,
+                    note: item.note || 'Apni Dukan',
+                    client_ts: item.timestamp ? Number(item.timestamp) : null,
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    date: row.date || '',
+                    sareeName: row.saree_name || 'Finished Saree',
+                    karigerName: row.kariger_name || '',
+                    pcs: Number(row.pcs) || 0,
+                    note: row.note || 'Apni Dukan',
+                    timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
+                };
+            }
         }
         // === ADD NEW ROW-BY-ROW MODULES HERE IN FUTURE ===
     };
@@ -931,8 +982,9 @@
                 return 'payments';
             }
         }
-        if (k.includes('material_transfer') || k.includes('transfer')) return 'material_transfers';
+        // Dukan check ko transfer se pehle rakhein (taaki dukan_transfer_history sahi table me jaye)
         if (k.includes('dukan')) return 'dukan_challans';
+        if (k.includes('material_transfer') || k.includes('transfer')) return 'material_transfers';
 
         // ⭐ TANI ORDERS & RANGAI TABLE ROUTING
         if (k.includes('tani_order') || k.includes('tani_parchi') || k.includes('tani_rangai')) return 'tani_orders';
@@ -983,6 +1035,7 @@
         if (tableName === 'job_work_bills' && k.includes('jw_bills_list')) return 'jw_bills_list';
         if (tableName === 'job_work_bills' && k.includes('jw_payments_list')) return 'jw_payments_list';
         if (tableName === 'tani_orders' || k.includes('tani_orders')) return 'tani_orders_list';
+        if (tableName === 'dukan_challans' || k.includes('dukan_transfer')) return 'dukan_transfer_history';
         return cloudKey;
     };
 
@@ -998,9 +1051,9 @@
             case 'sancha_list':
             case 'sancha_history': return 'Sancha (Tani & Chukka • Delta Sync) load ho raha hai...';
             case 'karigers':
-            case 'tani_sheets': return 'Sabhi Karigers & Tani Sheets (Delta Sync) load ho rahi hain...';
-            case 'material_transfers':
-            case 'dukan_challans': return 'Transfers & Dukan Challans load ho rahe hain...';
+            case 'tani_sheets': return 'Sabhi Karigers & Tani Sheets (Delta Sync) load rahi hain...';
+            case 'material_transfers': return 'Material Transfers load ho rahe hain...';
+            case 'dukan_challans': return 'Dukan Challans (Delta Sync) load ho rahe hain...';
             case 'payments': return 'Payments & Bakaya Hisab (Delta Sync) load ho raha hai...';
             case 'cutting':
             case 'cutting_history':
@@ -1067,6 +1120,7 @@
         if (typeof window.renderZariTable === 'function') window.renderZariTable();
         if (typeof window.renderSareeTable === 'function') window.renderSareeTable();
         if (typeof window.renderSanchaTable === 'function') window.renderSanchaTable();
+        if (typeof window.renderDukanTransferTable === 'function') window.renderDukanTransferTable();
         if (typeof window.renderJobWorkersTable === 'function') window.renderJobWorkersTable();
         if (typeof window.renderJobWorkMovementDaybook === 'function') window.renderJobWorkMovementDaybook();
         if (typeof window.renderJobWorkBillsTable === 'function') window.renderJobWorkBillsTable();
@@ -1563,10 +1617,10 @@
                 localKey = String(localKey).replace(prefix, '');
             }
 
-            // Purane app_store ke stale records ko ignore karein jo ab Row-by-Row tables me hain
-            if (tbl === 'app_store' && localKey) {
+            // Purane JSONB tables (jaise app_store / material_transfers) ke stale records ko ignore karein jo ab Row-by-Row tables me hain
+            if (localKey && !Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, tbl)) {
                 const resolved = resolveTargetTable(localKey);
-                if (Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, resolved)) {
+                if (resolved !== tbl && Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, resolved)) {
                     return;
                 }
             }
