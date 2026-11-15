@@ -107,6 +107,168 @@
                     timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
                 };
             }
+        },
+
+        karigers: {
+            defaultSourceKey: 'kariger_list',
+            resolveSourceKey: () => 'kariger_list',
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'name', 'saree', 'mobile', 'mohalla',
+                    'date', 'karkhanaId', 'karkhanaName'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    name: item.name || '',
+                    saree: item.saree || '',
+                    mobile: item.mobile || '',
+                    mohalla: item.mohalla || item.address || item.pata || '',
+                    date: item.date || null,
+                    karkhana_id: item.karkhanaId || 'k_main',
+                    karkhana_name: item.karkhanaName || '',
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    name: row.name || '',
+                    saree: row.saree || '',
+                    mobile: row.mobile || '',
+                    mohalla: row.mohalla || '',
+                    date: row.date || '',
+                    karkhanaId: row.karkhana_id || 'k_main',
+                    karkhanaName: row.karkhana_name || ''
+                };
+            }
+        },
+
+        tani_sheets: {
+            defaultSourceKey: 'kariger_sheets_default',
+            resolveSourceKey: (shortKey) => String(shortKey || '').trim(),
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'title', 'pichlaBana', 'pichlaZari', 'pichlaBani',
+                    'banaWaste', 'zariWaste', 'rateBana', 'rateZari', 'rateBani',
+                    'taniPcs', 'chukkaPcs', 'banaItem', 'zariItem',
+                    'taniItem', 'taniSancha', 'taniWazan',
+                    'chukkaItem', 'chukkaSancha', 'chukkaWazan',
+                    'colors', 'linkedTaniOrderId', 'linkedTaniOrderNo', 'note', 'rows'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                const matchKar = String(ctx.sourceKey || '').match(/kariger_sheets_(.+)$/i);
+                const karigerId = matchKar ? matchKar[1].trim() : '';
+
+                let sheetOrder = 0;
+                try {
+                    const cachedList = ctx.fullKey && window.APP_MEMORY_CACHE ? window.APP_MEMORY_CACHE[ctx.fullKey] : null;
+                    if (Array.isArray(cachedList)) {
+                        const foundIdx = cachedList.findIndex((s) => s && String(s.id) === rid);
+                        if (foundIdx >= 0) sheetOrder = foundIdx;
+                    } else {
+                        const numMatch = rid.match(/(\d+)$/);
+                        if (numMatch) sheetOrder = parseInt(numMatch[1], 10) || 0;
+                    }
+                } catch (_) {}
+
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    kariger_id: karigerId,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    sheet_order: sheetOrder,
+                    title: item.title || rid,
+                    pichla_bana: Number(item.pichlaBana) || 0,
+                    pichla_zari: Number(item.pichlaZari) || 0,
+                    pichla_bani: Number(item.pichlaBani) || 0,
+                    bana_waste: Number(item.banaWaste) || 0,
+                    zari_waste: Number(item.zariWaste) || 0,
+                    rate_bana: item.rateBana !== undefined && item.rateBana !== null ? Number(item.rateBana) : 0.311,
+                    rate_zari: item.rateZari !== undefined && item.rateZari !== null ? Number(item.rateZari) : 0.110,
+                    rate_bani: item.rateBani !== undefined && item.rateBani !== null ? Number(item.rateBani) : 240,
+                    tani_pcs: item.taniPcs !== undefined && item.taniPcs !== null ? parseInt(item.taniPcs, 10) : 72,
+                    chukka_pcs: item.chukkaPcs !== undefined && item.chukkaPcs !== null ? parseInt(item.chukkaPcs, 10) : 72,
+                    bana_item: item.banaItem || '',
+                    zari_item: item.zariItem || '',
+                    tani_item: item.taniItem || '',
+                    tani_sancha: item.taniSancha || '',
+                    tani_wazan: Number(item.taniWazan) || 0,
+                    chukka_item: item.chukkaItem || '',
+                    chukka_sancha: item.chukkaSancha || '',
+                    chukka_wazan: Number(item.chukkaWazan) || 0,
+                    colors: Array.isArray(item.colors) ? item.colors : [],
+                    linked_tani_order_id: item.linkedTaniOrderId || null,
+                    linked_tani_order_no: item.linkedTaniOrderNo || null,
+                    note: item.note || '',
+                    rows: Array.isArray(item.rows) ? item.rows : [],
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                const obj = {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    title: row.title || row.record_id || 'Tani 1',
+                    pichlaBana: Number(row.pichla_bana) || 0,
+                    pichlaZari: Number(row.pichla_zari) || 0,
+                    pichlaBani: Number(row.pichla_bani) || 0,
+                    banaWaste: Number(row.bana_waste) || 0,
+                    zariWaste: Number(row.zari_waste) || 0,
+                    rateBana: row.rate_bana !== undefined && row.rate_bana !== null ? Number(row.rate_bana) : 0.311,
+                    rateZari: row.rate_zari !== undefined && row.rate_zari !== null ? Number(row.rate_zari) : 0.110,
+                    rateBani: row.rate_bani !== undefined && row.rate_bani !== null ? Number(row.rate_bani) : 240,
+                    taniPcs: row.tani_pcs !== undefined && row.tani_pcs !== null ? Number(row.tani_pcs) : 72,
+                    chukkaPcs: row.chukka_pcs !== undefined && row.chukka_pcs !== null ? Number(row.chukka_pcs) : 72,
+                    banaItem: row.bana_item || '',
+                    zariItem: row.zari_item || '',
+                    taniItem: row.tani_item || '',
+                    taniSancha: row.tani_sancha || '',
+                    taniWazan: Number(row.tani_wazan) || 0,
+                    chukkaItem: row.chukka_item || '',
+                    chukkaSancha: row.chukka_sancha || '',
+                    chukkaWazan: Number(row.chukka_wazan) || 0,
+                    colors: Array.isArray(row.colors) ? row.colors : [],
+                    note: row.note || '',
+                    rows: Array.isArray(row.rows) ? row.rows : []
+                };
+                if (row.linked_tani_order_id) obj.linkedTaniOrderId = row.linked_tani_order_id;
+                if (row.linked_tani_order_no) obj.linkedTaniOrderNo = row.linked_tani_order_no;
+                return obj;
+            }
         }
         // === ADD NEW ROW-BY-ROW MODULES HERE IN FUTURE ===
     };
@@ -334,7 +496,7 @@
             case 'sancha_list':
             case 'sancha_history': return 'Sancha (Tani & Chukka) load ho raha hai...';
             case 'karigers':
-            case 'tani_sheets': return 'Sabhi Karigers & Tani Sheets load ho rahi hain...';
+            case 'tani_sheets': return 'Sabhi Karigers & Tani Sheets (Delta Sync) load ho rahi hain...';
             case 'material_transfers':
             case 'dukan_challans': return 'Transfers & Dukan Challans load ho rahe hain...';
             case 'payments': return 'Payments & Bakaya Hisab (Delta Sync) load ho raha hai...';
@@ -508,7 +670,7 @@
         showSyncStatus('syncing');
 
         try {
-            const ctx = { uid, tid, sess, sourceKey, shortKey };
+            const ctx = { uid, tid, sess, sourceKey, shortKey, fullKey };
 
             // 1. Upsert sirf badli / nayi rows (chunked)
             const validUpserts = (upserts || []).filter((it) => it && it.id !== undefined && it.id !== null);
@@ -631,6 +793,11 @@
             let hasNewData = false;
 
             groupedBySource.forEach((rows, sKey) => {
+                // Sheet order (jaise Tani 1, Tani 2, Tani 3...) barabar rakhne ke liye sort karein
+                if (rows.length > 1 && rows[0] && rows[0].sheet_order !== undefined) {
+                    rows.sort((a, b) => (Number(a.sheet_order) || 0) - (Number(b.sheet_order) || 0));
+                }
+
                 const fullStorageKey = (typeof window.getStorageKey === 'function')
                     ? window.getStorageKey(sKey)
                     : `${uid}_${sess}_${sKey}`;
@@ -890,9 +1057,12 @@
                 localKey = String(localKey).replace(prefix, '');
             }
 
-            // Purane app_store ke stale payment records ko ignore karein
-            if (tbl === 'app_store' && localKey && resolveTargetTable(localKey) === 'payments') {
-                return;
+            // Purane app_store ke stale records ko ignore karein
+            if (tbl === 'app_store' && localKey) {
+                const resolved = resolveTargetTable(localKey);
+                if (resolved === 'payments' || resolved === 'karigers' || resolved === 'tani_sheets') {
+                    return;
+                }
             }
 
             const mappedLocalKey = mapCloudKeyToLocalKey(localKey, tbl);
