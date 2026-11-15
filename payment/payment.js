@@ -52,6 +52,17 @@
         return String(s || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
     };
 
+    const escJsAttr = (s) => encodeURIComponent(String(s || '')).replace(/'/g, '%27');
+
+    const safeGetStore = (key) => {
+        try {
+            const raw = typeof window.getStore === 'function' ? window.getStore(key) : [];
+            return typeof window.safeArray === 'function' ? window.safeArray(raw) : (Array.isArray(raw) ? raw : []);
+        } catch (_) {
+            return [];
+        }
+    };
+
     const safeNum = (val, fallback = 0) => {
         const n = parseFloat(val);
         return isNaN(n) || !isFinite(n) ? fallback : n;
@@ -82,8 +93,8 @@
     };
 
     const getToday = () => {
-        return (typeof window.getTodayDate === 'function') 
-            ? window.getTodayDate() 
+        return (typeof window.getTodayDate === 'function')
+            ? window.getTodayDate()
             : new Date().toISOString().split('T')[0];
     };
 
@@ -110,7 +121,7 @@
         if (typeof window.getKarkhanasSafe === 'function') {
             karkhanas = window.getKarkhanasSafe();
         } else {
-            karkhanas = window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : [];
+            karkhanas = safeGetStore('karkhana_list');
         }
         if (!karkhanas.length) {
             karkhanas = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
@@ -127,7 +138,7 @@
             const isMain = (k.id === 'k_main' || k.isDefault);
             const icon = isMain ? '🏢 ' : '🏭 ';
             const isActive = (String(window.currentPaymentKarkhanaFilter) === String(k.id)) ? ' active' : '';
-            html += `<button type="button" class="sheet-tab${isActive}" onclick="switchPaymentKarkhanaTab('${esc(k.id)}')">${icon}${esc(k.name)}</button>`;
+            html += `<button type="button" class="sheet-tab${isActive}" onclick="switchPaymentKarkhanaTab(decodeURIComponent('${escJsAttr(k.id)}'))">${icon}${esc(k.name)}</button>`;
         });
 
         html += `
@@ -166,8 +177,8 @@
             return WEAVER_BAKAYA_CACHE.get(cleanId);
         }
 
-        const sheets = (typeof window.getKarigerSheets === 'function') 
-            ? window.getKarigerSheets(cleanId) 
+        const sheets = (typeof window.getKarigerSheets === 'function')
+            ? window.getKarigerSheets(cleanId)
             : [];
         const curSheet = (sheets && sheets.length) ? sheets[sheets.length - 1] : null;
 
@@ -195,13 +206,13 @@
         const tbody = document.getElementById('payment-table-body');
         if (!tbody) return;
 
-        let karigers = (window.safeArray ? window.safeArray(window.getStore('kariger_list')) : [])
+        let karigers = safeGetStore('kariger_list')
             .filter((k) => k && k.name && String(k.name).trim() !== '');
 
         // Branch Godown Filter
         if (window.currentPaymentKarkhanaFilter !== 'all') {
-            karigers = karigers.filter((k) => 
-                String(k.karkhanaId) === String(window.currentPaymentKarkhanaFilter) || 
+            karigers = karigers.filter((k) =>
+                String(k.karkhanaId) === String(window.currentPaymentKarkhanaFilter) ||
                 (!k.karkhanaId && window.currentPaymentKarkhanaFilter === 'k_main')
             );
         }
@@ -237,8 +248,8 @@
 
             const kName = k.name || 'Kariger';
             const sName = k.saree || '-';
-            const gName = k.karkhanaName || ((typeof window.getKarkhanaNameById === 'function') 
-                ? window.getKarkhanaNameById(k.karkhanaId) 
+            const gName = k.karkhanaName || ((typeof window.getKarkhanaNameById === 'function')
+                ? window.getKarkhanaNameById(k.karkhanaId)
                 : 'Main Godown');
 
             const rowObj = {
@@ -295,9 +306,9 @@
 
         let html = '';
         pageRows.forEach((r, idx) => {
-            const safeKid = encodeURIComponent(r.karkhanaId);
-            const safeKName = encodeURIComponent(r.kariger);
-            const safeId = esc(r.id);
+            const safeKid = escJsAttr(r.karkhanaId);
+            const safeKName = escJsAttr(r.kariger);
+            const safeId = escJsAttr(r.id);
 
             html += `<tr>
                 <td>${startIndex + idx + 1}</td>
@@ -308,10 +319,10 @@
                 <td style="color:#059669; font-weight:800;">₹ ${r.diya.toFixed(2)}</td>
                 <td style="color:#dc2626; font-weight:800; font-size:15px; background:#fef2f2;">₹ ${r.baki.toFixed(2)}</td>
                 <td style="text-align:center;">
-                    <button type="button" class="sheet-btn" style="background:#10b981; font-weight:bold; padding:4px 10px; border-radius:4px; border:none; color:white; cursor:pointer;" onclick="openQuickPayModal('${safeId}', '${safeKName}', '${safeKid}', ${r.baki})">⚡ Pay</button>
+                    <button type="button" class="sheet-btn" style="background:#10b981; font-weight:bold; padding:4px 10px; border-radius:4px; border:none; color:white; cursor:pointer;" onclick="openQuickPayModal(decodeURIComponent('${safeId}'), '${safeKName}', '${safeKid}', ${r.baki})">⚡ Pay</button>
                 </td>
                 <td style="text-align:center;">
-                    <button type="button" class="sheet-btn" style="background:#7c3aed; font-weight:bold; padding:4px 10px; border-radius:4px; border:none; color:white; cursor:pointer;" onclick="openPaymentPassbook('${safeId}', '${esc(r.kariger)}')">📖 Passbook</button>
+                    <button type="button" class="sheet-btn" style="background:#7c3aed; font-weight:bold; padding:4px 10px; border-radius:4px; border:none; color:white; cursor:pointer;" onclick="openPaymentPassbook(decodeURIComponent('${safeId}'), decodeURIComponent('${safeKName}'))">📖 Passbook</button>
                 </td>
             </tr>`;
         });
@@ -343,15 +354,16 @@
     ======================================================================== */
 
     const openQuickPayModal = (karigerId, safeKName, safeKid, bakiAmt) => {
-        const karigerName = decodeURIComponent(safeKName);
-        const karkhanaId = decodeURIComponent(safeKid);
+        const karigerName = decodeURIComponent(safeKName || '');
+        const karkhanaId = decodeURIComponent(safeKid || '');
+        const encodedKarigerId = escJsAttr(karigerId);
 
         const existingModal = document.getElementById('quick-pay-modal');
         if (existingModal) existingModal.remove();
 
         const today = getToday();
-        const godamName = (typeof window.getKarkhanaNameById === 'function') 
-            ? window.getKarkhanaNameById(karkhanaId) 
+        const godamName = (typeof window.getKarkhanaNameById === 'function')
+            ? window.getKarkhanaNameById(karkhanaId)
             : 'Godown';
 
         const modalHtml = `
@@ -384,7 +396,7 @@
                         <div style="margin-bottom:14px; background:#f0fdf4; border:1px solid #86efac; padding:8px 10px; border-radius:6px; font-size:12px; color:#15803d; font-weight:700;">
                             ℹ️ Ye payment sidhe aapke Payments Register & Kariger Khata me darj hoga.
                         </div>
-                        <button type="button" onclick="submitQuickPayForm('${esc(karigerId)}', '${safeKName}', '${safeKid}')" style="background:#10b981; color:#ffffff; border:none; width:100%; padding:10px; border-radius:6px; font-weight:bold; font-size:14px; cursor:pointer;">
+                        <button type="button" onclick="submitQuickPayForm(decodeURIComponent('${encodedKarigerId}'), '${escJsAttr(karigerName)}', '${escJsAttr(karkhanaId)}')" style="background:#10b981; color:#ffffff; border:none; width:100%; padding:10px; border-radius:6px; font-weight:bold; font-size:14px; cursor:pointer;">
                             ✅ Payment Jama Karein
                         </button>
                     </div>
@@ -400,8 +412,8 @@
     };
 
     const submitQuickPayForm = (karigerId, safeKName, safeKid) => {
-        const karigerName = decodeURIComponent(safeKName);
-        const karkhanaId = decodeURIComponent(safeKid);
+        const karigerName = decodeURIComponent(safeKName || '');
+        const karkhanaId = decodeURIComponent(safeKid || '');
 
         const amt = roundCurrency(document.getElementById('quick-pay-amount')?.value);
         const payDate = document.getElementById('quick-pay-date')?.value || getToday();
@@ -411,8 +423,8 @@
 
         try {
             // 1. Kariger Tani Sheet Update
-            let sheets = (typeof window.getKarigerSheets === 'function') 
-                ? window.getKarigerSheets(karigerId) 
+            let sheets = (typeof window.getKarigerSheets === 'function')
+                ? window.getKarigerSheets(karigerId)
                 : [];
 
             if (!sheets || !sheets.length) {
@@ -433,7 +445,7 @@
             }
 
             const activeSheet = sheets[sheets.length - 1];
-            activeSheet.rows = window.safeArray ? window.safeArray(activeSheet.rows) : [];
+            activeSheet.rows = window.safeArray ? window.safeArray(activeSheet.rows) : (Array.isArray(activeSheet.rows) ? activeSheet.rows : []);
 
             const payRef = `pay_${Date.now()}`;
             const newRow = {
@@ -461,8 +473,8 @@
                 window.saveKarigerSheets(karigerId, sheets);
             }
 
-            // 2. ⭐ DEDICATED PAYMENTS STORE RECORD (Saved to payment_records / payments table)
-            const payRecords = window.safeArray ? window.safeArray(window.getStore('payment_records')) : [];
+            // 2. ⭐ DEDICATED PAYMENTS STORE RECORD (Saved to Supabase 'payments' table)
+            const payRecords = safeGetStore('payment_records');
             payRecords.push({
                 id: `pay_rec_${Date.now()}`,
                 date: payDate,
@@ -510,7 +522,7 @@
         if (typeof window.getKarkhanasSafe === 'function') {
             karkhanas = window.getKarkhanasSafe();
         } else {
-            karkhanas = window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : [];
+            karkhanas = safeGetStore('karkhana_list');
         }
 
         const today = getToday();
@@ -590,17 +602,17 @@
         if (amt <= 0) return alert('Kripya sahi amount (₹) bharein!');
 
         try {
-            const fromName = (typeof window.getKarkhanaNameById === 'function') 
-                ? window.getKarkhanaNameById(fromKid) 
+            const fromName = (typeof window.getKarkhanaNameById === 'function')
+                ? window.getKarkhanaNameById(fromKid)
                 : fromKid;
-            const toName = (typeof window.getKarkhanaNameById === 'function') 
-                ? window.getKarkhanaNameById(toKid) 
+            const toName = (typeof window.getKarkhanaNameById === 'function')
+                ? window.getKarkhanaNameById(toKid)
                 : toKid;
 
             const trRef = `tr_cash_${Date.now()}`;
 
-            // ⭐ DEDICATED PAYMENTS STORE RECORD (Saved to payment_records / payments table)
-            const payRecords = window.safeArray ? window.safeArray(window.getStore('payment_records')) : [];
+            // ⭐ DEDICATED PAYMENTS STORE RECORD (Saved to Supabase 'payments' table)
+            const payRecords = safeGetStore('payment_records');
 
             // Source Outward Entry
             payRecords.push({
@@ -727,13 +739,13 @@
     const applyPaymentPassbookFilters = () => {
         if (!window.activePaymentKarigerId) return;
 
-        const sheets = (typeof window.getKarigerSheets === 'function') 
-            ? window.getKarigerSheets(window.activePaymentKarigerId) 
+        const sheets = (typeof window.getKarigerSheets === 'function')
+            ? window.getKarigerSheets(window.activePaymentKarigerId)
             : [];
 
         let allRows = [];
         sheets.forEach((sh) => {
-            const rows = window.safeArray ? window.safeArray(sh?.rows) : [];
+            const rows = window.safeArray ? window.safeArray(sh?.rows) : (Array.isArray(sh?.rows) ? sh.rows : []);
             rows.forEach((r) => {
                 const paidVal = safeNum(r?.paid);
                 const sareeVal = safeNum(r?.saree);
@@ -789,7 +801,7 @@
 
         let html = '';
         pageRows.forEach((row) => {
-            const singlePrintBtn = `<button type="button" title="A6 Parchi Print" class="sheet-btn" style="background:#0284c7; color:#ffffff; padding:4px 7px; font-size:11px; font-weight:bold; border-radius:4px; border:none; cursor:pointer;" onclick="printSinglePaymentEntry('${esc(row.date)}', '${esc(row.sheetTitle)}', ${row.saree}, ${row.paid}, '${esc(row.note)}')">🖨️</button>`;
+            const singlePrintBtn = `<button type="button" title="A6 Parchi Print" class="sheet-btn" style="background:#0284c7; color:#ffffff; padding:4px 7px; font-size:11px; font-weight:bold; border-radius:4px; border:none; cursor:pointer;" onclick="printSinglePaymentEntry(decodeURIComponent('${escJsAttr(row.date)}'), decodeURIComponent('${escJsAttr(row.sheetTitle)}'), ${row.saree}, ${row.paid}, decodeURIComponent('${escJsAttr(row.note)}'))">🖨️</button>`;
 
             html += `<tr>
                 <td>${esc(row.date)}</td>
