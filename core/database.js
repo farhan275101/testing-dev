@@ -1,811 +1,780 @@
 /* ============================================================================
-   SIMPLICITY ERP - ENTERPRISE AUTO-POLLING & LIVE REALTIME ENGINE (ALL MODULES)
-   File: core/database.js • Developed by Farhan Jawed
-   Modules: Multi-Godam + Jobwork + Tani Orders & Rangai Engine
+   SIMPLICITY ERP - HIGH-PERFORMANCE OFFLINE-FIRST STORAGE & TALLY LOADER ENGINE
+   File: core/storage.js • Developed by Farhan Jawed
+   Architecture: L1-RAM / L2-Tiny-LS (<50KB) / L3-IndexedDB (GBs) / L4-Cloud Queue
 ============================================================================ */
 
 (() => {
     'use strict';
 
-    // 🚀 SUPABASE CONFIGURATION
-    const SUPABASE_CONFIG = Object.freeze({
-        url: "https://mvbejtoylowskerlgfxs.supabase.co",
-        anonKey: "sb_publishable_NhTU4xzRMi0gtKH4CzVf_Q_lRfzjg3c"
+    let APP_MEMORY_CACHE = Object.create(null);
+    let idbInstance = null;
+    let isRemoteUpdating = false;
+    let isBackupPreviewMode = false;
+    let PREVIEW_BACKUP_DATA = null;
+
+    const SYNC_DEBOUNCE_TIMERS = new Map();
+    const DEBOUNCE_DELAY_MS = 300;
+    let isSyncQueueFlushing = false;
+
+    const GLOBAL_APP_KEYS = Object.freeze([
+        'app_sessions_list',
+        'app_active_session',
+        'karkhana_list',
+        'active_karkhana_id',
+        'karkhana_transfers',
+        'app_users',
+        'info_ledger'
+    ]);
+
+    const DB_CONFIG = Object.freeze({
+        NAME: 'SimplicityERP_DB',
+        VERSION: 2,
+        STORE_APP: 'app_store',
+        STORE_QUEUE: 'sync_queue'
     });
 
-    const PULL_COOLDOWN_MS = 45000; // 45 sec cooldown for focus/visibility pulls
+    // Sirf chhoti aur instant startup keys localStorage me rahengi (< 50 KB)
+    // Baaki saara heavy data (800 karigers, sheets, stock, payments) sirf IndexedDB me rahega
+    const isLightweightKey = (key) => {
+        const k = String(key || '').toLowerCase();
+        return (
+            k.includes('session') ||
+            k.includes('user_id') ||
+            k.includes('tenant_id') ||
+            k.includes('app_users') ||
+            k.includes('karkhana_list') ||
+            k.includes('active_karkhana') ||
+            k.includes('billing_config') ||
+            k.includes('portal_token')
+        );
+    };
 
-    let supabaseClient = null;
-    let isConnectedToCloud = false;
-    let renderDebounceTimer = null;
-    let realtimeChannel = null;
-    let isSyncingInProgress = false;
-    let lastFullPullAt = 0;
-    let lastFullPullUid = null;
-    const recentSelfWrites = {};
-    const tablePullTimers = {};
-
-    try {
-        if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
-            supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
-            window.supabaseClient = supabaseClient;
-            console.log('✅ [CloudEngine] Supabase Realtime Engine Initialized (test-dav).');
-        }
-    } catch (initErr) {
-        console.error('❌ [CloudEngine] Supabase Init failure:', initErr);
-    }
-
-    const getSafeUserId = () => {
+    const isUserLoggedIn = () => {
         try {
             if (window.currentUserId && String(window.currentUserId).trim() && window.currentUserId !== 'app') {
-                return String(window.currentUserId).trim();
+                return true;
             }
             if (window.currentUserProfile && window.currentUserProfile.id) {
-                return String(window.currentUserProfile.id).trim();
+                return true;
             }
-            const authData = localStorage.getItem('app_active_session_auth');
-            if (authData) {
-                const parsed = JSON.parse(authData);
-                if (parsed && parsed.id) return String(parsed.id).trim();
-            }
-            if (typeof window.getEffectiveUserId === 'function') {
-                const id = window.getEffectiveUserId();
-                if (id && id !== 'app' && id !== '10001') return String(id).trim();
+            if (localStorage.getItem('app_active_session_auth')) {
+                return true;
             }
             const stored = localStorage.getItem('app_current_user_id') || localStorage.getItem('currentUserId');
-            if (stored) {
-                const clean = String(stored).trim().replace(/[^a-zA-Z0-9_@-]/g, '');
-                if (clean && clean !== 'app') return clean;
+            if (stored && String(stored).trim() && String(stored).trim() !== 'app') {
+                return true;
             }
         } catch (_) {}
-        return null;
+        return false;
     };
 
-    const getSafeTenantId = () => {
+    /* ========================================================================
+       TALLY-STYLE COMPANY DATA LOADER UI (0% - 100%)
+    ======================================================================== */
+    const ERPLoader = (() => {
+        let hideTimer = null;
+        let failsafeTimer = null;
+        let currentPct = 0;
+
+        const injectStyles = () => {
+            if (document.getElementById('erp-tally-loader-style')) return;
+            const style = document.createElement('style');
+            style.id = 'erp-tally-loader-style';
+            style.textContent = `
+                #erp-tally-loader {
+                    position: fixed;
+                    inset: 0;
+                    z-index: 999999;
+                    background: rgba(15, 23, 42, 0.78);
+                    backdrop-filter: blur(6px);
+                    -webkit-backdrop-filter: blur(6px);
+                    display: none;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 16px;
+                    font-family: system-ui, -apple-system, sans-serif;
+                    transition: opacity 0.25s ease;
+                }
+                .erp-loader-card {
+                    width: 100%;
+                    max-width: 420px;
+                    background: #ffffff;
+                    border-radius: 18px;
+                    padding: 24px 22px;
+                    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+                    border: 1px solid #e2e8f0;
+                    text-align: center;
+                }
+                .erp-loader-brand {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    background: #ecfdf5;
+                    color: #065f46;
+                    border: 1px solid #a7f3d0;
+                    padding: 5px 12px;
+                    border-radius: 999px;
+                    font-size: 11.5px;
+                    font-weight: 800;
+                    letter-spacing: 0.4px;
+                    text-transform: uppercase;
+                    margin-bottom: 12px;
+                }
+                .erp-loader-spinner {
+                    width: 42px;
+                    height: 42px;
+                    margin: 4px auto 12px;
+                    border: 4px solid #e2e8f0;
+                    border-top-color: #059669;
+                    border-radius: 50%;
+                    animation: erpSpin 0.8s linear infinite;
+                }
+                @keyframes erpSpin {
+                    to { transform: rotate(360deg); }
+                }
+                .erp-loader-title {
+                    margin: 0;
+                    font-size: 18px;
+                    font-weight: 800;
+                    color: #0f172a;
+                }
+                .erp-loader-meta {
+                    margin: 5px 0 14px;
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: #475569;
+                }
+                .erp-loader-pct-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: baseline;
+                    margin-bottom: 6px;
+                }
+                .erp-loader-msg {
+                    font-size: 13px;
+                    font-weight: 700;
+                    color: #1e293b;
+                    text-align: left;
+                }
+                .erp-loader-pct {
+                    font-size: 22px;
+                    font-weight: 900;
+                    color: #059669;
+                    min-width: 56px;
+                    text-align: right;
+                }
+                .erp-loader-track {
+                    width: 100%;
+                    height: 12px;
+                    background: #e2e8f0;
+                    border-radius: 999px;
+                    overflow: hidden;
+                    margin-bottom: 10px;
+                }
+                .erp-loader-bar {
+                    height: 100%;
+                    width: 0%;
+                    background: linear-gradient(90deg, #059669, #10b981, #34d399);
+                    border-radius: 999px;
+                    transition: width 0.2s ease;
+                }
+                .erp-loader-sub {
+                    font-size: 11.5px;
+                    color: #64748b;
+                    font-weight: 600;
+                    min-height: 16px;
+                }
+                .erp-loader-foot {
+                    margin-top: 14px;
+                    padding-top: 10px;
+                    border-top: 1px dashed #e2e8f0;
+                    font-size: 11px;
+                    color: #94a3b8;
+                    font-weight: 600;
+                }
+            `;
+            document.head.appendChild(style);
+        };
+
+        const ensureDOM = () => {
+            if (!document.body) return null;
+            injectStyles();
+            let el = document.getElementById('erp-tally-loader');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'erp-tally-loader';
+                el.innerHTML = `
+                    <div class="erp-loader-card">
+                        <div class="erp-loader-brand">📊 SIMPLICITY ERP</div>
+                        <div class="erp-loader-spinner" id="erp-loader-spinner"></div>
+                        <h3 class="erp-loader-title" id="erp-loader-title">Company Data Load Ho Raha Hai...</h3>
+                        <div class="erp-loader-meta" id="erp-loader-meta">Taiyari ho rahi hai...</div>
+                        <div class="erp-loader-pct-row">
+                            <div class="erp-loader-msg" id="erp-loader-msg">Data load ho raha hai...</div>
+                            <div class="erp-loader-pct" id="erp-loader-pct">0%</div>
+                        </div>
+                        <div class="erp-loader-track">
+                            <div class="erp-loader-bar" id="erp-loader-bar"></div>
+                        </div>
+                        <div class="erp-loader-sub" id="erp-loader-sub">Kripya intezar karein...</div>
+                        <div class="erp-loader-foot">🔒 Secure Local IndexedDB + Cloud Sync</div>
+                    </div>
+                `;
+                document.body.appendChild(el);
+            }
+            return el;
+        };
+
+        const getSessionBadgeText = () => {
+            try {
+                const uid = getEffectiveUserId();
+                let sess = '2026-2027';
+                if (typeof window.getActiveFinancialSession === 'function') {
+                    sess = window.getActiveFinancialSession();
+                } else {
+                    sess = APP_MEMORY_CACHE[`${uid}_app_active_session`] || localStorage.getItem(`${uid}_app_active_session`) || '2026-2027';
+                }
+                sess = String(sess).replace(/['"]+/g, '').trim() || '2026-2027';
+                return `👤 Account: ${String(uid).toUpperCase()} • 📅 Session: ${sess}`;
+            } catch (_) {
+                return 'Company Data Loading...';
+            }
+        };
+
+        const show = (msg = 'Data load ho raha hai...', sub = 'Kripya intezar karein...', pct = 5) => {
+            if (!document.body) return;
+            if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+            const el = ensureDOM();
+            if (!el) return;
+
+            const metaEl = document.getElementById('erp-loader-meta');
+            const spinEl = document.getElementById('erp-loader-spinner');
+            if (metaEl) metaEl.textContent = getSessionBadgeText();
+            if (spinEl) spinEl.style.display = 'block';
+
+            el.style.opacity = '1';
+            el.style.display = 'flex';
+            setProgress(pct, msg, sub);
+
+            if (failsafeTimer) clearTimeout(failsafeTimer);
+            failsafeTimer = setTimeout(() => hide(0), 20000);
+        };
+
+        const setProgress = (pct, msg, sub) => {
+            const safePct = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+            if (safePct >= currentPct || safePct === 0) {
+                currentPct = safePct;
+            }
+            const pctEl = document.getElementById('erp-loader-pct');
+            const barEl = document.getElementById('erp-loader-bar');
+            const msgEl = document.getElementById('erp-loader-msg');
+            const subEl = document.getElementById('erp-loader-sub');
+            const spinEl = document.getElementById('erp-loader-spinner');
+
+            if (pctEl) pctEl.textContent = `${currentPct}%`;
+            if (barEl) barEl.style.width = `${currentPct}%`;
+            if (msg !== undefined && msgEl) msgEl.textContent = msg;
+            if (sub !== undefined && subEl) subEl.textContent = sub;
+            if (currentPct >= 100 && spinEl) spinEl.style.display = 'none';
+        };
+
+        const hide = (delayMs = 350) => {
+            if (failsafeTimer) { clearTimeout(failsafeTimer); failsafeTimer = null; }
+            if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+
+            const doHide = () => {
+                const el = document.getElementById('erp-tally-loader');
+                if (!el) return;
+                el.style.opacity = '0';
+                setTimeout(() => {
+                    el.style.display = 'none';
+                    currentPct = 0;
+                }, 250);
+            };
+
+            if (delayMs > 0) {
+                hideTimer = setTimeout(doHide, delayMs);
+            } else {
+                doHide();
+            }
+        };
+
+        return { show, setProgress, hide };
+    })();
+
+    window.ERPLoader = ERPLoader;
+
+    const getSupabase = () => {
+        return window.supabaseClient || window.supabase || (typeof window.supabase !== 'undefined' ? window.supabase : null);
+    };
+
+    const clearMemoryCache = () => {
+        APP_MEMORY_CACHE = Object.create(null);
+        window.APP_MEMORY_CACHE = APP_MEMORY_CACHE;
+        SYNC_DEBOUNCE_TIMERS.forEach((timer) => clearTimeout(timer));
+        SYNC_DEBOUNCE_TIMERS.clear();
+    };
+
+    const getEffectiveUserId = () => {
         try {
-            if (window.currentTenantId) return String(window.currentTenantId).trim();
-            const stored = localStorage.getItem('app_current_tenant_id') || localStorage.getItem('tenantId');
-            if (stored) return String(stored).trim();
+            if (typeof window.currentUserId !== 'undefined' && window.currentUserId) {
+                const sanitized = String(window.currentUserId).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                if (sanitized && sanitized !== 'app') return sanitized;
+            }
+            const stored = localStorage.getItem('app_current_user_id') ||
+                           localStorage.getItem('currentUserId') ||
+                           sessionStorage.getItem('currentUserId');
+            if (stored) {
+                const sanitized = String(stored).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                if (sanitized && sanitized !== 'app') return sanitized;
+            }
         } catch (_) {}
-        return getSafeUserId();
+        return 'farhan';
     };
 
-    const getActiveSessionVal = () => {
+    const getStorageKey = (key) => {
+        const uid = getEffectiveUserId();
+        const safeKey = String(key || '').trim();
+
+        if (GLOBAL_APP_KEYS.includes(safeKey)) {
+            return `${uid}_${safeKey}`;
+        }
+
+        let sess = '2026-2027';
         try {
             if (typeof window.getActiveFinancialSession === 'function') {
-                return window.getActiveFinancialSession();
-            }
-            const uId = getSafeUserId();
-            if (uId) {
-                const stored = localStorage.getItem(`${uId}_app_active_session`) || localStorage.getItem('app_active_session');
-                if (stored) return String(stored).replace(/['"]+/g, '').trim();
-            }
-        } catch (_) {}
-        return '2026-2027';
-    };
-
-    /**
-     * ⭐ AUTO PUSH KARKHANAS (Main Godown + Bahadurganj)
-     */
-    const autoPushKarkhanasToSupabase = async () => {
-        if (!supabaseClient || !navigator.onLine) return;
-        const uid = getSafeUserId();
-        if (!uid) return;
-        const sess = getActiveSessionVal();
-
-        let list = [];
-        try {
-            if (typeof window.getKarkhanasSafe === 'function') {
-                list = window.getKarkhanasSafe();
-            }
-            if (!Array.isArray(list) || list.length === 0) {
-                const rawPrefixed =
-                    localStorage.getItem(`${uid}_${sess}_karkhana_list`) ||
-                    localStorage.getItem(`${uid}_karkhana_list`);
-                if (rawPrefixed) list = JSON.parse(rawPrefixed);
-            }
-            if (!Array.isArray(list) || list.length === 0) {
-                if (typeof window.getStore === 'function') {
-                    const st = window.getStore('karkhana_list');
-                    if (Array.isArray(st) && st.length > 0) list = st;
-                }
+                sess = window.getActiveFinancialSession();
+            } else {
+                const storedSess = APP_MEMORY_CACHE[`${uid}_app_active_session`] ||
+                                   localStorage.getItem(`${uid}_app_active_session`);
+                if (storedSess) sess = storedSess;
             }
         } catch (_) {}
 
-        if (!Array.isArray(list) || list.length === 0) {
-            list = [
-                { id: 'k_main', name: 'Main Godown', isDefault: true },
-                { id: 'k_bahadurganj', name: 'Bahadurganj', isDefault: false }
-            ];
-        }
-
-        try {
-            recentSelfWrites['karkhanas'] = Date.now();
-            await supabaseClient.from('karkhanas').delete().eq('user_id', uid);
-
-            const rows = list.map((k) => ({
-                user_id: uid,
-                karkhana_name: String(k.name || 'Karkhana').trim(),
-                is_default: Boolean(k.isDefault || k.id === 'k_main'),
-                created_at: new Date().toISOString()
-            }));
-
-            let { error } = await supabaseClient.from('karkhanas').insert(rows);
-
-            if (error) {
-                const rowsWithId = rows.map((r, i) => ({ ...r, id: i + 1 }));
-                await supabaseClient.from('karkhanas').insert(rowsWithId);
-            }
-            console.log('🟢 [Auto-Sync] karkhanas cloud table updated!');
-        } catch (err) {
-            console.warn('[autoPushKarkhanasToSupabase]:', err);
-        }
+        sess = String(sess).replace(/['"]+/g, '').trim().replace(/[^0-9-]/g, '') || '2026-2027';
+        return `${uid}_${sess}_${safeKey}`;
     };
 
-    const resolveTargetTable = (fullKey) => {
-        const k = String(fullKey).toLowerCase();
+    const getIndexedDBPromise = () => {
+        return new Promise((resolve) => {
+            if (idbInstance) return resolve(idbInstance);
+            if (!('indexedDB' in window)) return resolve(null);
 
-        if (k.includes('karkhana_list')) return 'KARKHANA_ACTION';
-        if (k.includes('session') || k.includes('app_store')) return 'app_store';
-
-        // ⭐ Nayi dedicated tables
-        if (k.includes('info_ledger')) return 'info_ledger';
-        if (k.includes('billing_config')) return 'billing_config';
-        if (k.includes('tani_learned')) return 'tani_learned';
-
-        if (k.includes('saree_history')) return 'saree_history';
-        if (k.includes('saree_stock') || k.includes('saree_items') || k.includes('saree')) return 'saree_stock';
-        if (k.includes('zari_history')) return 'zari_history';
-        if (k.includes('zari_stock') || k.includes('zari')) return 'zari_stock';
-        if (k.includes('bana_history')) return 'bana_history';
-        if (k.includes('bana_stock') || k.includes('bana')) return 'bana_stock';
-        if (k.includes('sancha_history')) return 'sancha_history';
-        if (k.includes('sancha_items') || k.includes('sancha_list') || k.includes('sancha')) return 'sancha_list';
-        if (k.includes('kariger_sheet') || k.includes('tani_sheet')) return 'tani_sheets';
-        if (k.includes('kariger_list') || k.includes('karigers') || k.includes('kariger')) return 'karigers';
-        if (
-            k.includes('payment_records') ||
-            k.includes('payment_history') ||
-            k.includes('payment_list') ||
-            k.includes('payments')
-        ) {
-            return 'payments';
-        }
-        if (k.includes('material_transfer') || k.includes('transfer')) return 'material_transfers';
-        if (k.includes('dukan')) return 'dukan_challans';
-
-        // ⭐ TANI ORDERS & RANGAI TABLE ROUTING
-        if (k.includes('tani_order') || k.includes('tani_parchi') || k.includes('tani_rangai')) return 'tani_orders';
-
-        if (k.includes('embroidery_history')) return 'embroidery_history';
-        if (k.includes('cutting_history')) return 'cutting_history';
-        if (k.includes('calender_history')) return 'calender_history';
-
-        // KHATA SHEETS ➔ HISTORY TABLES
-        if (k.includes('jobwork_sheets_') || k.includes('jw_sheet_')) {
-            const workerId = k.replace(/.*jobwork_sheets_/, '').replace(/.*jw_sheet_/, '');
-            let workers = [];
             try {
-                if (typeof window.getStore === 'function') workers = window.getStore('jobwork_workers') || [];
-                if (!workers.length) workers = JSON.parse(localStorage.getItem('jobwork_workers') || '[]');
-            } catch (_) {}
-            const found = workers.find(w => w && String(w.id).toLowerCase() === workerId.toLowerCase());
-            const wType = String(found?.type || '').toLowerCase();
-
-            if (wType === 'embroidery') return 'embroidery_history';
-            if (wType === 'calender') return 'calender_history';
-            return 'cutting_history';
-        }
-
-        // WORKERS LIST ➔ MASTER TABLES
-        if (k.includes('jobwork_workers') || k.includes('cutting_workers') || k.includes('calender_workers') || k.includes('embroidery_workers')) {
-            return 'WORKERS_ACTION';
-        }
-
-        if (k.includes('jw_bill') || k.includes('jobwork_bill') || k.includes('jw_payment')) {
-            return 'job_work_bills';
-        }
-
-        // Fallback: Agar kisi nayi/bina-table wali key ka data aaye toh app_store me safe sync ho
-        console.warn('[CloudEngine] Unmapped key synced to app_store fallback:', fullKey);
-        return 'app_store';
-    };
-
-    const mapCloudKeyToLocalKey = (cloudKey, tableName) => {
-        const k = String(cloudKey).toLowerCase();
-        if (k.includes('sancha_list') || tableName === 'sancha_list') return 'sancha_items';
-        if (k.includes('karigers') || tableName === 'karigers') return 'kariger_list';
-        if (tableName === 'job_work_bills' && k.includes('jw_bills_list')) return 'jw_bills_list';
-        if (tableName === 'job_work_bills' && k.includes('jw_payments_list')) return 'jw_payments_list';
-        if (tableName === 'tani_orders' || k.includes('tani_orders')) return 'tani_orders_list';
-        return cloudKey;
-    };
-
-    const showSyncStatus = (status) => {
-        const badge = document.getElementById('cloud-status-badge');
-        if (!badge) return;
-
-        if (typeof window.isBackupPreviewMode !== 'undefined' && window.isBackupPreviewMode) {
-            badge.className = 'sync-badge';
-            badge.style.background = '#fef08a';
-            badge.style.color = '#854d0e';
-            badge.innerHTML = '👁️ Preview Mode';
-            return;
-        }
-
-        switch (status) {
-            case 'syncing':
-                badge.className = 'sync-badge sync-syncing';
-                badge.style.background = '#dbeafe';
-                badge.style.color = '#1d4ed8';
-                badge.innerHTML = '🔄 Syncing...';
-                break;
-            case 'offline':
-                badge.className = 'sync-badge';
-                badge.style.background = '#fff7ed';
-                badge.style.color = '#ea580c';
-                badge.innerHTML = '🟠 Offline Mode';
-                break;
-            case 'error':
-                badge.className = 'sync-badge';
-                badge.style.background = '#fee2e2';
-                badge.style.color = '#dc2626';
-                badge.innerHTML = '⚠️ Sync Error';
-                break;
-            case 'online':
-            default:
-                badge.className = 'sync-badge';
-                badge.style.background = '#ecfdf5';
-                badge.style.color = '#059669';
-                badge.innerHTML = '🟢 Cloud Synced';
-                break;
-        }
-    };
-
-    const triggerSmartUIRepaint = () => {
-        const activeEl = document.activeElement;
-        const isUserTyping = activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
-        if (isUserTyping) return;
-
-        if (renderDebounceTimer) clearTimeout(renderDebounceTimer);
-        renderDebounceTimer = setTimeout(() => {
-            if (typeof window.populateNavbarKarkhanaDropdown === 'function') window.populateNavbarKarkhanaDropdown();
-            if (typeof window.renderSheetTabs === 'function') window.renderSheetTabs();
-            if (typeof window.renderKarigerTable === 'function') window.renderKarigerTable();
-            if (typeof window.renderBanaTable === 'function') window.renderBanaTable();
-            if (typeof window.renderZariTable === 'function') window.renderZariTable();
-            if (typeof window.renderSareeTable === 'function') window.renderSareeTable();
-            if (typeof window.renderSanchaTable === 'function') window.renderSanchaTable();
-            if (typeof window.renderJobWorkersTable === 'function') window.renderJobWorkersTable();
-            if (typeof window.renderJobWorkMovementDaybook === 'function') window.renderJobWorkMovementDaybook();
-            if (typeof window.renderJobWorkBillsTable === 'function') window.renderJobWorkBillsTable();
-            if (typeof window.updateJobWorkHubBadges === 'function') window.updateJobWorkHubBadges();
-            if (typeof window.renderDashboardDayBook === 'function') window.renderDashboardDayBook();
-            if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
-            if (typeof window.renderTaniOrdersTable === 'function') window.renderTaniOrdersTable();
-            if (typeof window.updateTaniOrderBadges === 'function') window.updateTaniOrderBadges();
-            if (typeof window.invalidatePaymentCache === 'function') window.invalidatePaymentCache();
-            if (typeof window.renderPaymentTable === 'function') window.renderPaymentTable();
-        }, 150);
-    };
-
-    const smartApplyRemoteData = (targetKey, rowData) => {
-        if (!targetKey || rowData === undefined || rowData === null) return false;
-
-        const uid = getSafeUserId();
-        if (!uid) return false;
-        const sess = getActiveSessionVal();
-
-        let shortKey = String(targetKey);
-        const prefix = `${uid}_${sess}_`;
-        if (shortKey.startsWith(prefix)) {
-            shortKey = shortKey.replace(prefix, '');
-        }
-
-        const fullStorageKey = (typeof window.getStorageKey === 'function')
-            ? window.getStorageKey(shortKey)
-            : `${uid}_${sess}_${shortKey}`;
-
-        try {
-            const newStr = JSON.stringify(rowData);
-            let currentStr = null;
-
-            if (window.APP_MEMORY_CACHE && window.APP_MEMORY_CACHE[fullStorageKey] !== undefined) {
-                try { currentStr = JSON.stringify(window.APP_MEMORY_CACHE[fullStorageKey]); } catch (_) {}
-            }
-            if (currentStr === null) {
-                try { currentStr = localStorage.getItem(fullStorageKey); } catch (_) {}
-            }
-
-            if (currentStr === newStr) return false;
-
-            if (window.APP_MEMORY_CACHE) {
-                window.APP_MEMORY_CACHE[fullStorageKey] = rowData;
-                window.APP_MEMORY_CACHE[shortKey] = rowData;
-            }
-            if (typeof window.idbPut === 'function') {
-                window.idbPut(fullStorageKey, rowData);
-            }
-            try {
-                localStorage.setItem(fullStorageKey, newStr);
-                localStorage.setItem(shortKey, newStr);
+                const req = window.indexedDB.open(DB_CONFIG.NAME, DB_CONFIG.VERSION);
+                req.onupgradeneeded = (e) => {
+                    const dbase = e.target.result;
+                    if (!dbase.objectStoreNames.contains(DB_CONFIG.STORE_APP)) {
+                        dbase.createObjectStore(DB_CONFIG.STORE_APP);
+                    }
+                    if (!dbase.objectStoreNames.contains(DB_CONFIG.STORE_QUEUE)) {
+                        dbase.createObjectStore(DB_CONFIG.STORE_QUEUE, { keyPath: 'id' });
+                    }
+                };
+                req.onsuccess = (e) => {
+                    idbInstance = e.target.result;
+                    idbInstance.onclose = () => { idbInstance = null; };
+                    resolve(idbInstance);
+                };
+                req.onerror = () => resolve(null);
             } catch (_) {
-                // localStorage 5MB quota full hone par bhi IndexedDB & Memory Cache safe rahega
+                resolve(null);
             }
-            return true;
+        });
+    };
+
+    const openEnterpriseIndexedDB = (callback) => {
+        getIndexedDBPromise().then((dbase) => {
+            if (typeof callback === 'function') callback(dbase);
+        });
+    };
+
+    const idbPut = async (key, value) => {
+        try {
+            const dbase = await getIndexedDBPromise();
+            if (!dbase) return false;
+            return await new Promise((resolve) => {
+                try {
+                    const tx = dbase.transaction(DB_CONFIG.STORE_APP, 'readwrite');
+                    tx.objectStore(DB_CONFIG.STORE_APP).put(value, key);
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                } catch (_) {
+                    resolve(false);
+                }
+            });
         } catch (_) {
             return false;
         }
     };
 
-    const cloudWrite = async (fullKey, data) => {
-        if (!supabaseClient) return false;
-
-        const targetTable = resolveTargetTable(fullKey);
-        if (!targetTable) return false;
-
-        const uid = getSafeUserId();
-        const tid = getSafeTenantId();
-        const sess = getActiveSessionVal();
-
-        if (!uid) return false;
-
-        if (targetTable === 'KARKHANA_ACTION') {
-            await autoPushKarkhanasToSupabase();
-            return true;
-        }
-
-        showSyncStatus('syncing');
-
+    const idbDelete = async (key) => {
         try {
-            // ⭐ 1. WORKERS LIST SYNC (Dedicated jobwork_workers + department tables)
-            if (targetTable === 'WORKERS_ACTION') {
-                const workersList = Array.isArray(data) ? data : [];
-                const nowMs = Date.now();
-                recentSelfWrites['jobwork_workers'] = nowMs;
-                recentSelfWrites['embroidery'] = nowMs;
-                recentSelfWrites['cutting'] = nowMs;
-                recentSelfWrites['calender'] = nowMs;
+            const dbase = await getIndexedDBPromise();
+            if (!dbase) return;
+            const tx = dbase.transaction(DB_CONFIG.STORE_APP, 'readwrite');
+            tx.objectStore(DB_CONFIG.STORE_APP).delete(key);
+        } catch (_) {}
+    };
 
-                try {
-                    await supabaseClient.from('jobwork_workers').upsert({
-                        id: `${uid}_${sess}_jobwork_workers`,
-                        user_id: uid, tenant_id: tid, session: sess,
-                        data: workersList,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
-                } catch (_) {}
+    const enqueueSyncMutation = async (mutation) => {
+        try {
+            const dbase = await getIndexedDBPromise();
+            if (!dbase) return;
+            const tx = dbase.transaction(DB_CONFIG.STORE_QUEUE, 'readwrite');
+            tx.objectStore(DB_CONFIG.STORE_QUEUE).put(mutation);
+        } catch (_) {}
+    };
 
-                try {
-                    const embWorkers = workersList.filter(w => String(w?.type || '').toLowerCase() === 'embroidery');
-                    await supabaseClient.from('embroidery').upsert({
-                        id: `${uid}_${sess}_embroidery_workers`,
-                        user_id: uid, tenant_id: tid, session: sess,
-                        data: embWorkers,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
-                } catch (_) {}
+    const flushSyncQueue = async () => {
+        if (isSyncQueueFlushing || !navigator.onLine) return;
+        const sb = getSupabase();
+        if (!sb) return;
 
-                try {
-                    const cutWorkers = workersList.filter(w => String(w?.type || '').toLowerCase() === 'cutting');
-                    await supabaseClient.from('cutting').upsert({
-                        id: `${uid}_${sess}_cutting_workers`,
-                        user_id: uid, tenant_id: tid, session: sess,
-                        data: cutWorkers,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
-                } catch (_) {}
+        isSyncQueueFlushing = true;
+        try {
+            const dbase = await getIndexedDBPromise();
+            if (!dbase) { isSyncQueueFlushing = false; return; }
 
-                try {
-                    const calWorkers = workersList.filter(w => String(w?.type || '').toLowerCase() === 'calender');
-                    await supabaseClient.from('calender').upsert({
-                        id: `${uid}_${sess}_calender_workers`,
-                        user_id: uid, tenant_id: tid, session: sess,
-                        data: calWorkers,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
-                } catch (_) {}
+            const tx = dbase.transaction(DB_CONFIG.STORE_QUEUE, 'readonly');
+            const req = tx.objectStore(DB_CONFIG.STORE_QUEUE).getAll();
 
-                isConnectedToCloud = true;
-                showSyncStatus('online');
-                return true;
-            }
+            req.onsuccess = async () => {
+                const queue = req.result || [];
+                if (queue.length === 0) { isSyncQueueFlushing = false; return; }
 
-            const cleanKey = String(fullKey).replace(`${uid}_${sess}_`, '').replace(`${uid}_`, '');
-            const recordId = `${uid}_${sess}_${cleanKey}`;
-            recentSelfWrites[targetTable] = Date.now();
+                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('syncing');
 
-            if (targetTable === 'app_store') {
-                await supabaseClient.from('app_store').delete().eq('id', recordId);
-                await supabaseClient.from('app_store').insert({
-                    id: recordId,
-                    user_id: uid,
-                    tenant_id: tid,
-                    session: sess,
-                    data: data,
-                    key: String(fullKey),
-                    value: data,
-                    updated_at: new Date().toISOString()
-                });
-                isConnectedToCloud = true;
-                showSyncStatus('online');
-                return true;
-            }
+                for (const item of queue) {
+                    try {
+                        if (typeof window.CloudEngine?.cloudWrite === 'function') {
+                            await window.CloudEngine.cloudWrite(item.targetKey, item.data);
+                        }
+                        const deleteTx = dbase.transaction(DB_CONFIG.STORE_QUEUE, 'readwrite');
+                        deleteTx.objectStore(DB_CONFIG.STORE_QUEUE).delete(item.id);
+                    } catch (_) {
+                        break;
+                    }
+                }
 
-            const payload = {
-                id: recordId,
-                user_id: uid,
-                tenant_id: tid,
-                session: sess,
-                data: data,
-                updated_at: new Date().toISOString()
+                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('online');
+                isSyncQueueFlushing = false;
             };
-
-            const { error } = await supabaseClient
-                .from(targetTable)
-                .upsert(payload, { onConflict: 'id' });
-
-            if (error) {
-                console.error(`❌ [Supabase Error in ${targetTable}]:`, error.message);
-                showSyncStatus('error');
-                return false;
-            }
-
-            // ⭐ 2. PASSBOOK (LEN-DEN) SYNC
-            if (targetTable === 'saree_history' && Array.isArray(data)) {
-                try {
-                    let groupedStock = [];
-                    if (typeof window.groupSareeStockByTab === 'function') {
-                        groupedStock = window.groupSareeStockByTab(data, 'fresh', 'all') || [];
-                    }
-                    if (groupedStock.length > 0) {
-                        recentSelfWrites['saree_stock'] = Date.now();
-                        await supabaseClient.from('saree_stock').upsert({
-                            id: `${uid}_${sess}_saree_stock`,
-                            user_id: uid, tenant_id: tid, session: sess,
-                            data: groupedStock, updated_at: new Date().toISOString()
-                        }, { onConflict: 'id' });
-                    }
-                } catch (_) {}
-
-                try {
-                    const embHistory = data.filter(r => {
-                        if (!r) return false;
-                        const t = String(r.type || '').toLowerCase();
-                        const lbl = String(r.typeLabel || '').toLowerCase();
-                        const p = String(r.partyName || r.targetWorker || r.note || '').toLowerCase();
-                        return t === 'embroidery' || lbl.includes('embroidery') || p.includes('embroidery') || lbl.includes('कढ़ाई');
-                    });
-                    if (embHistory.length > 0) {
-                        recentSelfWrites['embroidery_history'] = Date.now();
-                        await supabaseClient.from('embroidery_history').upsert({
-                            id: `${uid}_${sess}_embroidery_history`,
-                            user_id: uid, tenant_id: tid, session: sess,
-                            data: embHistory, updated_at: new Date().toISOString()
-                        }, { onConflict: 'id' });
-                    }
-                } catch (_) {}
-
-                try {
-                    const cutHistory = data.filter(r => {
-                        if (!r) return false;
-                        const t = String(r.type || '').toLowerCase();
-                        const lbl = String(r.typeLabel || '').toLowerCase();
-                        const p = String(r.partyName || r.targetWorker || r.note || '').toLowerCase();
-                        return t === 'cutting' || lbl.includes('cutting') || p.includes('cutting') || lbl.includes('कटिंग');
-                    });
-                    if (cutHistory.length > 0) {
-                        recentSelfWrites['cutting_history'] = Date.now();
-                        await supabaseClient.from('cutting_history').upsert({
-                            id: `${uid}_${sess}_cutting_history`,
-                            user_id: uid, tenant_id: tid, session: sess,
-                            data: cutHistory, updated_at: new Date().toISOString()
-                        }, { onConflict: 'id' });
-                    }
-                } catch (_) {}
-
-                try {
-                    const calHistory = data.filter(r => {
-                        if (!r) return false;
-                        const t = String(r.type || '').toLowerCase();
-                        const lbl = String(r.typeLabel || '').toLowerCase();
-                        const p = String(r.partyName || r.targetWorker || r.note || '').toLowerCase();
-                        return t === 'finished' || lbl.includes('calender') || p.includes('calender') || lbl.includes('कैलेंडर');
-                    });
-                    if (calHistory.length > 0) {
-                        recentSelfWrites['calender_history'] = Date.now();
-                        await supabaseClient.from('calender_history').upsert({
-                            id: `${uid}_${sess}_calender_history`,
-                            user_id: uid, tenant_id: tid, session: sess,
-                            data: calHistory, updated_at: new Date().toISOString()
-                        }, { onConflict: 'id' });
-                    }
-                } catch (_) {}
-            }
-
-            isConnectedToCloud = true;
-            showSyncStatus('online');
-            return true;
-        } catch (err) {
-            console.error(`❌ [Supabase Exception]:`, err);
-            showSyncStatus('error');
-            return false;
+            req.onerror = () => { isSyncQueueFlushing = false; };
+        } catch (_) {
+            isSyncQueueFlushing = false;
         }
     };
 
-    const applyRowsFromTable = (tbl, data, uid) => {
-        if (!Array.isArray(data) || data.length === 0) return false;
-        let hasNewData = false;
-        const sess = getActiveSessionVal();
-        const prefix = `${uid}_${sess}_`;
+    window.addEventListener('online', () => { flushSyncQueue(); });
 
-        data.forEach((row) => {
-            let localKey = row.id || row.key;
-            if (localKey && String(localKey).startsWith(prefix)) {
-                localKey = String(localKey).replace(prefix, '');
-            }
+    /**
+     * Supabase Cloud Sync Engine (Debounced)
+     */
+    const dispatchCloudSync = (fullKey, toSave, action = 'SET') => {
+        const uid = getEffectiveUserId();
+        if (isRemoteUpdating || !uid) return;
 
-            // Purane app_store ke stale payment records ko ignore karein
-            if (tbl === 'app_store' && localKey && resolveTargetTable(localKey) === 'payments') {
-                return;
-            }
+        const queueId = `${uid}_${fullKey}`;
 
-            const mappedLocalKey = mapCloudKeyToLocalKey(localKey, tbl);
-            const rowData = row.data !== undefined ? row.data : (row.value !== undefined ? row.value : row);
-
-            if (mappedLocalKey && rowData !== undefined) {
-                if (mappedLocalKey === 'embroidery_workers' || mappedLocalKey === 'cutting_workers' || mappedLocalKey === 'calender_workers') {
-                    const existing = (typeof window.getStore === 'function')
-                        ? (window.getStore('jobwork_workers') || [])
-                        : JSON.parse(localStorage.getItem('jobwork_workers') || '[]');
-                    const incomingType = mappedLocalKey.replace('_workers', '');
-                    const others = existing.filter(w => String(w?.type || '').toLowerCase() !== incomingType);
-                    const merged = [...others, ...(Array.isArray(rowData) ? rowData : [])];
-                    if (smartApplyRemoteData('jobwork_workers', merged)) hasNewData = true;
-                } else {
-                    if (smartApplyRemoteData(mappedLocalKey, rowData)) hasNewData = true;
-                }
-            }
-        });
-        return hasNewData;
-    };
-
-    const pullSingleTable = async (tbl) => {
-        if (!supabaseClient || !navigator.onLine || !tbl) return;
-        const uid = getSafeUserId();
-        if (!uid) return;
-
-        try {
-            if (tbl === 'karkhanas') {
-                const { data: kData } = await supabaseClient.from('karkhanas').select('*').eq('user_id', uid);
-                if (Array.isArray(kData) && kData.length > 0) {
-                    const kList = kData.map(row => ({
-                        id: row.is_default ? 'k_main' : `k_${row.id}`,
-                        name: row.karkhana_name,
-                        isDefault: Boolean(row.is_default)
-                    }));
-                    if (smartApplyRemoteData('karkhana_list', kList)) {
-                        triggerSmartUIRepaint();
-                    }
-                }
-                return;
-            }
-
-            const { data, error } = await supabaseClient
-                .from(tbl)
-                .select('*')
-                .eq('user_id', uid);
-
-            if (!error && data && data.length > 0) {
-                if (applyRowsFromTable(tbl, data, uid)) {
-                    triggerSmartUIRepaint();
-                }
-            }
-        } catch (_) {}
-    };
-
-    const pullAllCloudData = async (silent = true, force = false) => {
-        if (!supabaseClient || !navigator.onLine || isSyncingInProgress) return;
-        const uid = getSafeUserId();
-        if (!uid) return;
-
-        const now = Date.now();
-        if (!force && lastFullPullUid === uid && (now - lastFullPullAt) < PULL_COOLDOWN_MS) {
-            return;
+        if (SYNC_DEBOUNCE_TIMERS.has(fullKey)) {
+            clearTimeout(SYNC_DEBOUNCE_TIMERS.get(fullKey));
         }
 
-        isSyncingInProgress = true;
-        if (!silent) showSyncStatus('syncing');
+        const timer = setTimeout(async () => {
+            SYNC_DEBOUNCE_TIMERS.delete(fullKey);
 
-        try {
-            const { data: kData } = await supabaseClient.from('karkhanas').select('*').eq('user_id', uid);
-            if (Array.isArray(kData) && kData.length > 0) {
-                const kList = kData.map(row => ({
-                    id: row.is_default ? 'k_main' : `k_${row.id}`,
-                    name: row.karkhana_name,
-                    isDefault: Boolean(row.is_default)
-                }));
-                smartApplyRemoteData('karkhana_list', kList);
-            } else {
-                await autoPushKarkhanasToSupabase();
+            const sb = getSupabase();
+            if (!navigator.onLine || !sb) {
+                await enqueueSyncMutation({
+                    id: queueId,
+                    action,
+                    targetKey: fullKey,
+                    data: toSave,
+                    timestamp: Date.now()
+                });
+                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('offline');
+                return;
             }
-        } catch (_) {}
 
-        const tables = [
-            'app_store',
-            'saree_stock', 'saree_history',
-            'zari_stock', 'zari_history',
-            'bana_stock', 'bana_history',
-            'sancha_list', 'sancha_history',
-            'karigers', 'tani_sheets',
-            'material_transfers', 'dukan_challans',
-            'payments',
-            'cutting', 'cutting_history',
-            'embroidery', 'embroidery_history',
-            'calender', 'calender_history',
-            'job_work_bills',
-            'tani_orders',
-            'info_ledger',
-            'billing_config',
-            'jobwork_workers',
-            'tani_learned'
-        ];
-
-        let hasNewData = false;
-
-        for (const tbl of tables) {
             try {
-                const { data, error } = await supabaseClient
-                    .from(tbl)
-                    .select('*')
-                    .eq('user_id', uid);
+                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('syncing');
 
-                if (!error && data && data.length > 0) {
-                    if (applyRowsFromTable(tbl, data, uid)) {
-                        hasNewData = true;
+                if (typeof window.CloudEngine?.cloudWrite === 'function') {
+                    await window.CloudEngine.cloudWrite(fullKey, toSave);
+                }
+
+                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('online');
+            } catch (networkErr) {
+                await enqueueSyncMutation({
+                    id: queueId,
+                    action,
+                    targetKey: fullKey,
+                    data: toSave,
+                    timestamp: Date.now()
+                });
+                if (typeof window.showSyncStatus === 'function') window.showSyncStatus('offline');
+            }
+        }, DEBOUNCE_DELAY_MS);
+
+        SYNC_DEBOUNCE_TIMERS.set(fullKey, timer);
+    };
+
+    // Purane localStorage se heavy keys ko safely IndexedDB me shift karke 5MB khali rakhein
+    const migrateLocalStorageToCache = async () => {
+        const uid = getEffectiveUserId();
+        try {
+            const keysSnapshot = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k) keysSnapshot.push(k);
+            }
+
+            for (const k of keysSnapshot) {
+                if (k.startsWith(`${uid}_`) || k === 'app_users') {
+                    let val = APP_MEMORY_CACHE[k];
+                    if (!(k in APP_MEMORY_CACHE)) {
+                        const raw = localStorage.getItem(k);
+                        try {
+                            val = JSON.parse(raw);
+                        } catch (_) {
+                            val = raw;
+                        }
+                        APP_MEMORY_CACHE[k] = val;
+                        await idbPut(k, val);
+                    }
+                    // Heavy keys ko IndexedDB me safe karne ke baad localStorage se hata dein
+                    if (!isLightweightKey(k)) {
+                        try { localStorage.removeItem(k); } catch (_) {}
                     }
                 }
+            }
+        } catch (_) {}
+    };
+
+    const initIndexedDBPreload = async (callback) => {
+        const uid = getEffectiveUserId();
+        const showLoader = isUserLoggedIn();
+
+        const finishPreload = async () => {
+            await migrateLocalStorageToCache();
+            flushSyncQueue();
+
+            if (typeof window.triggerActiveSectionRefresh === 'function') {
+                window.triggerActiveSectionRefresh();
+            } else if (typeof window.renderDashboardDayBook === 'function') {
+                window.renderDashboardDayBook();
+            }
+
+            if (showLoader) {
+                if (!navigator.onLine) {
+                    ERPLoader.setProgress(100, 'Offline Mode Taiyar Hai ✅', 'Local IndexedDB se data load ho gaya');
+                    ERPLoader.hide(400);
+                } else {
+                    ERPLoader.setProgress(35, 'Local Data Ready • Cloud Sync Chalu Hai...', 'Supabase se taza data check ho raha hai...');
+                }
+            }
+
+            if (typeof callback === 'function') callback();
+        };
+
+        if (showLoader) {
+            ERPLoader.show('Local Database Load Ho Rahi Hai...', 'IndexedDB se purana hisab taiyar ho raha hai...', 12);
+        }
+
+        try {
+            const dbase = await getIndexedDBPromise();
+            if (!dbase) {
+                await finishPreload();
+                return;
+            }
+
+            const tx = dbase.transaction(DB_CONFIG.STORE_APP, 'readonly');
+            const req = tx.objectStore(DB_CONFIG.STORE_APP).openCursor();
+
+            req.onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) {
+                    const k = String(cursor.key);
+                    if (k.startsWith(`${uid}_`) || k === 'app_users') {
+                        APP_MEMORY_CACHE[k] = cursor.value;
+                    }
+                    cursor.continue();
+                } else {
+                    finishPreload();
+                }
+            };
+            req.onerror = () => {
+                finishPreload();
+            };
+        } catch (_) {
+            await finishPreload();
+        }
+    };
+
+    const safeArr = (val) => {
+        if (typeof window.safeArray === 'function') return window.safeArray(val);
+        return Array.isArray(val) ? val : [];
+    };
+
+    const getStore = (key) => {
+        if (isBackupPreviewMode && PREVIEW_BACKUP_DATA) {
+            if (key.startsWith('kariger_sheets_')) {
+                const kId = key.replace('kariger_sheets_', '');
+                return safeArr(PREVIEW_BACKUP_DATA.sheets?.[kId]);
+            }
+            if (key.startsWith('jobwork_sheets_')) {
+                const wId = key.replace('jobwork_sheets_', '');
+                return safeArr(PREVIEW_BACKUP_DATA.jobwork_sheets?.[wId]);
+            }
+            if (PREVIEW_BACKUP_DATA.data && Object.prototype.hasOwnProperty.call(PREVIEW_BACKUP_DATA.data, key)) {
+                const pVal = PREVIEW_BACKUP_DATA.data[key];
+                return Array.isArray(pVal) ? safeArr(pVal) : pVal;
+            }
+            return [];
+        }
+
+        try {
+            const fullKey = getStorageKey(key);
+
+            if (fullKey in APP_MEMORY_CACHE) {
+                const cachedVal = APP_MEMORY_CACHE[fullKey];
+                if (typeof cachedVal === 'string' || typeof cachedVal === 'number' || typeof cachedVal === 'boolean') {
+                    return cachedVal;
+                }
+                if (cachedVal !== null && typeof cachedVal === 'object' && !Array.isArray(cachedVal)) {
+                    return cachedVal;
+                }
+                return safeArr(cachedVal);
+            }
+
+            const raw = localStorage.getItem(fullKey);
+            if (!raw || raw === 'null' || raw === 'undefined') return [];
+
+            const parsed = JSON.parse(raw);
+            APP_MEMORY_CACHE[fullKey] = parsed;
+            if (typeof parsed === 'string' || typeof parsed === 'number' || typeof parsed === 'boolean') {
+                return parsed;
+            }
+            if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                return parsed;
+            }
+            return safeArr(parsed);
+        } catch (_) {
+            return [];
+        }
+    };
+
+    const setStore = (key, data) => {
+        if (isBackupPreviewMode) return;
+
+        try {
+            const fullKey = getStorageKey(key);
+            const toSave = Array.isArray(data) ? safeArr(data) : data;
+
+            APP_MEMORY_CACHE[fullKey] = toSave;
+            window.APP_MEMORY_CACHE[fullKey] = toSave;
+            idbPut(fullKey, toSave);
+
+            // Sirf chhoti keys localStorage me rakhein; heavy data sirf IndexedDB me jaayega
+            if (isLightweightKey(fullKey)) {
+                try {
+                    localStorage.setItem(fullKey, JSON.stringify(toSave));
+                } catch (_) {}
+            }
+
+            dispatchCloudSync(fullKey, toSave, 'SET');
+        } catch (fatalErr) {
+            console.error('[Storage:setStore] Fatal write error:', fatalErr);
+        }
+    };
+
+    const setRemoteStore = (fullKey, cleanData) => {
+        APP_MEMORY_CACHE[fullKey] = cleanData;
+        if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = cleanData;
+        if (isLightweightKey(fullKey)) {
+            try {
+                localStorage.setItem(fullKey, JSON.stringify(cleanData));
             } catch (_) {}
         }
-
-        lastFullPullAt = Date.now();
-        lastFullPullUid = uid;
-        isSyncingInProgress = false;
-
-        if (hasNewData || !silent) {
-            triggerSmartUIRepaint();
-        }
-        showSyncStatus('online');
+        idbPut(fullKey, cleanData);
     };
 
-    const initSupabaseRealtime = () => {
-        if (!supabaseClient) return;
-        const uid = getSafeUserId();
-        if (!uid) return; // Login se pehle sync mat chalao
-
-        detachSupabaseRealtime();
-
+    const deleteStoreKey = (key) => {
         try {
-            realtimeChannel = supabaseClient.channel(`public_db_realtime_${uid}`)
-                .on(
-                    'postgres_changes',
-                    { event: '*', schema: 'public' },
-                    (payload) => {
-                        if (typeof window.isBackupPreviewMode !== 'undefined' && window.isBackupPreviewMode) return;
-                        const row = payload.new || payload.old;
-                        if (!row || row.user_id !== uid) return;
-
-                        const tbl = payload.table;
-                        const rKey = String(row.key || row.id || '');
-                        if (rKey.includes('app_active_session') && payload.new) {
-                            const rawVal = payload.new.data !== undefined ? payload.new.data : payload.new.value;
-                            const cloudActiveSess = String(rawVal || '').replace(/['"]+/g, '').trim();
-                            const currentLocalSess = getActiveSessionVal();
-
-                            if (/^\d{4}-\d{4}$/.test(cloudActiveSess) && cloudActiveSess !== currentLocalSess) {
-                                localStorage.setItem(`${uid}_app_active_session`, cloudActiveSess);
-                                window.location.reload();
-                                return;
-                            }
-                        }
-
-                        // Apne khud ke abhi-abhi kiye gaye write ka echo skip karein
-                        if (tbl && recentSelfWrites[tbl] && (Date.now() - recentSelfWrites[tbl]) < 3000) {
-                            return;
-                        }
-
-                        // Sirf wahi 1 table refresh karein jisme badlav aaya
-                        if (tbl && !isSyncingInProgress) {
-                            if (tablePullTimers[tbl]) clearTimeout(tablePullTimers[tbl]);
-                            tablePullTimers[tbl] = setTimeout(() => {
-                                pullSingleTable(tbl);
-                            }, 350);
-                        }
-                    }
-                )
-                .subscribe((status) => {
-                    if (status === 'SUBSCRIBED') {
-                        isConnectedToCloud = true;
-                        showSyncStatus('online');
-                    }
-                });
-
-            pullAllCloudData(false, true);
+            const fullKey = getStorageKey(key);
+            delete APP_MEMORY_CACHE[fullKey];
+            if (window.APP_MEMORY_CACHE) delete window.APP_MEMORY_CACHE[fullKey];
+            idbDelete(fullKey);
+            try { localStorage.removeItem(fullKey); } catch (_) {}
+            dispatchCloudSync(fullKey, null, 'REMOVE');
         } catch (err) {
-            console.warn('[CloudEngine] Realtime setup:', err);
+            console.error('[Storage:deleteStoreKey] Delete error:', err);
         }
     };
 
-    const detachSupabaseRealtime = () => {
-        try {
-            Object.keys(tablePullTimers).forEach((t) => {
-                clearTimeout(tablePullTimers[t]);
-                delete tablePullTimers[t];
-            });
-            if (realtimeChannel && supabaseClient) {
-                supabaseClient.removeChannel(realtimeChannel);
-                realtimeChannel = null;
-            }
-        } catch (_) {}
+    const publicStorageAPI = {
+        getStore,
+        setStore,
+        setRemoteStore,
+        deleteStoreKey,
+        clearMemoryCache,
+        getStorageKey,
+        getEffectiveUserId,
+        openEnterpriseIndexedDB,
+        idbPut,
+        idbDelete,
+        initIndexedDBPreload,
+        flushSyncQueue,
+        isLightweightKey,
+        GLOBAL_APP_KEYS,
+        get isRemoteUpdating() { return isRemoteUpdating; },
+        set isRemoteUpdating(val) { isRemoteUpdating = Boolean(val); },
+        get isBackupPreviewMode() { return isBackupPreviewMode; },
+        set isBackupPreviewMode(val) { isBackupPreviewMode = Boolean(val); },
+        get PREVIEW_BACKUP_DATA() { return PREVIEW_BACKUP_DATA; },
+        set PREVIEW_BACKUP_DATA(val) { PREVIEW_BACKUP_DATA = val; },
+        get APP_MEMORY_CACHE() { return APP_MEMORY_CACHE; }
     };
 
-    const switchSessionListeners = () => { pullAllCloudData(false, true); };
+    window.APP_MEMORY_CACHE = APP_MEMORY_CACHE;
+    window.GLOBAL_APP_KEYS = GLOBAL_APP_KEYS;
+    window.clearMemoryCache = clearMemoryCache;
+    window.openEnterpriseIndexedDB = openEnterpriseIndexedDB;
+    window.idbPut = idbPut;
+    window.idbDelete = idbDelete;
+    window.initIndexedDBPreload = initIndexedDBPreload;
+    window.getEffectiveUserId = getEffectiveUserId;
+    window.getStorageKey = getStorageKey;
+    window.getStore = getStore;
+    window.setStore = setStore;
+    window.setRemoteStore = setRemoteStore;
+    window.deleteStoreKey = deleteStoreKey;
+    window.flushSyncQueue = flushSyncQueue;
 
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && navigator.onLine && getSafeUserId()) {
-            pullAllCloudData(true, false);
-        }
+    Object.defineProperty(window, 'isRemoteUpdating', {
+        get: () => isRemoteUpdating,
+        set: (v) => { isRemoteUpdating = Boolean(v); },
+        configurable: true
+    });
+    Object.defineProperty(window, 'isBackupPreviewMode', {
+        get: () => isBackupPreviewMode,
+        set: (v) => { isBackupPreviewMode = Boolean(v); },
+        configurable: true
+    });
+    Object.defineProperty(window, 'PREVIEW_BACKUP_DATA', {
+        get: () => PREVIEW_BACKUP_DATA,
+        set: (v) => { PREVIEW_BACKUP_DATA = v; },
+        configurable: true
     });
 
-    window.addEventListener('focus', () => {
-        if (navigator.onLine && getSafeUserId()) {
-            pullAllCloudData(true, false);
-        }
-    });
+    window.StorageEngine = publicStorageAPI;
 
-    const publicCloudAPI = {
-        get db() { return supabaseClient; },
-        get supabase() { return supabaseClient; },
-        get isConnectedToCloud() { return isConnectedToCloud; },
-        showSyncStatus,
-        initSupabaseRealtime,
-        detachSupabaseRealtime,
-        switchSessionListeners,
-        cloudWrite,
-        pullAllCloudData,
-        autoPushKarkhanasToSupabase,
-        triggerSmartUIRepaint
-    };
-
-    window.db = supabaseClient;
-    window.supabaseClient = supabaseClient;
-    window.showSyncStatus = showSyncStatus;
-    window.initSupabaseRealtime = initSupabaseRealtime;
-    window.detachSupabaseRealtime = detachSupabaseRealtime;
-    window.CloudEngine = publicCloudAPI;
-    window.cloudWrite = cloudWrite;
-    window.pullAllCloudData = pullAllCloudData;
-
-    window.addEventListener('online', () => {
-        isConnectedToCloud = true;
-        showSyncStatus('online');
-        if (getSafeUserId()) initSupabaseRealtime();
-    });
-
-    window.addEventListener('offline', () => {
-        isConnectedToCloud = false;
-        showSyncStatus('offline');
-    });
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            if (getSafeUserId()) setTimeout(initSupabaseRealtime, 200);
-        });
-    } else {
-        if (getSafeUserId()) setTimeout(initSupabaseRealtime, 200);
-    }
+    // 🌟 STARTUP PRELOAD: Har reload par IndexedDB se data turant memory me laao
+    initIndexedDBPreload();
 
     if (typeof module !== 'undefined' && module.exports) {
-        module.exports = publicCloudAPI;
+        module.exports = publicStorageAPI;
     }
 })();
