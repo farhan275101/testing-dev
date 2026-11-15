@@ -38,6 +38,69 @@
         console.error('❌ [CloudEngine] Supabase Init failure:', initErr);
     }
 
+    const createJobWorkHistorySchema = (defaultSourceKey) => ({
+        defaultSourceKey,
+        resolveSourceKey: (shortKey) => String(shortKey || '').trim() || defaultSourceKey,
+        toSqlRow: (item, ctx) => {
+            const known = new Set([
+                'id', 'title', 'monthKey', 'closingPendingSaree', 'closingBakiAmt', 'rows'
+            ]);
+            const extra = {};
+            if (item && typeof item === 'object') {
+                Object.keys(item).forEach((k) => {
+                    if (!known.has(k) && item[k] !== undefined) {
+                        extra[k] = item[k];
+                    }
+                });
+            }
+            const rid = String(item.id).trim();
+            const matchW = String(ctx.sourceKey || '').match(/(?:jobwork_sheets_|jw_sheet_)(.+)$/i);
+            const workerId = matchW ? matchW[1].trim() : '';
+
+            let sheetOrder = 0;
+            try {
+                const cachedList = ctx.fullKey && window.APP_MEMORY_CACHE ? window.APP_MEMORY_CACHE[ctx.fullKey] : null;
+                if (Array.isArray(cachedList)) {
+                    const foundIdx = cachedList.findIndex((s) => s && String(s.id) === rid);
+                    if (foundIdx >= 0) sheetOrder = foundIdx;
+                }
+            } catch (_) {}
+
+            return {
+                id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                record_id: rid,
+                worker_id: workerId,
+                user_id: ctx.uid,
+                tenant_id: ctx.tid,
+                session: ctx.sess,
+                source_key: ctx.sourceKey,
+                sheet_order: sheetOrder,
+                title: item.title || rid,
+                month_key: item.monthKey || null,
+                closing_pending_saree: Number(item.closingPendingSaree) || 0,
+                closing_baki_amt: Number(item.closingBakiAmt) || 0,
+                rows: Array.isArray(item.rows) ? item.rows : [],
+                extra,
+                is_deleted: false
+            };
+        },
+        fromSqlRow: (row) => {
+            const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                ? row.extra
+                : {};
+            const obj = {
+                ...extraObj,
+                id: row.record_id || row.id,
+                title: row.title || row.record_id || 'Month 1',
+                closingPendingSaree: Number(row.closing_pending_saree) || 0,
+                closingBakiAmt: Number(row.closing_baki_amt) || 0,
+                rows: Array.isArray(row.rows) ? row.rows : []
+            };
+            if (row.month_key) obj.monthKey = row.month_key;
+            return obj;
+        }
+    });
+
     /* ========================================================================
        GENERIC ROW-BY-ROW & DELTA SYNC SCHEMA REGISTRY
        (Naya module convert karte waqt bas yahin 1 block add karna hoga)
@@ -822,6 +885,135 @@
                     timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
                 };
             }
+        },
+
+        jobwork_workers: {
+            defaultSourceKey: 'jobwork_workers',
+            resolveSourceKey: () => 'jobwork_workers',
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'type', 'date', 'name', 'address', 'mobile'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    type: String(item.type || 'cutting').toLowerCase(),
+                    date: item.date || null,
+                    name: item.name || '',
+                    address: item.address || '',
+                    mobile: item.mobile || '',
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    type: row.type || 'cutting',
+                    date: row.date || '',
+                    name: row.name || '',
+                    address: row.address || '',
+                    mobile: row.mobile || ''
+                };
+            }
+        },
+
+        cutting_history: createJobWorkHistorySchema('jobwork_sheets_cutting'),
+        embroidery_history: createJobWorkHistorySchema('jobwork_sheets_embroidery'),
+        calender_history: createJobWorkHistorySchema('jobwork_sheets_calender'),
+
+        job_work_bills: {
+            defaultSourceKey: 'jw_bills_list',
+            resolveSourceKey: (shortKey) => {
+                const k = String(shortKey || '').toLowerCase();
+                if (k.includes('jw_payment')) return 'jw_payments_list';
+                return 'jw_bills_list';
+            },
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'billId', 'billNo', 'date', 'workerId', 'workerName',
+                    'workType', 'pcs', 'billAmt', 'paidAmt', 'amount', 'mode', 'note'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    bill_id: item.billId || null,
+                    bill_no: item.billNo || null,
+                    date: item.date || null,
+                    worker_id: item.workerId || null,
+                    worker_name: item.workerName || '',
+                    work_type: item.workType || null,
+                    pcs: parseInt(item.pcs || 0, 10) || 0,
+                    bill_amt: Number(item.billAmt) || 0,
+                    paid_amt: Number(item.paidAmt) || 0,
+                    amount: Number(item.amount) || 0,
+                    mode: item.mode || null,
+                    note: item.note || '',
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                if (row.source_key === 'jw_payments_list') {
+                    return {
+                        ...extraObj,
+                        id: row.record_id || row.id,
+                        billId: row.bill_id || '',
+                        billNo: row.bill_no || '-',
+                        date: row.date || '',
+                        workerName: row.worker_name || '',
+                        amount: Number(row.amount) || 0,
+                        mode: row.mode || 'Cash',
+                        note: row.note || ''
+                    };
+                }
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    billNo: row.bill_no || '-',
+                    date: row.date || '',
+                    workerId: row.worker_id || '',
+                    workerName: row.worker_name || 'Worker',
+                    workType: row.work_type || 'Job Work',
+                    pcs: Number(row.pcs) || 0,
+                    billAmt: Number(row.bill_amt) || 0,
+                    paidAmt: Number(row.paid_amt) || 0,
+                    note: row.note || ''
+                };
+            }
         }
         // === ADD NEW ROW-BY-ROW MODULES HERE IN FUTURE ===
     };
@@ -999,6 +1191,9 @@
             let workers = [];
             try {
                 if (typeof window.getStore === 'function') workers = window.getStore('jobwork_workers') || [];
+                if (!workers.length && window.APP_MEMORY_CACHE?.jobwork_workers) {
+                    workers = window.APP_MEMORY_CACHE.jobwork_workers;
+                }
                 if (!workers.length) workers = JSON.parse(localStorage.getItem('jobwork_workers') || '[]');
             } catch (_) {}
             const found = workers.find(w => w && String(w.id).toLowerCase() === workerId.toLowerCase());
@@ -1009,9 +1204,9 @@
             return 'cutting_history';
         }
 
-        // WORKERS LIST ➔ MASTER TABLES
+        // WORKERS LIST ➔ ROW-BY-ROW MASTER TABLE
         if (k.includes('jobwork_workers') || k.includes('cutting_workers') || k.includes('calender_workers') || k.includes('embroidery_workers')) {
-            return 'WORKERS_ACTION';
+            return 'jobwork_workers';
         }
 
         if (k.includes('jw_bill') || k.includes('jobwork_bill') || k.includes('jw_payment')) {
@@ -1032,6 +1227,7 @@
         const k = String(cloudKey).toLowerCase();
         if (k.includes('sancha_list') || tableName === 'sancha_list') return 'sancha_items';
         if (k.includes('karigers') || tableName === 'karigers') return 'kariger_list';
+        if (tableName === 'jobwork_workers' || k.includes('jobwork_workers')) return 'jobwork_workers';
         if (tableName === 'job_work_bills' && k.includes('jw_bills_list')) return 'jw_bills_list';
         if (tableName === 'job_work_bills' && k.includes('jw_payments_list')) return 'jw_payments_list';
         if (tableName === 'tani_orders' || k.includes('tani_orders')) return 'tani_orders_list';
@@ -1051,18 +1247,15 @@
             case 'sancha_list':
             case 'sancha_history': return 'Sancha (Tani & Chukka • Delta Sync) load ho raha hai...';
             case 'karigers':
-            case 'tani_sheets': return 'Sabhi Karigers & Tani Sheets (Delta Sync) load rahi hain...';
+            case 'tani_sheets': return 'Sabhi Karigers & Tani Sheets (Delta Sync) load ho rahi hain...';
             case 'material_transfers': return 'Material Transfers load ho rahe hain...';
             case 'dukan_challans': return 'Dukan Challans (Delta Sync) load ho rahe hain...';
             case 'payments': return 'Payments & Bakaya Hisab (Delta Sync) load ho raha hai...';
-            case 'cutting':
             case 'cutting_history':
-            case 'embroidery':
             case 'embroidery_history':
-            case 'calender':
             case 'calender_history':
             case 'job_work_bills':
-            case 'jobwork_workers': return 'Jobwork Workers & Bills load ho rahe hain...';
+            case 'jobwork_workers': return 'Jobwork Workers, Sheets & Bills (Delta Sync) load ho rahe hain...';
             case 'tani_orders': return 'Tani Orders & Rangai Chart (Delta Sync) load ho raha hai...';
             case 'tani_learned': return 'Tani Learned Colors & Rangi load ho raha hai...';
             case 'info_ledger':
@@ -1121,9 +1314,18 @@
         if (typeof window.renderSareeTable === 'function') window.renderSareeTable();
         if (typeof window.renderSanchaTable === 'function') window.renderSanchaTable();
         if (typeof window.renderDukanTransferTable === 'function') window.renderDukanTransferTable();
-        if (typeof window.renderJobWorkersTable === 'function') window.renderJobWorkersTable();
-        if (typeof window.renderJobWorkMovementDaybook === 'function') window.renderJobWorkMovementDaybook();
-        if (typeof window.renderJobWorkBillsTable === 'function') window.renderJobWorkBillsTable();
+        if (typeof window.invalidateJobWorkCache === 'function') window.invalidateJobWorkCache();
+        if (window.currentJobWorkMode === 'embroidery' && typeof window.renderEmbroideryWorkersTable === 'function') {
+            window.renderEmbroideryWorkersTable();
+        } else if (window.currentJobWorkMode === 'cutting' && typeof window.renderCuttingWorkersTable === 'function') {
+            window.renderCuttingWorkersTable();
+        } else if (window.currentJobWorkMode === 'calender' && typeof window.renderCalenderWorkersTable === 'function') {
+            window.renderCalenderWorkersTable();
+        } else if (typeof window.renderJobWorkWorkersTable === 'function') {
+            window.renderJobWorkWorkersTable();
+        }
+        if (typeof window.renderJwMovementDaybook === 'function') window.renderJwMovementDaybook();
+        if (typeof window.renderJwBillsTable === 'function') window.renderJwBillsTable();
         if (typeof window.updateJobWorkHubBadges === 'function') window.updateJobWorkHubBadges();
         if (typeof window.renderDashboardDayBook === 'function') window.renderDashboardDayBook();
         if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
@@ -1349,7 +1551,7 @@
             let hasNewData = false;
 
             groupedBySource.forEach((rows, sKey) => {
-                // Sheet order (jaise Tani 1, Tani 2, Tani 3...) barabar rakhne ke liye sort karein
+                // Sheet order (jaise Tani 1, Tani 2, Month 1, Month 2...) barabar rakhne ke liye sort karein
                 if (rows.length > 1 && rows[0] && rows[0].sheet_order !== undefined) {
                     rows.sort((a, b) => (Number(a.sheet_order) || 0) - (Number(b.sheet_order) || 0));
                 }
@@ -1430,59 +1632,6 @@
         showSyncStatus('syncing');
 
         try {
-            // ⭐ 1. WORKERS LIST SYNC (Dedicated jobwork_workers + department tables)
-            if (targetTable === 'WORKERS_ACTION') {
-                const workersList = Array.isArray(data) ? data : [];
-                const nowMs = Date.now();
-                recentSelfWrites['jobwork_workers'] = nowMs;
-                recentSelfWrites['embroidery'] = nowMs;
-                recentSelfWrites['cutting'] = nowMs;
-                recentSelfWrites['calender'] = nowMs;
-
-                try {
-                    await supabaseClient.from('jobwork_workers').upsert({
-                        id: `${uid}_${sess}_jobwork_workers`,
-                        user_id: uid, tenant_id: tid, session: sess,
-                        data: workersList,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
-                } catch (_) {}
-
-                try {
-                    const embWorkers = workersList.filter(w => String(w?.type || '').toLowerCase() === 'embroidery');
-                    await supabaseClient.from('embroidery').upsert({
-                        id: `${uid}_${sess}_embroidery_workers`,
-                        user_id: uid, tenant_id: tid, session: sess,
-                        data: embWorkers,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
-                } catch (_) {}
-
-                try {
-                    const cutWorkers = workersList.filter(w => String(w?.type || '').toLowerCase() === 'cutting');
-                    await supabaseClient.from('cutting').upsert({
-                        id: `${uid}_${sess}_cutting_workers`,
-                        user_id: uid, tenant_id: tid, session: sess,
-                        data: cutWorkers,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
-                } catch (_) {}
-
-                try {
-                    const calWorkers = workersList.filter(w => String(w?.type || '').toLowerCase() === 'calender');
-                    await supabaseClient.from('calender').upsert({
-                        id: `${uid}_${sess}_calender_workers`,
-                        user_id: uid, tenant_id: tid, session: sess,
-                        data: calWorkers,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
-                } catch (_) {}
-
-                isConnectedToCloud = true;
-                showSyncStatus('online');
-                return true;
-            }
-
             const cleanKey = String(fullKey).replace(`${uid}_${sess}_`, '').replace(`${uid}_`, '');
             const recordId = `${uid}_${sess}_${cleanKey}`;
             recentSelfWrites[targetTable] = Date.now();
@@ -1523,78 +1672,6 @@
                 return false;
             }
 
-            // ⭐ 2. PASSBOOK (LEN-DEN) SYNC
-            if (targetTable === 'saree_history' && Array.isArray(data)) {
-                try {
-                    let groupedStock = [];
-                    if (typeof window.groupSareeStockByTab === 'function') {
-                        groupedStock = window.groupSareeStockByTab(data, 'fresh', 'all') || [];
-                    }
-                    if (groupedStock.length > 0) {
-                        recentSelfWrites['saree_stock'] = Date.now();
-                        await supabaseClient.from('saree_stock').upsert({
-                            id: `${uid}_${sess}_saree_stock`,
-                            user_id: uid, tenant_id: tid, session: sess,
-                            data: groupedStock, updated_at: new Date().toISOString()
-                        }, { onConflict: 'id' });
-                    }
-                } catch (_) {}
-
-                try {
-                    const embHistory = data.filter(r => {
-                        if (!r) return false;
-                        const t = String(r.type || '').toLowerCase();
-                        const lbl = String(r.typeLabel || '').toLowerCase();
-                        const p = String(r.partyName || r.targetWorker || r.note || '').toLowerCase();
-                        return t === 'embroidery' || lbl.includes('embroidery') || p.includes('embroidery') || lbl.includes('कढ़ाई');
-                    });
-                    if (embHistory.length > 0) {
-                        recentSelfWrites['embroidery_history'] = Date.now();
-                        await supabaseClient.from('embroidery_history').upsert({
-                            id: `${uid}_${sess}_embroidery_history`,
-                            user_id: uid, tenant_id: tid, session: sess,
-                            data: embHistory, updated_at: new Date().toISOString()
-                        }, { onConflict: 'id' });
-                    }
-                } catch (_) {}
-
-                try {
-                    const cutHistory = data.filter(r => {
-                        if (!r) return false;
-                        const t = String(r.type || '').toLowerCase();
-                        const lbl = String(r.typeLabel || '').toLowerCase();
-                        const p = String(r.partyName || r.targetWorker || r.note || '').toLowerCase();
-                        return t === 'cutting' || lbl.includes('cutting') || p.includes('cutting') || lbl.includes('कटिंग');
-                    });
-                    if (cutHistory.length > 0) {
-                        recentSelfWrites['cutting_history'] = Date.now();
-                        await supabaseClient.from('cutting_history').upsert({
-                            id: `${uid}_${sess}_cutting_history`,
-                            user_id: uid, tenant_id: tid, session: sess,
-                            data: cutHistory, updated_at: new Date().toISOString()
-                        }, { onConflict: 'id' });
-                    }
-                } catch (_) {}
-
-                try {
-                    const calHistory = data.filter(r => {
-                        if (!r) return false;
-                        const t = String(r.type || '').toLowerCase();
-                        const lbl = String(r.typeLabel || '').toLowerCase();
-                        const p = String(r.partyName || r.targetWorker || r.note || '').toLowerCase();
-                        return t === 'finished' || lbl.includes('calender') || p.includes('calender') || lbl.includes('कैलेंडर');
-                    });
-                    if (calHistory.length > 0) {
-                        recentSelfWrites['calender_history'] = Date.now();
-                        await supabaseClient.from('calender_history').upsert({
-                            id: `${uid}_${sess}_calender_history`,
-                            user_id: uid, tenant_id: tid, session: sess,
-                            data: calHistory, updated_at: new Date().toISOString()
-                        }, { onConflict: 'id' });
-                    }
-                } catch (_) {}
-            }
-
             isConnectedToCloud = true;
             showSyncStatus('online');
             return true;
@@ -1629,17 +1706,7 @@
             const rowData = row.data !== undefined ? row.data : (row.value !== undefined ? row.value : row);
 
             if (mappedLocalKey && rowData !== undefined) {
-                if (mappedLocalKey === 'embroidery_workers' || mappedLocalKey === 'cutting_workers' || mappedLocalKey === 'calender_workers') {
-                    const existing = (typeof window.getStore === 'function')
-                        ? (window.getStore('jobwork_workers') || [])
-                        : JSON.parse(localStorage.getItem('jobwork_workers') || '[]');
-                    const incomingType = mappedLocalKey.replace('_workers', '');
-                    const others = existing.filter(w => String(w?.type || '').toLowerCase() !== incomingType);
-                    const merged = [...others, ...(Array.isArray(rowData) ? rowData : [])];
-                    if (smartApplyRemoteData('jobwork_workers', merged)) hasNewData = true;
-                } else {
-                    if (smartApplyRemoteData(mappedLocalKey, rowData)) hasNewData = true;
-                }
+                if (smartApplyRemoteData(mappedLocalKey, rowData)) hasNewData = true;
             }
         });
         return hasNewData;
@@ -1749,14 +1816,12 @@
                 'karigers', 'tani_sheets',
                 'material_transfers', 'dukan_challans',
                 'payments',
-                'cutting', 'cutting_history',
-                'embroidery', 'embroidery_history',
-                'calender', 'calender_history',
+                'jobwork_workers',
+                'cutting_history', 'embroidery_history', 'calender_history',
                 'job_work_bills',
                 'tani_orders',
                 'info_ledger',
                 'billing_config',
-                'jobwork_workers',
                 'tani_learned'
             ];
 
