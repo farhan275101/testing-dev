@@ -487,6 +487,81 @@
                     timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
                 };
             }
+        },
+
+        saree_history: {
+            defaultSourceKey: 'saree_history',
+            resolveSourceKey: () => 'saree_history',
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'refId', 'date', 'sareeName', 'karigerName',
+                    'partyName', 'targetWorker', 'karkhanaId', 'type',
+                    'typeLabel', 'aai', 'gai', 'isOut', 'isOpening',
+                    'note', 'naap', 'timestamp'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    ref_id: item.refId || null,
+                    date: item.date || null,
+                    saree_name: item.sareeName || item.name || item.saree || '',
+                    kariger_name: item.karigerName || item.kariger || null,
+                    party_name: item.partyName || null,
+                    target_worker: item.targetWorker || null,
+                    karkhana_id: item.karkhanaId || 'k_main',
+                    type: item.type || 'fresh',
+                    type_label: item.typeLabel || null,
+                    aai: Number(item.aai) || 0,
+                    gai: Number(item.gai) || 0,
+                    is_out: Boolean(item.isOut),
+                    is_opening: Boolean(item.isOpening),
+                    note: item.note || null,
+                    naap: item.naap || null,
+                    client_ts: item.timestamp ? Number(item.timestamp) : null,
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                const kName = row.kariger_name || '';
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    refId: row.ref_id || '',
+                    date: row.date || '',
+                    sareeName: row.saree_name || '',
+                    karigerName: kName,
+                    kariger: extraObj.kariger !== undefined ? extraObj.kariger : kName,
+                    partyName: row.party_name || '',
+                    targetWorker: row.target_worker || '',
+                    karkhanaId: row.karkhana_id || 'k_main',
+                    type: row.type || 'fresh',
+                    typeLabel: row.type_label || '',
+                    aai: Number(row.aai) || 0,
+                    gai: Number(row.gai) || 0,
+                    isOut: Boolean(row.is_out),
+                    isOpening: Boolean(row.is_opening),
+                    note: row.note || '',
+                    naap: row.naap || '',
+                    timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
+                };
+            }
         }
         // === ADD NEW ROW-BY-ROW MODULES HERE IN FUTURE ===
     };
@@ -706,7 +781,7 @@
         switch (tbl) {
             case 'app_store': return 'Session & Settings load ho rahi hain...';
             case 'saree_stock':
-            case 'saree_history': return 'Saree Stock & Passbook load ho raha hai...';
+            case 'saree_history': return 'Saree Stock & Passbook (Delta Sync) load ho raha hai...';
             case 'zari_stock':
             case 'zari_history': return 'Zari Stock & Hisab (Delta Sync) load ho raha hai...';
             case 'bana_stock':
@@ -729,7 +804,7 @@
             case 'tani_orders':
             case 'tani_learned': return 'Tani Orders & Rangai Chart load ho raha hai...';
             case 'info_ledger':
-            case 'billing_config': return 'Ledger & Billing Config load ho rahi hai...';
+            case 'billing_config': return 'Ledger & Billing Config load rahi hai...';
             default: return 'Company Data load ho raha hai...';
         }
     };
