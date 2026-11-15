@@ -562,6 +562,124 @@
                     timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
                 };
             }
+        },
+
+        sancha_list: {
+            defaultSourceKey: 'sancha_items',
+            resolveSourceKey: () => 'sancha_items',
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'date', 'name', 'category', 'aaya', 'gaya', 'bacha',
+                    'person', 'karkhanaId', 'timestamp'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    date: item.date || null,
+                    name: item.name || '',
+                    category: item.category || 'tani',
+                    aaya: Number(item.aaya) || 0,
+                    gaya: Number(item.gaya) || 0,
+                    bacha: Number(item.bacha) || 0,
+                    person: item.person || '-',
+                    karkhana_id: item.karkhanaId || 'k_main',
+                    client_ts: item.timestamp ? Number(item.timestamp) : null,
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    date: row.date || '',
+                    name: row.name || '',
+                    category: row.category || 'tani',
+                    aaya: Number(row.aaya) || 0,
+                    gaya: Number(row.gaya) || 0,
+                    bacha: Number(row.bacha) || 0,
+                    person: row.person || '-',
+                    karkhanaId: row.karkhana_id || 'k_main',
+                    timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
+                };
+            }
+        },
+
+        sancha_history: {
+            defaultSourceKey: 'sancha_history',
+            resolveSourceKey: () => 'sancha_history',
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'refId', 'date', 'name', 'category', 'kariger', 'type',
+                    'aaya', 'gaya', 'karkhanaId', 'isOpening', 'timestamp'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    ref_id: item.refId || null,
+                    date: item.date || null,
+                    name: item.name || '',
+                    category: item.category || 'tani',
+                    kariger: item.kariger || null,
+                    type: item.type || null,
+                    aaya: Number(item.aaya) || 0,
+                    gaya: Number(item.gaya) || 0,
+                    karkhana_id: item.karkhanaId || 'k_main',
+                    is_opening: Boolean(item.isOpening),
+                    client_ts: item.timestamp ? Number(item.timestamp) : null,
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    refId: row.ref_id || '',
+                    date: row.date || '',
+                    name: row.name || '',
+                    category: row.category || 'tani',
+                    kariger: row.kariger || '',
+                    type: row.type || '',
+                    aaya: Number(row.aaya) || 0,
+                    gaya: Number(row.gaya) || 0,
+                    karkhanaId: row.karkhana_id || 'k_main',
+                    isOpening: Boolean(row.is_opening),
+                    timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
+                };
+            }
         }
         // === ADD NEW ROW-BY-ROW MODULES HERE IN FUTURE ===
     };
@@ -787,7 +905,7 @@
             case 'bana_stock':
             case 'bana_history': return 'Bana Stock & Hisab (Delta Sync) load ho raha hai...';
             case 'sancha_list':
-            case 'sancha_history': return 'Sancha (Tani & Chukka) load ho raha hai...';
+            case 'sancha_history': return 'Sancha (Tani & Chukka • Delta Sync) load ho raha hai...';
             case 'karigers':
             case 'tani_sheets': return 'Sabhi Karigers & Tani Sheets (Delta Sync) load ho rahi hain...';
             case 'material_transfers':
