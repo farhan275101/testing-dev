@@ -17,6 +17,33 @@
     const ROW_PAGE_SIZE = 1000;
     const ROW_WRITE_CHUNK = 200;
 
+    const REALTIME_TABLES = [
+        'app_store',
+        'karkhanas',
+        'karigers',
+        'tani_sheets',
+        'payments',
+        'bana_stock',
+        'bana_history',
+        'zari_stock',
+        'zari_history',
+        'saree_history',
+        'sancha_list',
+        'sancha_history',
+        'tani_orders',
+        'dukan_challans',
+        'jobwork_workers',
+        'cutting_history',
+        'embroidery_history',
+        'calender_history',
+        'job_work_bills',
+        'material_transfers',
+        'tani_learned',
+        'saree_stock',
+        'info_ledger',
+        'billing_config'
+    ];
+
     let supabaseClient = null;
     let isConnectedToCloud = false;
     let renderDebounceTimer = null;
@@ -1933,6 +1960,40 @@
         }
     };
 
+    const handleRealtimePayload = (tbl, uid, payload) => {
+        if (typeof window.isBackupPreviewMode !== 'undefined' && window.isBackupPreviewMode) return;
+        const hasNew = payload && payload.new && Object.keys(payload.new).length > 0;
+        const row = hasNew ? payload.new : (payload ? payload.old : null);
+        if (!row) return;
+        if (row.user_id && row.user_id !== uid) return;
+
+        const rKey = String(row.key || row.id || '');
+        if (rKey.includes('app_active_session') && hasNew) {
+            const rawVal = payload.new.data !== undefined ? payload.new.data : payload.new.value;
+            const cloudActiveSess = String(rawVal || '').replace(/['"]+/g, '').trim();
+            const currentLocalSess = getActiveSessionVal();
+
+            if (/^\d{4}-\d{4}$/.test(cloudActiveSess) && cloudActiveSess !== currentLocalSess) {
+                localStorage.setItem(`${uid}_app_active_session`, cloudActiveSess);
+                window.location.reload();
+                return;
+            }
+        }
+
+        // Apne khud ke abhi-abhi kiye gaye write ka echo skip karein
+        if (tbl && recentSelfWrites[tbl] && (Date.now() - recentSelfWrites[tbl]) < 3000) {
+            return;
+        }
+
+        // Sirf wahi 1 table refresh karein jisme badlav aaya
+        if (tbl && !isSyncingInProgress) {
+            if (tablePullTimers[tbl]) clearTimeout(tablePullTimers[tbl]);
+            tablePullTimers[tbl] = setTimeout(() => {
+                pullSingleTable(tbl);
+            }, 350);
+        }
+    };
+
     const initSupabaseRealtime = () => {
         if (!supabaseClient) return;
         const uid = getSafeUserId();
@@ -1941,49 +2002,23 @@
         detachSupabaseRealtime();
 
         try {
-            realtimeChannel = supabaseClient.channel(`public_db_realtime_${uid}`)
-                .on(
+            let channel = supabaseClient.channel(`public_db_realtime_${uid}`);
+            const userFilter = `user_id=eq.${uid}`;
+
+            REALTIME_TABLES.forEach((tbl) => {
+                channel = channel.on(
                     'postgres_changes',
-                    { event: '*', schema: 'public' },
-                    (payload) => {
-                        if (typeof window.isBackupPreviewMode !== 'undefined' && window.isBackupPreviewMode) return;
-                        const row = payload.new || payload.old;
-                        if (!row || row.user_id !== uid) return;
+                    { event: '*', schema: 'public', table: tbl, filter: userFilter },
+                    (payload) => handleRealtimePayload(tbl, uid, payload)
+                );
+            });
 
-                        const tbl = payload.table;
-                        const rKey = String(row.key || row.id || '');
-                        if (rKey.includes('app_active_session') && payload.new) {
-                            const rawVal = payload.new.data !== undefined ? payload.new.data : payload.new.value;
-                            const cloudActiveSess = String(rawVal || '').replace(/['"]+/g, '').trim();
-                            const currentLocalSess = getActiveSessionVal();
-
-                            if (/^\d{4}-\d{4}$/.test(cloudActiveSess) && cloudActiveSess !== currentLocalSess) {
-                                localStorage.setItem(`${uid}_app_active_session`, cloudActiveSess);
-                                window.location.reload();
-                                return;
-                            }
-                        }
-
-                        // Apne khud ke abhi-abhi kiye gaye write ka echo skip karein
-                        if (tbl && recentSelfWrites[tbl] && (Date.now() - recentSelfWrites[tbl]) < 3000) {
-                            return;
-                        }
-
-                        // Sirf wahi 1 table refresh karein jisme badlav aaya
-                        if (tbl && !isSyncingInProgress) {
-                            if (tablePullTimers[tbl]) clearTimeout(tablePullTimers[tbl]);
-                            tablePullTimers[tbl] = setTimeout(() => {
-                                pullSingleTable(tbl);
-                            }, 350);
-                        }
-                    }
-                )
-                .subscribe((status) => {
-                    if (status === 'SUBSCRIBED') {
-                        isConnectedToCloud = true;
-                        showSyncStatus('online');
-                    }
-                });
+            realtimeChannel = channel.subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    isConnectedToCloud = true;
+                    showSyncStatus('online');
+                }
+            });
 
             pullAllCloudData(false, true);
         } catch (err) {
