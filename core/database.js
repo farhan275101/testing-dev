@@ -157,7 +157,14 @@
         if (k.includes('sancha_items') || k.includes('sancha_list') || k.includes('sancha')) return 'sancha_list';
         if (k.includes('kariger_sheet') || k.includes('tani_sheet')) return 'tani_sheets';
         if (k.includes('kariger_list') || k.includes('karigers') || k.includes('kariger')) return 'karigers';
-        if (k.includes('payments') || k.includes('payment_list')) return 'payments';
+        if (
+            k.includes('payment_records') ||
+            k.includes('payment_history') ||
+            k.includes('payment_list') ||
+            k.includes('payments')
+        ) {
+            return 'payments';
+        }
         if (k.includes('material_transfer') || k.includes('transfer')) return 'material_transfers';
         if (k.includes('dukan')) return 'dukan_challans';
 
@@ -269,6 +276,8 @@
             if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
             if (typeof window.renderTaniOrdersTable === 'function') window.renderTaniOrdersTable();
             if (typeof window.updateTaniOrderBadges === 'function') window.updateTaniOrderBadges();
+            if (typeof window.invalidatePaymentCache === 'function') window.invalidatePaymentCache();
+            if (typeof window.renderPaymentTable === 'function') window.renderPaymentTable();
         }, 150);
     };
 
@@ -285,8 +294,8 @@
             shortKey = shortKey.replace(prefix, '');
         }
 
-        const fullStorageKey = (typeof window.getStorageKey === 'function') 
-            ? window.getStorageKey(shortKey) 
+        const fullStorageKey = (typeof window.getStorageKey === 'function')
+            ? window.getStorageKey(shortKey)
             : `${uid}_${sess}_${shortKey}`;
 
         try {
@@ -530,13 +539,18 @@
                 localKey = String(localKey).replace(prefix, '');
             }
 
+            // Purane app_store ke stale payment records ko ignore karein
+            if (tbl === 'app_store' && localKey && resolveTargetTable(localKey) === 'payments') {
+                return;
+            }
+
             const mappedLocalKey = mapCloudKeyToLocalKey(localKey, tbl);
             const rowData = row.data !== undefined ? row.data : (row.value !== undefined ? row.value : row);
 
             if (mappedLocalKey && rowData !== undefined) {
                 if (mappedLocalKey === 'embroidery_workers' || mappedLocalKey === 'cutting_workers' || mappedLocalKey === 'calender_workers') {
-                    const existing = (typeof window.getStore === 'function') 
-                        ? (window.getStore('jobwork_workers') || []) 
+                    const existing = (typeof window.getStore === 'function')
+                        ? (window.getStore('jobwork_workers') || [])
                         : JSON.parse(localStorage.getItem('jobwork_workers') || '[]');
                     const incomingType = mappedLocalKey.replace('_workers', '');
                     const others = existing.filter(w => String(w?.type || '').toLowerCase() !== incomingType);
@@ -618,8 +632,8 @@
             'zari_stock', 'zari_history',
             'bana_stock', 'bana_history',
             'sancha_list', 'sancha_history',
-            'karigers', 'tani_sheets', 
-            'material_transfers', 'dukan_challans', 
+            'karigers', 'tani_sheets',
+            'material_transfers', 'dukan_challans',
             'payments',
             'cutting', 'cutting_history',
             'embroidery', 'embroidery_history',
