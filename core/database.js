@@ -680,6 +680,97 @@
                     timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
                 };
             }
+        },
+
+        tani_orders: {
+            defaultSourceKey: 'tani_orders_list',
+            resolveSourceKey: () => 'tani_orders_list',
+            sortList: (arr) => arr.sort((a, b) =>
+                ((Number(b.orderNo) || 0) - (Number(a.orderNo) || 0)) ||
+                ((Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))
+            ),
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'orderNo', 'date', 'sancha', 'kariger', 'mohalla',
+                    'paai', 'border', 'bana', 'meter', 'pcs', 'rangi',
+                    'matchingTable', 'contrastVal', 'contrastLabel', 'selectedContrasts',
+                    'status', 'sanchaPortalStatus', 'rangiPortalStatus', 'sanchaPortalPushed',
+                    'statusHistory', 'createdAt', 'updatedAt'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    order_no: item.orderNo ? String(item.orderNo) : '',
+                    date: item.date || null,
+                    sancha: item.sancha || '',
+                    kariger: item.kariger || '',
+                    mohalla: item.mohalla || '',
+                    paai: item.paai || '',
+                    border: item.border || '',
+                    bana: item.bana || '',
+                    meter: Number(item.meter) || 0,
+                    pcs: parseInt(item.pcs || 0, 10) || 0,
+                    rangi: item.rangi || '',
+                    matching_table: Array.isArray(item.matchingTable) ? item.matchingTable : [],
+                    contrast_val: item.contrastVal || '',
+                    contrast_label: item.contrastLabel || '',
+                    selected_contrasts: Array.isArray(item.selectedContrasts) ? item.selectedContrasts : [],
+                    status: item.status || 'sancha',
+                    sancha_portal_status: item.sanchaPortalStatus || 'pending',
+                    rangi_portal_status: item.rangiPortalStatus || 'waiting',
+                    sancha_portal_pushed: Boolean(item.sanchaPortalPushed),
+                    status_history: Array.isArray(item.statusHistory) ? item.statusHistory : [],
+                    client_created_at: item.createdAt ? Number(item.createdAt) : null,
+                    client_updated_at: item.updatedAt ? Number(item.updatedAt) : null,
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                const obj = {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    orderNo: row.order_no || '',
+                    date: row.date || '',
+                    sancha: row.sancha || '',
+                    kariger: row.kariger || '',
+                    mohalla: row.mohalla || '',
+                    paai: row.paai || '',
+                    border: row.border || '',
+                    bana: row.bana || '',
+                    meter: Number(row.meter) || 0,
+                    pcs: Number(row.pcs) || 0,
+                    rangi: row.rangi || '',
+                    matchingTable: Array.isArray(row.matching_table) ? row.matching_table : [],
+                    contrastVal: row.contrast_val || '',
+                    contrastLabel: row.contrast_label || '',
+                    selectedContrasts: Array.isArray(row.selected_contrasts) ? row.selected_contrasts : [],
+                    status: row.status || 'sancha',
+                    sanchaPortalStatus: row.sancha_portal_status || 'pending',
+                    rangiPortalStatus: row.rangi_portal_status || 'waiting',
+                    sanchaPortalPushed: Boolean(row.sancha_portal_pushed),
+                    statusHistory: Array.isArray(row.status_history) ? row.status_history : []
+                };
+                if (row.client_created_at) obj.createdAt = Number(row.client_created_at);
+                if (row.client_updated_at) obj.updatedAt = Number(row.client_updated_at);
+                return obj;
+            }
         }
         // === ADD NEW ROW-BY-ROW MODULES HERE IN FUTURE ===
     };
@@ -919,8 +1010,8 @@
             case 'calender_history':
             case 'job_work_bills':
             case 'jobwork_workers': return 'Jobwork Workers & Bills load ho rahe hain...';
-            case 'tani_orders':
-            case 'tani_learned': return 'Tani Orders & Rangai Chart load ho raha hai...';
+            case 'tani_orders': return 'Tani Orders & Rangai Chart (Delta Sync) load ho raha hai...';
+            case 'tani_learned': return 'Tani Learned Colors & Rangi load ho raha hai...';
             case 'info_ledger':
             case 'billing_config': return 'Ledger & Billing Config load rahi hai...';
             default: return 'Company Data load ho raha hai...';
@@ -1238,6 +1329,10 @@
                 }
 
                 const mergedArr = Array.from(mergedMap.values());
+                if (typeof schema.sortList === 'function') {
+                    schema.sortList(mergedArr);
+                }
+
                 if (smartApplyRemoteData(sKey, mergedArr)) {
                     hasNewData = true;
                 }
