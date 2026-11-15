@@ -59,10 +59,28 @@
         if (el) el.style.display = val;
     };
 
+    const toIsoDate = (val) => {
+        if (!val) return '';
+        const s = String(val).trim();
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+        const parts = s.split(/[-/]/);
+        if (parts.length === 3 && parts[0].length === 2 && parts[2].length === 4) {
+            return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+        return s;
+    };
+
+    const isSameDay = (itemDate, targetIso) => {
+        if (!itemDate || !targetIso) return false;
+        return toIsoDate(itemDate) === toIsoDate(targetIso);
+    };
+
     const getToday = () => {
-        return (typeof window.getTodayDate === 'function') 
-            ? window.getTodayDate() 
+        const raw = (typeof window.getTodayDate === 'function')
+            ? window.getTodayDate()
             : new Date().toISOString().split('T')[0];
+        const iso = toIsoDate(raw);
+        return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : new Date().toISOString().split('T')[0];
     };
 
     const matchesGodown = (itemKid, targetKid) => {
@@ -145,7 +163,8 @@
        DAY-BOOK RENDER ENGINE (DYNAMIC READ FROM SOURCE STORES)
        ======================================================================== */
     const renderDashboardDayBook = () => {
-        const d = document.getElementById('dash-day-date')?.value || getToday();
+        const rawD = document.getElementById('dash-day-date')?.value || getToday();
+        const d = toIsoDate(rawD) || getToday();
         const thead = document.getElementById('dash-daybook-thead');
         const tbody = document.getElementById('dash-daybook-tbody');
         const tfoot = document.getElementById('dash-daybook-tfoot');
@@ -180,20 +199,20 @@
         const zStock = window.safeArray ? window.safeArray(window.getStore('zari_stock')) : [];
 
         bStock.forEach((b) => {
-            if (b?.date === d && matchesGodown(b.karkhanaId, targetKid)) {
+            if (isSameDay(b?.date, d) && matchesGodown(b.karkhanaId, targetKid)) {
                 bIn += safeNum(b.aaya);
             }
         });
 
         zStock.forEach((z) => {
-            if (z?.date === d && matchesGodown(z.karkhanaId, targetKid)) {
+            if (isSameDay(z?.date, d) && matchesGodown(z.karkhanaId, targetKid)) {
                 zIn += safeNum(z.aaya);
             }
         });
 
         // 2. WEAVER CONSUMPTION & WAGE PAYMENTS (Tani Sheets)
-        const karList = (typeof window.sanitizeKarigerList === 'function') 
-            ? window.sanitizeKarigerList() 
+        const karList = (typeof window.sanitizeKarigerList === 'function')
+            ? window.sanitizeKarigerList()
             : (window.safeArray ? window.safeArray(window.getStore('kariger_list')) : []);
 
         karList.forEach((k) => {
@@ -203,7 +222,7 @@
             sheets.forEach((sh) => {
                 const rows = window.safeArray ? window.safeArray(sh?.rows) : [];
                 rows.forEach((r) => {
-                    if (r?.date === d) {
+                    if (isSameDay(r?.date, d)) {
                         const netB = safeNum(r.netBana);
                         const retB = safeNum(r.retBana);
                         const netZ = safeNum(r.netZari);
@@ -222,7 +241,7 @@
 
         // 3. MATERIAL TRANSFERS
         const transfers = (window.safeArray ? window.safeArray(window.getStore('material_transfers')) : [])
-            .filter((t) => t?.date === d);
+            .filter((t) => isSameDay(t?.date, d));
 
         transfers.forEach((t) => {
             const qty = safeNum(t.qty || t.quantity);
@@ -240,7 +259,7 @@
 
         // 4. ⭐ DEDICATED PAYMENTS STORE READ (Separated from Daybook)
         const payRecords = (window.safeArray ? window.safeArray(window.getStore('payment_records')) : [])
-            .filter((x) => x?.date === d);
+            .filter((x) => isSameDay(x?.date, d));
 
         payRecords.forEach((e) => {
             if (!matchesGodown(e.karkhanaId, targetKid)) return;
@@ -258,7 +277,7 @@
         const sH = [];
 
         rawSareeHistory.forEach((h) => {
-            if (!h || h.date !== d) return;
+            if (!h || !isSameDay(h.date, d)) return;
             if (!matchesGodown(h.karkhanaId, targetKid)) return;
 
             const ref = String(h.refId || '');
@@ -273,8 +292,8 @@
             if (isJobWork && outQ > 0) {
                 const workerLabel = h.note || h.typeLabel || 'Job Work';
                 const isCal = String(h.typeLabel || '').toLowerCase().includes('calender');
-                const cleanLabel = isCal 
-                    ? `Calender me hai (${workerLabel.replace(' ko bheja', '')})` 
+                const cleanLabel = isCal
+                    ? `Calender me hai (${workerLabel.replace(' ko bheja', '')})`
                     : `Cutting me hai (${workerLabel.replace(' ko bheja', '')})`;
 
                 sH.push({
@@ -306,7 +325,7 @@
 
         // 6. SANCHA MOVEMENTS
         const sanchaHist = (window.safeArray ? window.safeArray(window.getStore('sancha_history')) : [])
-            .filter((h) => h?.date === d && matchesGodown(h.karkhanaId, targetKid));
+            .filter((h) => isSameDay(h?.date, d) && matchesGodown(h.karkhanaId, targetKid));
 
         let sanchaIn = 0, sanchaOut = 0;
         sanchaHist.forEach((h) => {
@@ -335,7 +354,7 @@
             let bRows = [];
 
             bStock.forEach((b) => {
-                if (b?.date === d && matchesGodown(b.karkhanaId, targetKid) && safeNum(b.aaya) > 0) {
+                if (isSameDay(b?.date, d) && matchesGodown(b.karkhanaId, targetKid) && safeNum(b.aaya) > 0) {
                     bRows.push({
                         name: b.name,
                         desc: b.isOpening ? '📦 Opening Stock' : 'Godam Purchase',
@@ -352,8 +371,8 @@
                 sheets.forEach((sh) => {
                     const rows = window.safeArray ? window.safeArray(sh?.rows) : [];
                     rows.forEach((r) => {
-                        if (r?.date === d) {
-                            const itName = r.banaItemName || r.banaItem || 'Bana';
+                        if (isSameDay(r?.date, d)) {
+                            const itName = r.banaItemName || r.banaItem || sh.banaItem || 'Bana';
                             const netB = safeNum(r.netBana);
                             const retB = safeNum(r.retBana);
 
@@ -405,7 +424,7 @@
             let zRows = [];
 
             zStock.forEach((z) => {
-                if (z?.date === d && matchesGodown(z.karkhanaId, targetKid) && safeNum(z.aaya) > 0) {
+                if (isSameDay(z?.date, d) && matchesGodown(z.karkhanaId, targetKid) && safeNum(z.aaya) > 0) {
                     zRows.push({
                         name: z.name,
                         desc: z.isOpening ? '📦 Opening Stock' : 'Godam Purchase',
@@ -422,8 +441,8 @@
                 sheets.forEach((sh) => {
                     const rows = window.safeArray ? window.safeArray(sh?.rows) : [];
                     rows.forEach((r) => {
-                        if (r?.date === d) {
-                            const itName = r.zariItemName || r.zariItem || 'Zari';
+                        if (isSameDay(r?.date, d)) {
+                            const itName = r.zariItemName || r.zariItem || sh.zariItem || 'Zari';
                             const netZ = safeNum(r.netZari);
                             const retZ = safeNum(r.retZari);
 
@@ -495,7 +514,7 @@
             sRows.forEach(h => { curIn += safeInt(h.aai); curOut += safeInt(h.gai); });
             tfoot.innerHTML = `<tr><td colspan='2'><strong>Kul Saree:</strong></td><td><strong style='color:#059669;'>+${curIn} Pcs</strong></td><td><strong style='color:#dc2626;'>-${curOut} Pcs</strong></td><td>-</td></tr>`;
 
-        // ================= TAB 4: PAYMENT (DIRECT FROM PAYMENT_RECORDS) =================
+        // ================= TAB 4: PAYMENT (DIRECT FROM PAYMENT_RECORDS & TANI SHEETS) =================
         } else if (window.currentDayBookTab === 'payment') {
             thead.innerHTML = "<tr style='background:#7c3aed; color:white;'><th>Party / Kariger</th><th>Vivran / Khata</th><th>📥 Aamad (In)</th><th>📤 Diya (Out)</th></tr>";
             let pRows = [];
@@ -508,7 +527,7 @@
                 sheets.forEach((sh) => {
                     const rows = window.safeArray ? window.safeArray(sh?.rows) : [];
                     rows.forEach((r) => {
-                        if (r?.date === d && safeNum(r.paid) > 0) {
+                        if (isSameDay(r?.date, d) && safeNum(r.paid) > 0) {
                             pRows.push({
                                 party: k.name,
                                 desc: `Mazdoori (${sh.title})`,
@@ -562,8 +581,8 @@
 
             currentDaybookFilteredRowsCache = sRows;
             renderPaginatedDaybookRows(sRows, tbody, pager, '#0284c7', (h) => {
-                const catBadge = (h.category === 'chukka') 
-                    ? "<span class='badge-blue' style='background:#ede9fe; color:#6d28d9; font-size:10px;'>⚙️ Chukka</span>" 
+                const catBadge = (h.category === 'chukka')
+                    ? "<span class='badge-blue' style='background:#ede9fe; color:#6d28d9; font-size:10px;'>⚙️ Chukka</span>"
                     : "<span class='badge-blue' style='font-size:10px;'>🧵 Tani</span>";
                 const inQ = safeNum(h.aaya || h.qty);
                 const outQ = safeNum(h.gaya);
@@ -640,7 +659,7 @@
         }
 
         const tab = window.currentDayBookTab || 'bana';
-        const d = document.getElementById('dash-day-date')?.value || getToday();
+        const d = toIsoDate(document.getElementById('dash-day-date')?.value || getToday());
         const kName = getDashboardKarkhanaPrintName(window.currentDashboardKarkhanaFilter);
         const searchInp = document.getElementById('dash-daybook-search') || document.getElementById('search-daybook-input');
         const sTxt = searchInp ? searchInp.value.trim() : '';
@@ -809,8 +828,8 @@
         const targetKid = window.currentDashboardKarkhanaFilter;
         const isAll = (targetKid === 'all');
 
-        let karList = (typeof window.sanitizeKarigerList === 'function') 
-            ? window.sanitizeKarigerList() 
+        let karList = (typeof window.sanitizeKarigerList === 'function')
+            ? window.sanitizeKarigerList()
             : (window.safeArray ? window.safeArray(window.getStore('kariger_list')) : []);
 
         if (!isAll) {
@@ -942,8 +961,8 @@
 
     const getCurrentActiveSection = () => {
         const sections = [
-            'dashboard-view', 'admin-section', 'info-section', 
-            'kariger-section', 'kariger-sheet-section', 'bana-section', 
+            'dashboard-view', 'admin-section', 'info-section',
+            'kariger-section', 'kariger-sheet-section', 'bana-section',
             'zari-section', 'saree-section', 'payment-section', 'sancha-section',
             'jobwork-section', 'daybook-section'
         ];
@@ -1045,10 +1064,7 @@
         initApp
     };
 
-    Object.keys(daybookAPI).forEach((fnName) => {
-        window[fnName] = daybookAPI[fnName];
-    });
-
+    Object.keys(daybookAPI).forEach((fnName) => { window[fnName] = daybookAPI[fnName]; });
     window.DaybookEngine = daybookAPI;
     window.openDayBookModule = openDayBookModule;
 
