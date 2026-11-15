@@ -269,6 +269,115 @@
                 if (row.linked_tani_order_no) obj.linkedTaniOrderNo = row.linked_tani_order_no;
                 return obj;
             }
+        },
+
+        bana_stock: {
+            defaultSourceKey: 'bana_stock',
+            resolveSourceKey: () => 'bana_stock',
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'date', 'name', 'aaya', 'gaya', 'bacha', 'karkhanaId', 'timestamp'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    date: item.date || null,
+                    name: item.name || '',
+                    aaya: Number(item.aaya) || 0,
+                    gaya: Number(item.gaya) || 0,
+                    bacha: Number(item.bacha) || 0,
+                    karkhana_id: item.karkhanaId || 'k_main',
+                    client_ts: item.timestamp ? Number(item.timestamp) : null,
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    date: row.date || '',
+                    name: row.name || '',
+                    aaya: Number(row.aaya) || 0,
+                    gaya: Number(row.gaya) || 0,
+                    bacha: Number(row.bacha) || 0,
+                    karkhanaId: row.karkhana_id || 'k_main',
+                    timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
+                };
+            }
+        },
+
+        bana_history: {
+            defaultSourceKey: 'bana_history',
+            resolveSourceKey: () => 'bana_history',
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'refId', 'date', 'name', 'kariger', 'type',
+                    'aaya', 'gaya', 'karkhanaId', 'timestamp'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                return {
+                    id: `${ctx.uid}_${ctx.sess}_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: ctx.sess,
+                    source_key: ctx.sourceKey,
+                    ref_id: item.refId || null,
+                    date: item.date || null,
+                    name: item.name || '',
+                    kariger: item.kariger || null,
+                    type: item.type || null,
+                    aaya: Number(item.aaya) || 0,
+                    gaya: Number(item.gaya) || 0,
+                    karkhana_id: item.karkhanaId || 'k_main',
+                    client_ts: item.timestamp ? Number(item.timestamp) : null,
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                return {
+                    ...extraObj,
+                    id: row.record_id || row.id,
+                    refId: row.ref_id || '',
+                    date: row.date || '',
+                    name: row.name || '',
+                    kariger: row.kariger || '',
+                    type: row.type || '',
+                    aaya: Number(row.aaya) || 0,
+                    gaya: Number(row.gaya) || 0,
+                    karkhanaId: row.karkhana_id || 'k_main',
+                    timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
+                };
+            }
         }
         // === ADD NEW ROW-BY-ROW MODULES HERE IN FUTURE ===
     };
@@ -492,7 +601,7 @@
             case 'zari_stock':
             case 'zari_history': return 'Zari Stock & Hisab load ho raha hai...';
             case 'bana_stock':
-            case 'bana_history': return 'Bana Stock & Hisab load ho raha hai...';
+            case 'bana_history': return 'Bana Stock & Hisab (Delta Sync) load ho raha hai...';
             case 'sancha_list':
             case 'sancha_history': return 'Sancha (Tani & Chukka) load ho raha hai...';
             case 'karigers':
@@ -1057,10 +1166,10 @@
                 localKey = String(localKey).replace(prefix, '');
             }
 
-            // Purane app_store ke stale records ko ignore karein
+            // Purane app_store ke stale records ko ignore karein jo ab Row-by-Row tables me hain
             if (tbl === 'app_store' && localKey) {
                 const resolved = resolveTargetTable(localKey);
-                if (resolved === 'payments' || resolved === 'karigers' || resolved === 'tani_sheets') {
+                if (Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, resolved)) {
                     return;
                 }
             }
