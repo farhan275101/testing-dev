@@ -1,8 +1,7 @@
 /* ============================================================================
-   SIMPLICITY ERP - HIGH-PERFORMANCE OFFLINE-FIRST STORAGE ENGINE
+   SIMPLICITY ERP - HIGH-PERFORMANCE OFFLINE-FIRST STORAGE & TALLY LOADER ENGINE
    File: core/storage.js • Developed by Farhan Jawed
-   Architecture: 4-Tier L1-RAM / L2-LS / L3-IDB / L4-Supabase Cloud Queue
-   [FIXED: Instant DOM Startup Preload & Multi-Session Isolation]
+   Architecture: L1-RAM / L2-Tiny-LS (<50KB) / L3-IndexedDB (GBs) / L4-Cloud Queue
 ============================================================================ */
 
 (() => {
@@ -35,6 +34,277 @@
         STORE_QUEUE: 'sync_queue'
     });
 
+    // Sirf chhoti aur instant startup keys localStorage me rahengi (< 50 KB)
+    // Baaki saara heavy data (800 karigers, sheets, stock, payments) sirf IndexedDB me rahega
+    const isLightweightKey = (key) => {
+        const k = String(key || '').toLowerCase();
+        return (
+            k.includes('session') ||
+            k.includes('user_id') ||
+            k.includes('tenant_id') ||
+            k.includes('app_users') ||
+            k.includes('karkhana_list') ||
+            k.includes('active_karkhana') ||
+            k.includes('billing_config') ||
+            k.includes('portal_token')
+        );
+    };
+
+    const isUserLoggedIn = () => {
+        try {
+            if (window.currentUserId && String(window.currentUserId).trim() && window.currentUserId !== 'app') {
+                return true;
+            }
+            if (window.currentUserProfile && window.currentUserProfile.id) {
+                return true;
+            }
+            if (localStorage.getItem('app_active_session_auth')) {
+                return true;
+            }
+            const stored = localStorage.getItem('app_current_user_id') || localStorage.getItem('currentUserId');
+            if (stored && String(stored).trim() && String(stored).trim() !== 'app') {
+                return true;
+            }
+        } catch (_) {}
+        return false;
+    };
+
+    /* ========================================================================
+       TALLY-STYLE COMPANY DATA LOADER UI (0% - 100%)
+    ======================================================================== */
+    const ERPLoader = (() => {
+        let hideTimer = null;
+        let failsafeTimer = null;
+        let currentPct = 0;
+
+        const injectStyles = () => {
+            if (document.getElementById('erp-tally-loader-style')) return;
+            const style = document.createElement('style');
+            style.id = 'erp-tally-loader-style';
+            style.textContent = `
+                #erp-tally-loader {
+                    position: fixed;
+                    inset: 0;
+                    z-index: 999999;
+                    background: rgba(15, 23, 42, 0.78);
+                    backdrop-filter: blur(6px);
+                    -webkit-backdrop-filter: blur(6px);
+                    display: none;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 16px;
+                    font-family: system-ui, -apple-system, sans-serif;
+                    transition: opacity 0.25s ease;
+                }
+                .erp-loader-card {
+                    width: 100%;
+                    max-width: 420px;
+                    background: #ffffff;
+                    border-radius: 18px;
+                    padding: 24px 22px;
+                    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+                    border: 1px solid #e2e8f0;
+                    text-align: center;
+                }
+                .erp-loader-brand {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    background: #ecfdf5;
+                    color: #065f46;
+                    border: 1px solid #a7f3d0;
+                    padding: 5px 12px;
+                    border-radius: 999px;
+                    font-size: 11.5px;
+                    font-weight: 800;
+                    letter-spacing: 0.4px;
+                    text-transform: uppercase;
+                    margin-bottom: 12px;
+                }
+                .erp-loader-spinner {
+                    width: 42px;
+                    height: 42px;
+                    margin: 4px auto 12px;
+                    border: 4px solid #e2e8f0;
+                    border-top-color: #059669;
+                    border-radius: 50%;
+                    animation: erpSpin 0.8s linear infinite;
+                }
+                @keyframes erpSpin {
+                    to { transform: rotate(360deg); }
+                }
+                .erp-loader-title {
+                    margin: 0;
+                    font-size: 18px;
+                    font-weight: 800;
+                    color: #0f172a;
+                }
+                .erp-loader-meta {
+                    margin: 5px 0 14px;
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: #475569;
+                }
+                .erp-loader-pct-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: baseline;
+                    margin-bottom: 6px;
+                }
+                .erp-loader-msg {
+                    font-size: 13px;
+                    font-weight: 700;
+                    color: #1e293b;
+                    text-align: left;
+                }
+                .erp-loader-pct {
+                    font-size: 22px;
+                    font-weight: 900;
+                    color: #059669;
+                    min-width: 56px;
+                    text-align: right;
+                }
+                .erp-loader-track {
+                    width: 100%;
+                    height: 12px;
+                    background: #e2e8f0;
+                    border-radius: 999px;
+                    overflow: hidden;
+                    margin-bottom: 10px;
+                }
+                .erp-loader-bar {
+                    height: 100%;
+                    width: 0%;
+                    background: linear-gradient(90deg, #059669, #10b981, #34d399);
+                    border-radius: 999px;
+                    transition: width 0.2s ease;
+                }
+                .erp-loader-sub {
+                    font-size: 11.5px;
+                    color: #64748b;
+                    font-weight: 600;
+                    min-height: 16px;
+                }
+                .erp-loader-foot {
+                    margin-top: 14px;
+                    padding-top: 10px;
+                    border-top: 1px dashed #e2e8f0;
+                    font-size: 11px;
+                    color: #94a3b8;
+                    font-weight: 600;
+                }
+            `;
+            document.head.appendChild(style);
+        };
+
+        const ensureDOM = () => {
+            if (!document.body) return null;
+            injectStyles();
+            let el = document.getElementById('erp-tally-loader');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'erp-tally-loader';
+                el.innerHTML = `
+                    <div class="erp-loader-card">
+                        <div class="erp-loader-brand">📊 SIMPLICITY ERP</div>
+                        <div class="erp-loader-spinner" id="erp-loader-spinner"></div>
+                        <h3 class="erp-loader-title" id="erp-loader-title">Company Data Load Ho Raha Hai...</h3>
+                        <div class="erp-loader-meta" id="erp-loader-meta">Taiyari ho rahi hai...</div>
+                        <div class="erp-loader-pct-row">
+                            <div class="erp-loader-msg" id="erp-loader-msg">Data load ho raha hai...</div>
+                            <div class="erp-loader-pct" id="erp-loader-pct">0%</div>
+                        </div>
+                        <div class="erp-loader-track">
+                            <div class="erp-loader-bar" id="erp-loader-bar"></div>
+                        </div>
+                        <div class="erp-loader-sub" id="erp-loader-sub">Kripya intezar karein...</div>
+                        <div class="erp-loader-foot">🔒 Secure Local IndexedDB + Cloud Sync</div>
+                    </div>
+                `;
+                document.body.appendChild(el);
+            }
+            return el;
+        };
+
+        const getSessionBadgeText = () => {
+            try {
+                const uid = getEffectiveUserId();
+                let sess = '2026-2027';
+                if (typeof window.getActiveFinancialSession === 'function') {
+                    sess = window.getActiveFinancialSession();
+                } else {
+                    sess = APP_MEMORY_CACHE[`${uid}_app_active_session`] || localStorage.getItem(`${uid}_app_active_session`) || '2026-2027';
+                }
+                sess = String(sess).replace(/['"]+/g, '').trim() || '2026-2027';
+                return `👤 Account: ${String(uid).toUpperCase()} • 📅 Session: ${sess}`;
+            } catch (_) {
+                return 'Company Data Loading...';
+            }
+        };
+
+        const show = (msg = 'Data load ho raha hai...', sub = 'Kripya intezar karein...', pct = 5) => {
+            if (!document.body) return;
+            if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+            const el = ensureDOM();
+            if (!el) return;
+
+            const metaEl = document.getElementById('erp-loader-meta');
+            const spinEl = document.getElementById('erp-loader-spinner');
+            if (metaEl) metaEl.textContent = getSessionBadgeText();
+            if (spinEl) spinEl.style.display = 'block';
+
+            el.style.opacity = '1';
+            el.style.display = 'flex';
+            setProgress(pct, msg, sub);
+
+            if (failsafeTimer) clearTimeout(failsafeTimer);
+            failsafeTimer = setTimeout(() => hide(0), 20000);
+        };
+
+        const setProgress = (pct, msg, sub) => {
+            const safePct = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+            if (safePct >= currentPct || safePct === 0) {
+                currentPct = safePct;
+            }
+            const pctEl = document.getElementById('erp-loader-pct');
+            const barEl = document.getElementById('erp-loader-bar');
+            const msgEl = document.getElementById('erp-loader-msg');
+            const subEl = document.getElementById('erp-loader-sub');
+            const spinEl = document.getElementById('erp-loader-spinner');
+
+            if (pctEl) pctEl.textContent = `${currentPct}%`;
+            if (barEl) barEl.style.width = `${currentPct}%`;
+            if (msg !== undefined && msgEl) msgEl.textContent = msg;
+            if (sub !== undefined && subEl) subEl.textContent = sub;
+            if (currentPct >= 100 && spinEl) spinEl.style.display = 'none';
+        };
+
+        const hide = (delayMs = 350) => {
+            if (failsafeTimer) { clearTimeout(failsafeTimer); failsafeTimer = null; }
+            if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+
+            const doHide = () => {
+                const el = document.getElementById('erp-tally-loader');
+                if (!el) return;
+                el.style.opacity = '0';
+                setTimeout(() => {
+                    el.style.display = 'none';
+                    currentPct = 0;
+                }, 250);
+            };
+
+            if (delayMs > 0) {
+                hideTimer = setTimeout(doHide, delayMs);
+            } else {
+                doHide();
+            }
+        };
+
+        return { show, setProgress, hide };
+    })();
+
+    window.ERPLoader = ERPLoader;
+
     const getSupabase = () => {
         return window.supabaseClient || window.supabase || (typeof window.supabase !== 'undefined' ? window.supabase : null);
     };
@@ -52,8 +322,8 @@
                 const sanitized = String(window.currentUserId).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
                 if (sanitized && sanitized !== 'app') return sanitized;
             }
-            const stored = localStorage.getItem('app_current_user_id') || 
-                           localStorage.getItem('currentUserId') || 
+            const stored = localStorage.getItem('app_current_user_id') ||
+                           localStorage.getItem('currentUserId') ||
                            sessionStorage.getItem('currentUserId');
             if (stored) {
                 const sanitized = String(stored).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
@@ -76,7 +346,7 @@
             if (typeof window.getActiveFinancialSession === 'function') {
                 sess = window.getActiveFinancialSession();
             } else {
-                const storedSess = APP_MEMORY_CACHE[`${uid}_app_active_session`] || 
+                const storedSess = APP_MEMORY_CACHE[`${uid}_app_active_session`] ||
                                    localStorage.getItem(`${uid}_app_active_session`);
                 if (storedSess) sess = storedSess;
             }
@@ -123,10 +393,20 @@
     const idbPut = async (key, value) => {
         try {
             const dbase = await getIndexedDBPromise();
-            if (!dbase) return;
-            const tx = dbase.transaction(DB_CONFIG.STORE_APP, 'readwrite');
-            tx.objectStore(DB_CONFIG.STORE_APP).put(value, key);
-        } catch (_) {}
+            if (!dbase) return false;
+            return await new Promise((resolve) => {
+                try {
+                    const tx = dbase.transaction(DB_CONFIG.STORE_APP, 'readwrite');
+                    tx.objectStore(DB_CONFIG.STORE_APP).put(value, key);
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                } catch (_) {
+                    resolve(false);
+                }
+            });
+        } catch (_) {
+            return false;
+        }
     };
 
     const idbDelete = async (key) => {
@@ -241,21 +521,32 @@
         SYNC_DEBOUNCE_TIMERS.set(fullKey, timer);
     };
 
-    const migrateLocalStorageToCache = () => {
+    // Purane localStorage se heavy keys ko safely IndexedDB me shift karke 5MB khali rakhein
+    const migrateLocalStorageToCache = async () => {
         const uid = getEffectiveUserId();
         try {
-            const len = localStorage.length;
-            for (let i = 0; i < len; i++) {
+            const keysSnapshot = [];
+            for (let i = 0; i < localStorage.length; i++) {
                 const k = localStorage.key(i);
-                if (k && (k.startsWith(`${uid}_`) || k === 'app_users') && !(k in APP_MEMORY_CACHE)) {
-                    const raw = localStorage.getItem(k);
-                    try {
-                        const parsed = JSON.parse(raw);
-                        APP_MEMORY_CACHE[k] = parsed;
-                        idbPut(k, parsed);
-                    } catch (_) {
-                        APP_MEMORY_CACHE[k] = raw;
-                        idbPut(k, raw);
+                if (k) keysSnapshot.push(k);
+            }
+
+            for (const k of keysSnapshot) {
+                if (k.startsWith(`${uid}_`) || k === 'app_users') {
+                    let val = APP_MEMORY_CACHE[k];
+                    if (!(k in APP_MEMORY_CACHE)) {
+                        const raw = localStorage.getItem(k);
+                        try {
+                            val = JSON.parse(raw);
+                        } catch (_) {
+                            val = raw;
+                        }
+                        APP_MEMORY_CACHE[k] = val;
+                        await idbPut(k, val);
+                    }
+                    // Heavy keys ko IndexedDB me safe karne ke baad localStorage se hata dein
+                    if (!isLightweightKey(k)) {
+                        try { localStorage.removeItem(k); } catch (_) {}
                     }
                 }
             }
@@ -264,11 +555,38 @@
 
     const initIndexedDBPreload = async (callback) => {
         const uid = getEffectiveUserId();
+        const showLoader = isUserLoggedIn();
+
+        const finishPreload = async () => {
+            await migrateLocalStorageToCache();
+            flushSyncQueue();
+
+            if (typeof window.triggerActiveSectionRefresh === 'function') {
+                window.triggerActiveSectionRefresh();
+            } else if (typeof window.renderDashboardDayBook === 'function') {
+                window.renderDashboardDayBook();
+            }
+
+            if (showLoader) {
+                if (!navigator.onLine) {
+                    ERPLoader.setProgress(100, 'Offline Mode Taiyar Hai ✅', 'Local IndexedDB se data load ho gaya');
+                    ERPLoader.hide(400);
+                } else {
+                    ERPLoader.setProgress(35, 'Local Data Ready • Cloud Sync Chalu Hai...', 'Supabase se taza data check ho raha hai...');
+                }
+            }
+
+            if (typeof callback === 'function') callback();
+        };
+
+        if (showLoader) {
+            ERPLoader.show('Local Database Load Ho Rahi Hai...', 'IndexedDB se purana hisab taiyar ho raha hai...', 12);
+        }
+
         try {
             const dbase = await getIndexedDBPromise();
             if (!dbase) {
-                migrateLocalStorageToCache();
-                if (typeof callback === 'function') callback();
+                await finishPreload();
                 return;
             }
 
@@ -284,18 +602,14 @@
                     }
                     cursor.continue();
                 } else {
-                    migrateLocalStorageToCache();
-                    flushSyncQueue();
-                    if (typeof callback === 'function') callback();
+                    finishPreload();
                 }
             };
             req.onerror = () => {
-                migrateLocalStorageToCache();
-                if (typeof callback === 'function') callback();
+                finishPreload();
             };
         } catch (_) {
-            migrateLocalStorageToCache();
-            if (typeof callback === 'function') callback();
+            await finishPreload();
         }
     };
 
@@ -329,6 +643,9 @@
                 if (typeof cachedVal === 'string' || typeof cachedVal === 'number' || typeof cachedVal === 'boolean') {
                     return cachedVal;
                 }
+                if (cachedVal !== null && typeof cachedVal === 'object' && !Array.isArray(cachedVal)) {
+                    return cachedVal;
+                }
                 return safeArr(cachedVal);
             }
 
@@ -338,6 +655,9 @@
             const parsed = JSON.parse(raw);
             APP_MEMORY_CACHE[fullKey] = parsed;
             if (typeof parsed === 'string' || typeof parsed === 'number' || typeof parsed === 'boolean') {
+                return parsed;
+            }
+            if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
                 return parsed;
             }
             return safeArr(parsed);
@@ -357,9 +677,12 @@
             window.APP_MEMORY_CACHE[fullKey] = toSave;
             idbPut(fullKey, toSave);
 
-            try {
-                localStorage.setItem(fullKey, JSON.stringify(toSave));
-            } catch (_) {}
+            // Sirf chhoti keys localStorage me rakhein; heavy data sirf IndexedDB me jaayega
+            if (isLightweightKey(fullKey)) {
+                try {
+                    localStorage.setItem(fullKey, JSON.stringify(toSave));
+                } catch (_) {}
+            }
 
             dispatchCloudSync(fullKey, toSave, 'SET');
         } catch (fatalErr) {
@@ -370,9 +693,11 @@
     const setRemoteStore = (fullKey, cleanData) => {
         APP_MEMORY_CACHE[fullKey] = cleanData;
         if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = cleanData;
-        try {
-            localStorage.setItem(fullKey, JSON.stringify(cleanData));
-        } catch (_) {}
+        if (isLightweightKey(fullKey)) {
+            try {
+                localStorage.setItem(fullKey, JSON.stringify(cleanData));
+            } catch (_) {}
+        }
         idbPut(fullKey, cleanData);
     };
 
@@ -402,6 +727,7 @@
         idbDelete,
         initIndexedDBPreload,
         flushSyncQueue,
+        isLightweightKey,
         GLOBAL_APP_KEYS,
         get isRemoteUpdating() { return isRemoteUpdating; },
         set isRemoteUpdating(val) { isRemoteUpdating = Boolean(val); },
