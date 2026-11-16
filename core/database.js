@@ -16,6 +16,7 @@
     const PULL_COOLDOWN_MS = 45000; // 45 sec cooldown for focus/visibility pulls
     const ROW_PAGE_SIZE = 1000;
     const ROW_WRITE_CHUNK = 200;
+    const PULL_CONCURRENCY = 5;
 
     const REALTIME_TABLES = [
         'app_store',
@@ -54,6 +55,8 @@
     const recentSelfWrites = {};
     const tablePullTimers = {};
     const tablePullInFlight = {};
+
+    const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
 
     try {
         if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
@@ -1325,6 +1328,7 @@
 
     const getTableProgressLabel = (tbl) => {
         switch (tbl) {
+            case 'karkhanas': return 'Godam aur Karkhane load ho rahe hain...';
             case 'app_store': return 'Session & Settings load ho rahi hain...';
             case 'saree_stock':
             case 'saree_history': return 'Saree Stock & Passbook (Delta Sync) load ho raha hai...';
@@ -1457,17 +1461,20 @@
             : `${uid}_${sess}_${shortKey}`;
 
         try {
-            const newStr = JSON.stringify(rowData);
             let currentStr = null;
-
             if (window.APP_MEMORY_CACHE && window.APP_MEMORY_CACHE[fullStorageKey] !== undefined) {
                 try { currentStr = JSON.stringify(window.APP_MEMORY_CACHE[fullStorageKey]); } catch (_) {}
             }
-            if (currentStr === null && isLightweightLocalKey(shortKey)) {
+            const isLight = isLightweightLocalKey(shortKey);
+            if (currentStr === null && isLight) {
                 try { currentStr = localStorage.getItem(fullStorageKey); } catch (_) {}
             }
 
-            if (currentStr === newStr) return false;
+            let newStr = null;
+            if (currentStr !== null || isLight) {
+                newStr = JSON.stringify(rowData);
+                if (currentStr === newStr) return false;
+            }
 
             if (window.APP_MEMORY_CACHE) {
                 window.APP_MEMORY_CACHE[fullStorageKey] = rowData;
@@ -1481,7 +1488,7 @@
             }
 
             // Sirf chhoti keys localStorage me rakhein; 800 karigers ka heavy data sirf IndexedDB me rahega
-            if (isLightweightLocalKey(shortKey)) {
+            if (isLight && newStr !== null) {
                 try {
                     localStorage.setItem(fullStorageKey, newStr);
                 } catch (_) {}
@@ -1815,8 +1822,8 @@
             }
 
             if (tbl === 'karkhanas') {
-                const { data: kData } = await supabaseClient.from('karkhanas').select('*').eq('user_id', uid);
-                if (Array.isArray(kData) && kData.length > 0) {
+                const { data: kData, error: kErr } = await supabaseClient.from('karkhanas').select('*').eq('user_id', uid);
+                if (!kErr && Array.isArray(kData) && kData.length > 0) {
                     const kList = kData.map(row => ({
                         id: row.is_default ? 'k_main' : `k_${row.id}`,
                         name: row.karkhana_name,
@@ -1848,7 +1855,7 @@
         if (!supabaseClient || !navigator.onLine) {
             if (!silent && window.ERPLoader) {
                 window.ERPLoader.setProgress(100, 'Offline Mode Taiyar Hai ✅', 'Local IndexedDB se chal raha hai');
-                window.ERPLoader.hide(350);
+                window.ERPLoader.hide(150);
             }
             return;
         }
@@ -1862,7 +1869,7 @@
         if (!force && lastFullPullUid === uid && (now - lastFullPullAt) < PULL_COOLDOWN_MS) {
             if (!silent && window.ERPLoader) {
                 window.ERPLoader.setProgress(100, 'Saara Data Taiyar Hai ✅', 'Recent cache loaded');
-                window.ERPLoader.hide(300);
+                window.ERPLoader.hide(150);
             }
             return;
         }
@@ -1871,40 +1878,62 @@
         if (!silent) {
             showSyncStatus('syncing');
             if (window.ERPLoader) {
-                window.ERPLoader.show('Cloud Data Sync Ho Raha Hai...', 'Godam aur Accounts load ho rahe hain...', 35);
+                window.ERPLoader.show('Cloud Data Sync Ho Raha Hai...', 'Fast Parallel Sync chal raha hai...', 40);
             }
         }
 
         let hasNewData = false;
 
-        try {
-            if (!silent && window.ERPLoader) {
-                window.ERPLoader.setProgress(38, 'Godam aur Karkhane load ho rahe hain...', 'Table: karkhanas');
-            }
+        const pullOneTableInPool = async (tbl) => {
             try {
-                const { data: kData } = await supabaseClient.from('karkhanas').select('*').eq('user_id', uid);
-                if (Array.isArray(kData) && kData.length > 0) {
-                    const kList = kData.map(row => ({
-                        id: row.is_default ? 'k_main' : `k_${row.id}`,
-                        name: row.karkhana_name,
-                        isDefault: Boolean(row.is_default)
-                    }));
-                    if (smartApplyRemoteData('karkhana_list', kList)) hasNewData = true;
-                } else {
-                    await autoPushKarkhanasToSupabase();
+                if (tbl === 'karkhanas') {
+                    const { data: kData, error: kErr } = await supabaseClient.from('karkhanas').select('*').eq('user_id', uid);
+                    if (!kErr && Array.isArray(kData) && kData.length > 0) {
+                        const kList = kData.map(row => ({
+                            id: row.is_default ? 'k_main' : `k_${row.id}`,
+                            name: row.karkhana_name,
+                            isDefault: Boolean(row.is_default)
+                        }));
+                        if (smartApplyRemoteData('karkhana_list', kList)) hasNewData = true;
+                    } else if (!kErr && Array.isArray(kData) && kData.length === 0) {
+                        await autoPushKarkhanasToSupabase();
+                    }
+                    return;
+                }
+
+                if (Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, tbl)) {
+                    if (await pullRowSyncTable(tbl, uid)) {
+                        hasNewData = true;
+                    }
+                    return;
+                }
+
+                const { data, error } = await supabaseClient
+                    .from(tbl)
+                    .select('*')
+                    .eq('user_id', uid);
+
+                if (!error && data && data.length > 0) {
+                    if (applyRowsFromTable(tbl, data, uid)) {
+                        hasNewData = true;
+                    }
                 }
             } catch (_) {}
+        };
 
+        try {
             const tables = [
+                'karkhanas',
                 'app_store',
+                'jobwork_workers',
+                'karigers',
+                'tani_sheets',
                 'saree_stock', 'saree_history',
                 'zari_stock', 'zari_history',
                 'bana_stock', 'bana_history',
                 'sancha_list', 'sancha_history',
-                'karigers', 'tani_sheets',
                 'material_transfers', 'dukan_challans',
                 'payments',
-                'jobwork_workers',
                 'cutting_history', 'embroidery_history', 'calender_history',
                 'job_work_bills',
                 'tani_orders',
@@ -1913,32 +1942,30 @@
                 'tani_learned'
             ];
 
-            for (let i = 0; i < tables.length; i++) {
-                const tbl = tables[i];
-                if (!silent && window.ERPLoader) {
-                    const pct = Math.min(96, 40 + Math.round(((i + 1) / tables.length) * 56));
-                    window.ERPLoader.setProgress(pct, getTableProgressLabel(tbl), `Module ${i + 1} / ${tables.length} (${tbl})`);
+            let nextIdx = 0;
+            let completedCount = 0;
+            const totalTables = tables.length;
+
+            const worker = async () => {
+                while (nextIdx < totalTables) {
+                    const myIdx = nextIdx++;
+                    const tbl = tables[myIdx];
+                    await pullOneTableInPool(tbl);
+                    completedCount++;
+                    if (!silent && window.ERPLoader) {
+                        const pct = Math.min(96, 40 + Math.round((completedCount / totalTables) * 56));
+                        window.ERPLoader.setProgress(pct, getTableProgressLabel(tbl), `Module ${completedCount} / ${totalTables} (${tbl})`);
+                    }
+                    await yieldToMain();
                 }
-                try {
-                    if (Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, tbl)) {
-                        if (await pullRowSyncTable(tbl, uid)) {
-                            hasNewData = true;
-                        }
-                        continue;
-                    }
+            };
 
-                    const { data, error } = await supabaseClient
-                        .from(tbl)
-                        .select('*')
-                        .eq('user_id', uid);
-
-                    if (!error && data && data.length > 0) {
-                        if (applyRowsFromTable(tbl, data, uid)) {
-                            hasNewData = true;
-                        }
-                    }
-                } catch (_) {}
+            const workerCount = Math.min(PULL_CONCURRENCY, totalTables);
+            const workers = [];
+            for (let w = 0; w < workerCount; w++) {
+                workers.push(worker());
             }
+            await Promise.all(workers);
 
             lastFullPullAt = Date.now();
             lastFullPullUid = uid;
@@ -1955,7 +1982,7 @@
             // Phir 100% dikha kar loader ko smoothly hata dein
             if (!silent && window.ERPLoader) {
                 window.ERPLoader.setProgress(100, 'Saara Data 100% Load Ho Gaya! ✅', 'Simplicity ERP Taiyar Hai');
-                window.ERPLoader.hide(400);
+                window.ERPLoader.hide(120);
             }
         }
     };
@@ -2093,10 +2120,10 @@
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
-            if (getSafeUserId()) setTimeout(initSupabaseRealtime, 200);
+            if (getSafeUserId()) setTimeout(initSupabaseRealtime, 30);
         });
     } else {
-        if (getSafeUserId()) setTimeout(initSupabaseRealtime, 200);
+        if (getSafeUserId()) setTimeout(initSupabaseRealtime, 30);
     }
 
     if (typeof module !== 'undefined' && module.exports) {
