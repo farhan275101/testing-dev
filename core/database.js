@@ -1128,23 +1128,21 @@
     const getSafeUserId = () => {
         try {
             if (window.currentUserId && String(window.currentUserId).trim() && window.currentUserId !== 'app') {
-                return String(window.currentUserId).trim();
+                return String(window.currentUserId).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
             }
             if (window.currentUserProfile && window.currentUserProfile.id) {
-                return String(window.currentUserProfile.id).trim();
+                return String(window.currentUserProfile.id).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
             }
             const authData = localStorage.getItem('app_active_session_auth');
             if (authData) {
                 const parsed = JSON.parse(authData);
-                if (parsed && parsed.id) return String(parsed.id).trim();
-            }
-            if (typeof window.getEffectiveUserId === 'function') {
-                const id = window.getEffectiveUserId();
-                if (id && id !== 'app' && id !== '10001') return String(id).trim();
+                if (parsed && parsed.id) {
+                    return String(parsed.id).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                }
             }
             const stored = localStorage.getItem('app_current_user_id') || localStorage.getItem('currentUserId');
             if (stored) {
-                const clean = String(stored).trim().replace(/[^a-zA-Z0-9_@-]/g, '');
+                const clean = String(stored).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
                 if (clean && clean !== 'app') return clean;
             }
         } catch (_) {}
@@ -1452,8 +1450,11 @@
 
         let shortKey = String(targetKey);
         const prefix = `${uid}_${sess}_`;
+        const globalPrefix = `${uid}_`;
         if (shortKey.startsWith(prefix)) {
             shortKey = shortKey.replace(prefix, '');
+        } else if (shortKey.startsWith(globalPrefix) && Array.isArray(window.GLOBAL_APP_KEYS) && window.GLOBAL_APP_KEYS.includes(shortKey.slice(globalPrefix.length))) {
+            shortKey = shortKey.slice(globalPrefix.length);
         }
 
         const fullStorageKey = (typeof window.getStorageKey === 'function')
@@ -1728,12 +1729,12 @@
 
         try {
             const cleanKey = String(fullKey).replace(`${uid}_${sess}_`, '').replace(`${uid}_`, '');
-            const recordId = `${uid}_${sess}_${cleanKey}`;
+            const isGlobal = Array.isArray(window.GLOBAL_APP_KEYS) && window.GLOBAL_APP_KEYS.includes(cleanKey);
+            const recordId = isGlobal ? `${uid}_${cleanKey}` : `${uid}_${sess}_${cleanKey}`;
             recentSelfWrites[targetTable] = Date.now();
 
             if (targetTable === 'app_store') {
-                await supabaseClient.from('app_store').delete().eq('id', recordId);
-                await supabaseClient.from('app_store').insert({
+                const { error: appErr } = await supabaseClient.from('app_store').upsert({
                     id: recordId,
                     user_id: uid,
                     tenant_id: tid,
@@ -1742,7 +1743,13 @@
                     key: String(fullKey),
                     value: data,
                     updated_at: new Date().toISOString()
-                });
+                }, { onConflict: 'id' });
+
+                if (appErr) {
+                    console.error('❌ [Supabase Error in app_store]:', appErr.message);
+                    showSyncStatus('error');
+                    return false;
+                }
                 isConnectedToCloud = true;
                 showSyncStatus('online');
                 return true;
@@ -1782,11 +1789,37 @@
         let hasNewData = false;
         const sess = getActiveSessionVal();
         const prefix = `${uid}_${sess}_`;
+        const globalPrefix = `${uid}_`;
 
         data.forEach((row) => {
-            let localKey = row.id || row.key;
-            if (localKey && String(localKey).startsWith(prefix)) {
-                localKey = String(localKey).replace(prefix, '');
+            const rawId = String(row.id || row.key || '');
+            if (!rawId) return;
+
+            // Global billing config ko skip karein (wo admin.js handle karta hai)
+            if (rawId.toLowerCase().includes('global_billing_config')) return;
+
+            const isGlobalSessionKey = (rawId === `${uid}_app_active_session` || rawId === `${uid}_app_sessions_list`);
+
+            // Purane/doosre session ki rows ko active session me mix hone se strictly rokein
+            if (!isGlobalSessionKey) {
+                if (row.session && String(row.session).trim() !== '' && String(row.session).trim() !== sess) {
+                    return;
+                }
+                const sessInIdMatch = rawId.match(/_(\d{4}-\d{4})_/);
+                if (sessInIdMatch && sessInIdMatch[1] !== sess) {
+                    return;
+                }
+                if (rawId.includes('app_active_session') || rawId.includes('app_sessions_list')) {
+                    // Stale session-prefixed duplicates ignore karein
+                    return;
+                }
+            }
+
+            let localKey = rawId;
+            if (localKey.startsWith(prefix)) {
+                localKey = localKey.replace(prefix, '');
+            } else if (isGlobalSessionKey && localKey.startsWith(globalPrefix)) {
+                localKey = localKey.slice(globalPrefix.length);
             }
 
             // Purane JSONB tables (jaise app_store / material_transfers) ke stale records ko ignore karein jo ab Row-by-Row tables me hain
@@ -1992,16 +2025,17 @@
         const hasNew = payload && payload.new && Object.keys(payload.new).length > 0;
         const row = hasNew ? payload.new : (payload ? payload.old : null);
         if (!row) return;
-        if (row.user_id && row.user_id !== uid) return;
+        if (row.user_id && String(row.user_id).toLowerCase() !== String(uid).toLowerCase()) return;
 
-        const rKey = String(row.key || row.id || '');
-        if (rKey.includes('app_active_session') && hasNew) {
+        const rKey = String(row.id || row.key || '');
+        if (rKey === `${uid}_app_active_session` && hasNew) {
             const rawVal = payload.new.data !== undefined ? payload.new.data : payload.new.value;
             const cloudActiveSess = String(rawVal || '').replace(/['"]+/g, '').trim();
             const currentLocalSess = getActiveSessionVal();
 
             if (/^\d{4}-\d{4}$/.test(cloudActiveSess) && cloudActiveSess !== currentLocalSess) {
                 localStorage.setItem(`${uid}_app_active_session`, cloudActiveSess);
+                if (typeof window.clearMemoryCache === 'function') window.clearMemoryCache();
                 window.location.reload();
                 return;
             }
