@@ -17,6 +17,12 @@
     const DEBOUNCE_DELAY_MS = 300;
     let isSyncQueueFlushing = false;
 
+    let resolvePreloadPromise = null;
+    const StoragePreloadPromise = new Promise((resolve) => {
+        resolvePreloadPromise = resolve;
+    });
+    window.StoragePreloadPromise = StoragePreloadPromise;
+
     // Generic Row-Level Diff & Delta Buffers (Permanent for all Row-by-Row modules)
     const LAST_SYNCED_SNAPSHOTS = new Map(); // fullKey -> Map<rowId, jsonString>
     const PENDING_ROW_DELTAS = new Map();    // fullKey -> { upserts: Map<rowId, obj>, deletes: Set<rowId> }
@@ -466,6 +472,25 @@
         });
     };
 
+    const idbGet = async (key) => {
+        try {
+            const dbase = await getIndexedDBPromise();
+            if (!dbase) return undefined;
+            return await new Promise((resolve) => {
+                try {
+                    const tx = dbase.transaction(DB_CONFIG.STORE_APP, 'readonly');
+                    const req = tx.objectStore(DB_CONFIG.STORE_APP).get(key);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => resolve(undefined);
+                } catch (_) {
+                    resolve(undefined);
+                }
+            });
+        } catch (_) {
+            return undefined;
+        }
+    };
+
     const idbPut = async (key, value) => {
         try {
             const dbase = await getIndexedDBPromise();
@@ -804,25 +829,31 @@
         const showLoader = isUserLoggedIn();
 
         const finishPreload = async () => {
-            await migrateLocalStorageToCache();
-            flushSyncQueue();
+            try {
+                await migrateLocalStorageToCache();
+                flushSyncQueue();
 
-            if (typeof window.triggerActiveSectionRefresh === 'function') {
-                window.triggerActiveSectionRefresh();
-            } else if (typeof window.renderDashboardDayBook === 'function') {
-                window.renderDashboardDayBook();
-            }
-
-            if (showLoader) {
-                if (!navigator.onLine) {
-                    ERPLoader.setProgress(100, 'Offline Mode Taiyar Hai ✅', 'Local IndexedDB se data load ho gaya');
-                    ERPLoader.hide(400);
-                } else {
-                    ERPLoader.setProgress(35, 'Local Data Ready • Cloud Sync Chalu Hai...', 'Supabase se taza data check ho raha hai...');
+                if (typeof window.triggerActiveSectionRefresh === 'function') {
+                    window.triggerActiveSectionRefresh();
+                } else if (typeof window.renderDashboardDayBook === 'function') {
+                    window.renderDashboardDayBook();
                 }
-            }
 
-            if (typeof callback === 'function') callback();
+                if (showLoader) {
+                    if (!navigator.onLine) {
+                        ERPLoader.setProgress(100, 'Offline Mode Taiyar Hai ✅', 'Local IndexedDB se data load ho gaya');
+                        ERPLoader.hide(400);
+                    } else {
+                        ERPLoader.setProgress(35, 'Local Data Ready • Cloud Sync Chalu Hai...', 'Supabase se taza data check ho raha hai...');
+                    }
+                }
+            } finally {
+                if (typeof resolvePreloadPromise === 'function') {
+                    resolvePreloadPromise(true);
+                    resolvePreloadPromise = null;
+                }
+                if (typeof callback === 'function') callback();
+            }
         };
 
         if (showLoader) {
@@ -1021,12 +1052,14 @@
         getStorageKey,
         getEffectiveUserId,
         openEnterpriseIndexedDB,
+        idbGet,
         idbPut,
         idbDelete,
         initIndexedDBPreload,
         flushSyncQueue,
         isLightweightKey,
         GLOBAL_APP_KEYS,
+        preloadPromise: StoragePreloadPromise,
         get isRemoteUpdating() { return isRemoteUpdating; },
         set isRemoteUpdating(val) { isRemoteUpdating = Boolean(val); },
         get isBackupPreviewMode() { return isBackupPreviewMode; },
@@ -1040,6 +1073,7 @@
     window.GLOBAL_APP_KEYS = GLOBAL_APP_KEYS;
     window.clearMemoryCache = clearMemoryCache;
     window.openEnterpriseIndexedDB = openEnterpriseIndexedDB;
+    window.idbGet = idbGet;
     window.idbPut = idbPut;
     window.idbDelete = idbDelete;
     window.initIndexedDBPreload = initIndexedDBPreload;
