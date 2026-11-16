@@ -1,7 +1,7 @@
 /* ============================================================================
    SIMPLICITY ERP - HIGH-SCALE FINANCIAL YEAR SESSION CONTROLLER
    File: session/session.js • Developed by Farhan Jawed
-   Architecture: Clean Direct Sessions • Cross-Device Live Sync • Zero Traps
+   Architecture: Clean Direct Sessions • Atomic RPC Delete • IDB & Cursor Cleanup
 ============================================================================ */
 
 (() => {
@@ -9,26 +9,45 @@
 
     const DEFAULT_BOOTSTRAP_SESSION = '2026-2027';
 
-    const getEffectiveUserId = () => {
+    const resolveUserId = () => {
         try {
+            if (window.StorageEngine && typeof window.StorageEngine.getEffectiveUserId === 'function') {
+                const sid = window.StorageEngine.getEffectiveUserId();
+                if (sid && sid !== 'app') return String(sid).trim();
+            }
+            if (window.currentUserId && String(window.currentUserId).trim() && window.currentUserId !== 'app') {
+                return String(window.currentUserId).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+            }
             if (window.currentUserProfile && window.currentUserProfile.id) {
-                return String(window.currentUserProfile.id).trim();
+                return String(window.currentUserProfile.id).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
             }
             const authData = localStorage.getItem('app_active_session_auth');
             if (authData) {
                 const parsed = JSON.parse(authData);
-                if (parsed.id) return String(parsed.id).trim();
+                if (parsed && parsed.id) {
+                    return String(parsed.id).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                }
             }
-            if (typeof window.getEffectiveUserId === 'function') {
-                const id = window.getEffectiveUserId();
-                if (id && id !== 'app') return id;
-            }
-            const stored = localStorage.getItem('app_current_user_id') || localStorage.getItem('currentUserId');
+            const stored = localStorage.getItem('app_current_user_id') ||
+                           localStorage.getItem('currentUserId') ||
+                           sessionStorage.getItem('currentUserId');
             if (stored) {
-                return String(stored).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                const clean = String(stored).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                if (clean && clean !== 'app') return clean;
             }
         } catch (_) {}
-        return '10001';
+        return 'farhan';
+    };
+
+    const getEffectiveUserId = () => resolveUserId();
+
+    const getSafeTenantId = (uid) => {
+        try {
+            if (window.currentTenantId) return String(window.currentTenantId).trim();
+            const stored = localStorage.getItem('app_current_tenant_id') || localStorage.getItem('tenantId');
+            if (stored) return String(stored).trim();
+        } catch (_) {}
+        return uid;
     };
 
     /**
@@ -41,15 +60,13 @@
         let list = [];
         try {
             const raw = localStorage.getItem(userKey);
-            if (raw) {
-                list = JSON.parse(raw);
-            }
+            if (raw) list = JSON.parse(raw);
         } catch (_) {
             list = [];
         }
 
-        let cleanList = Array.isArray(list) 
-            ? list.map(s => String(s).replace(/['"]+/g, '').trim()).filter(s => /^\d{4}-\d{4}$/.test(s))
+        let cleanList = Array.isArray(list)
+            ? list.map((s) => String(s).replace(/['"]+/g, '').trim()).filter((s) => /^\d{4}-\d{4}$/.test(s))
             : [];
 
         if (cleanList.length === 0) {
@@ -66,7 +83,7 @@
     };
 
     /**
-     * Current Active Session nikaalta hai (No Blacklist trap)
+     * Current Active Session nikaalta hai
      */
     const getActiveFinancialSession = () => {
         const uId = getEffectiveUserId();
@@ -80,7 +97,7 @@
 
         if (!sess || !/^\d{4}-\d{4}$/.test(sess) || !validSessions.includes(sess)) {
             sess = validSessions[validSessions.length - 1] || DEFAULT_BOOTSTRAP_SESSION;
-            localStorage.setItem(userKey, sess);
+            try { localStorage.setItem(userKey, sess); } catch (_) {}
             if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[userKey] = sess;
         }
 
@@ -106,60 +123,86 @@
         });
     };
 
-    const saveToAppStoreSafe = async (key, value) => {
+    const saveToAppStoreSafe = async (key, value, sessOverride = null) => {
         const sb = window.supabaseClient || window.supabase;
-        if (!sb || typeof sb.from !== 'function') return;
+        if (!sb || typeof sb.from !== 'function' || !navigator.onLine) return;
 
         const uId = getEffectiveUserId();
+        const tid = getSafeTenantId(uId);
+        const sessVal = sessOverride || getActiveFinancialSession();
         const now = new Date().toISOString();
 
         try {
-            await sb.from('app_store').delete().eq('id', key);
-            await sb.from('app_store').insert({
+            await sb.from('app_store').upsert({
                 id: key,
                 user_id: uId,
+                tenant_id: tid,
+                session: sessVal,
                 data: value,
                 key: key,
                 value: value,
                 updated_at: now
-            });
+            }, { onConflict: 'id' });
         } catch (err) {
             console.warn('[app_store safe write]:', err);
         }
     };
 
     const initCloudSessionSync = async () => {
+        if (window.isBackupPreviewMode) return;
         const uId = getEffectiveUserId();
         const sessionsKey = `${uId}_app_sessions_list`;
         const activeKey = `${uId}_app_active_session`;
 
         try {
             const sb = window.supabaseClient || window.supabase;
-            if (sb && typeof sb.from === 'function') {
-                const { data } = await sb.from('app_store').select('*').eq('user_id', uId);
+            if (sb && typeof sb.from === 'function' && navigator.onLine) {
+                const { data } = await sb
+                    .from('app_store')
+                    .select('id, key, data, value')
+                    .in('id', [sessionsKey, activeKey]);
+
                 if (data && Array.isArray(data)) {
+                    let updatedSessions = null;
+                    let cloudActive = null;
+
                     data.forEach((row) => {
-                        const rKey = row.key || row.id;
+                        const rId = String(row.id || row.key || '');
                         const rVal = row.data !== undefined ? row.data : row.value;
 
-                        if (rKey.includes('app_sessions_list') && Array.isArray(rVal) && rVal.length > 0) {
-                            const clean = rVal.map(s => String(s).replace(/['"]+/g, '').trim()).filter(s => /^\d{4}-\d{4}$/.test(s));
+                        if (rId === sessionsKey && Array.isArray(rVal) && rVal.length > 0) {
+                            const clean = rVal
+                                .map((s) => String(s).replace(/['"]+/g, '').trim())
+                                .filter((s) => /^\d{4}-\d{4}$/.test(s));
                             if (clean.length > 0) {
-                                localStorage.setItem(sessionsKey, JSON.stringify(clean));
+                                updatedSessions = Array.from(new Set(clean)).sort();
                             }
                         }
 
-                        if (rKey.includes('app_active_session') && rVal) {
-                            const cloudActive = String(rVal).replace(/['"]+/g, '').trim();
-                            const curActive = getActiveFinancialSession();
-                            if (/^\d{4}-\d{4}$/.test(cloudActive) && cloudActive !== curActive) {
-                                localStorage.setItem(activeKey, cloudActive);
-                                if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[activeKey] = cloudActive;
-                                window.location.reload();
-                                return;
+                        if (rId === activeKey && rVal) {
+                            const cand = String(rVal).replace(/['"]+/g, '').trim();
+                            if (/^\d{4}-\d{4}$/.test(cand)) {
+                                cloudActive = cand;
                             }
                         }
                     });
+
+                    if (updatedSessions) {
+                        localStorage.setItem(sessionsKey, JSON.stringify(updatedSessions));
+                        if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[sessionsKey] = updatedSessions;
+                    }
+
+                    if (cloudActive) {
+                        const validList = getAppSessions();
+                        const curActive = getActiveFinancialSession();
+                        if (validList.includes(cloudActive) && cloudActive !== curActive) {
+                            localStorage.setItem(activeKey, cloudActive);
+                            if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[activeKey] = cloudActive;
+                            if (typeof window.clearMemoryCache === 'function') window.clearMemoryCache();
+                            window.location.reload();
+                            return;
+                        }
+                    }
                 }
             }
             populateSessionDropdown();
@@ -181,13 +224,17 @@
         const uId = getEffectiveUserId();
 
         try {
+            if (typeof window.detachSupabaseRealtime === 'function') {
+                window.detachSupabaseRealtime();
+            }
+
             localStorage.setItem(`${uId}_app_active_session`, cleanTarget);
             if (window.APP_MEMORY_CACHE) {
                 window.APP_MEMORY_CACHE[`${uId}_app_active_session`] = cleanTarget;
             }
 
-            await saveToAppStoreSafe(`${uId}_app_active_session`, cleanTarget);
-            await saveToAppStoreSafe(`${uId}_app_sessions_list`, getAppSessions());
+            await saveToAppStoreSafe(`${uId}_app_active_session`, cleanTarget, cleanTarget);
+            await saveToAppStoreSafe(`${uId}_app_sessions_list`, getAppSessions(), cleanTarget);
 
             if (typeof window.clearMemoryCache === 'function') {
                 window.clearMemoryCache();
@@ -195,7 +242,7 @@
 
             setTimeout(() => {
                 window.location.reload();
-            }, 300);
+            }, 250);
         } catch (err) {
             console.error('[SessionSwitch] Error:', err);
             window.location.reload();
@@ -238,8 +285,66 @@
         modal.style.display = 'none';
     };
 
+    const clearSessionFromIndexedDB = async (uId, targetSess) => {
+        if (!('indexedDB' in window)) return;
+        const prefix = `${uId}_${targetSess}_`;
+
+        try {
+            await new Promise((resolve) => {
+                const req = window.indexedDB.open('SimplicityERP_DB', 2);
+                req.onsuccess = (e) => {
+                    const dbase = e.target.result;
+                    try {
+                        const storeNames = [];
+                        if (dbase.objectStoreNames.contains('app_store')) storeNames.push('app_store');
+                        if (dbase.objectStoreNames.contains('sync_queue')) storeNames.push('sync_queue');
+                        if (!storeNames.length) return resolve();
+
+                        const tx = dbase.transaction(storeNames, 'readwrite');
+
+                        if (dbase.objectStoreNames.contains('app_store')) {
+                            const appStore = tx.objectStore('app_store');
+                            const curReq = appStore.openKeyCursor();
+                            curReq.onsuccess = (ev) => {
+                                const cursor = ev.target.result;
+                                if (cursor) {
+                                    if (String(cursor.key).startsWith(prefix)) {
+                                        appStore.delete(cursor.key);
+                                    }
+                                    cursor.continue();
+                                }
+                            };
+                        }
+
+                        if (dbase.objectStoreNames.contains('sync_queue')) {
+                            const qStore = tx.objectStore('sync_queue');
+                            const qReq = qStore.openCursor();
+                            qReq.onsuccess = (ev) => {
+                                const cursor = ev.target.result;
+                                if (cursor) {
+                                    const val = cursor.value;
+                                    const tKey = String(val?.targetKey || '');
+                                    if (tKey.startsWith(prefix) || String(cursor.key).includes(prefix)) {
+                                        qStore.delete(cursor.key);
+                                    }
+                                    cursor.continue();
+                                }
+                            };
+                        }
+
+                        tx.oncomplete = () => resolve();
+                        tx.onerror = () => resolve();
+                    } catch (_) {
+                        resolve();
+                    }
+                };
+                req.onerror = () => resolve();
+            });
+        } catch (_) {}
+    };
+
     /* ========================================================================
-       🗑️ CLEAN SESSION DELETE
+       🗑️ CLEAN ATOMIC SESSION DELETE (CLOUD RPC + INDEXEDDB + DELTA CURSORS)
        ======================================================================== */
     const confirmAndDeleteSessionWithAuth = async () => {
         const delSel = document.getElementById('session-delete-select');
@@ -282,72 +387,60 @@
         }
 
         try {
-            // 1. Session list se hatao
+            if (typeof window.detachSupabaseRealtime === 'function') {
+                window.detachSupabaseRealtime();
+            }
+
+            // 1. Session list aur active session update karein
             sessions = sessions.filter((s) => s !== targetSess);
             if (sessions.length === 0) sessions = [DEFAULT_BOOTSTRAP_SESSION];
             localStorage.setItem(`${uId}_app_sessions_list`, JSON.stringify(sessions));
 
-            // 2. Active session adjust karo
             let nextActive = getActiveFinancialSession();
-            if (nextActive === targetSess) {
+            if (nextActive === targetSess || !sessions.includes(nextActive)) {
                 nextActive = sessions[sessions.length - 1] || DEFAULT_BOOTSTRAP_SESSION;
                 localStorage.setItem(`${uId}_app_active_session`, nextActive);
             }
 
-            // Purani blacklists saaf
             localStorage.removeItem(`${uId}_app_deleted_sessions`);
 
-            // 3. Supabase Cloud se saaf karo
+            // 2. Supabase Cloud se 1 Atomic RPC call me saaf karein
             const sb = window.supabaseClient || window.supabase;
-            if (sb && typeof sb.from === 'function') {
-                const tables = [
-                    'saree_stock', 'saree_history',
-                    'zari_stock', 'zari_history',
-                    'bana_stock', 'bana_history',
-                    'sancha_list', 'sancha_history',
-                    'karigers', 'tani_sheets', 
-                    'material_transfers', 'dukan_challans', 
-                    'payments',
-                    'cutting', 'cutting_history',
-                    'embroidery', 'embroidery_history',
-                    'calender', 'calender_history',
-                    'job_work_bills'
-                ];
-
-                for (const tbl of tables) {
-                    try {
-                        await sb.from(tbl).delete().eq('user_id', uId).eq('session', targetSess);
-                        await sb.from(tbl).delete().eq('user_id', uId).like('id', `%${targetSess}%`);
-                    } catch (_) {}
+            if (sb && typeof sb.rpc === 'function' && navigator.onLine) {
+                const { data: rpcRes, error: rpcErr } = await sb.rpc('delete_user_session_data', {
+                    p_user_id: uId,
+                    p_session: targetSess
+                });
+                if (rpcErr || (rpcRes && rpcRes.ok === false)) {
+                    console.warn('[SessionDelete RPC warning]:', rpcErr || rpcRes);
                 }
-
-                try {
-                    await sb.from('app_store').delete().eq('user_id', uId).like('id', `%${targetSess}%`);
-                } catch (_) {}
-
-                await saveToAppStoreSafe(`${uId}_app_sessions_list`, sessions);
-                await saveToAppStoreSafe(`${uId}_app_active_session`, nextActive);
+                await saveToAppStoreSafe(`${uId}_app_sessions_list`, sessions, nextActive);
+                await saveToAppStoreSafe(`${uId}_app_active_session`, nextActive, nextActive);
             }
 
-            // 4. LocalStorage saaf
+            // 3. LocalStorage + Delta Sync Cursors saaf karein
             const keysToRemove = [];
+            const sessPrefix = `${uId}_${targetSess}_`;
+            const cursorSuffix = `_${uId}_${targetSess}`;
             for (let i = 0; i < localStorage.length; i++) {
                 const k = localStorage.key(i);
-                if (k && k.includes(`_${targetSess}_`)) {
+                if (!k) continue;
+                if (k.startsWith(sessPrefix) || (k.startsWith('erp_delta_sync_') && k.endsWith(cursorSuffix))) {
                     keysToRemove.push(k);
                 }
             }
-            keysToRemove.forEach(k => localStorage.removeItem(k));
+            keysToRemove.forEach((k) => localStorage.removeItem(k));
 
-            if (window.APP_MEMORY_CACHE) {
-                Object.keys(window.APP_MEMORY_CACHE).forEach(k => {
-                    if (k.includes(`${targetSess}`)) delete window.APP_MEMORY_CACHE[k];
-                });
+            // 4. IndexedDB (app_store + sync_queue) se saaf karein
+            await clearSessionFromIndexedDB(uId, targetSess);
+
+            // 5. RAM cache clear karein
+            if (typeof window.clearMemoryCache === 'function') {
+                window.clearMemoryCache();
             }
 
-            alert(`✅ Session '${targetSess}' safalata-poorvak delete ho gaya!`);
+            alert(`✅ Session '${targetSess}' Cloud aur Local dono se safalata-poorvak delete ho gaya!`);
             window.location.reload();
-
         } catch (err) {
             console.error('[SessionDelete] Error:', err);
             window.location.reload();
@@ -373,9 +466,8 @@
     window.SessionEngine = Object.assign(window.SessionEngine || {}, sessionAPI);
 
     const initRunner = () => {
-        // Blacklist ka kachra saaf karein
         const uId = getEffectiveUserId();
-        localStorage.removeItem(`${uId}_app_deleted_sessions`);
+        try { localStorage.removeItem(`${uId}_app_deleted_sessions`); } catch (_) {}
 
         populateSessionDropdown();
         initCloudSessionSync();
