@@ -1,7 +1,7 @@
 /* ============================================================================
    SIMPLICITY ERP - HIGH-SCALE FINANCIAL YEAR SESSION CONTROLLER
    File: session/session.js • Developed by Farhan Jawed
-   Architecture: Clean Direct Sessions • Atomic RPC Delete • IDB & Cursor Cleanup
+   Architecture: Clean Direct Sessions • Auto-Injected Modals • Atomic RPC Delete
 ============================================================================ */
 
 (() => {
@@ -48,6 +48,83 @@
             if (stored) return String(stored).trim();
         } catch (_) {}
         return uid;
+    };
+
+    const ensureSessionModals = () => {
+        if (!document.body) return;
+
+        if (!document.getElementById('session-closing-modal')) {
+            const closingHtml = `
+                <div id="session-closing-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:99998; align-items:center; justify-content:center; padding:14px; box-sizing:border-box;" role="dialog" aria-modal="true">
+                    <div class="modal-card" style="background:#ffffff; width:100%; max-width:500px; max-height:92vh; border-radius:14px; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 25px 50px -12px rgba(0,0,0,0.4);">
+                        <div class="modal-header" style="background:#1e3a8a; color:#ffffff; padding:14px 18px; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <h3 style="margin:0; font-size:17px; color:#ffffff;">📅 Financial Year Closing & Session</h3>
+                                <small style="color:#bfdbfe; font-size:11.5px;">Purane saal ka hisab naye saal me opening le jayein</small>
+                            </div>
+                            <button type="button" class="close-modal-btn" onclick="closeSessionClosingModal()" style="background:transparent; border:none; color:#ffffff; font-size:22px; cursor:pointer;">✕</button>
+                        </div>
+                        <div class="modal-body" style="padding:16px; overflow-y:auto;">
+                            <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:10px; padding:14px; margin-bottom:16px;">
+                                <div style="font-weight:800; color:#1e3a8a; font-size:14px; margin-bottom:10px;">🚀 Naya Financial Year Shuru Karein</div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+                                    <div>
+                                        <label style="font-size:11.5px; font-weight:700; color:#334155;">Chalu Session:</label>
+                                        <input type="text" id="session-current-display" readonly style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; background:#e2e8f0; font-weight:800; color:#0f172a; margin-top:4px; box-sizing:border-box;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:11.5px; font-weight:700; color:#1e40af;">Naya Session (Format: YYYY-YYYY):</label>
+                                        <input type="text" id="session-new-input" placeholder="2027-2028" style="width:100%; padding:8px; border:1.5px solid #2563eb; border-radius:6px; font-weight:800; color:#1e3a8a; margin-top:4px; box-sizing:border-box;">
+                                    </div>
+                                </div>
+                                <div style="font-size:11.5px; color:#475569; margin-bottom:12px; line-height:1.45;">
+                                    ✅ Karigers + Tani Opening Balance (Bana/Zari/Bani)<br>
+                                    ✅ Saree Stock (All 5 Stages) • Bana • Zari • Sancha • Job Workers<br>
+                                    🔒 Purana session 100% safe rahega — aap jab chahein wapas dekh sakte hain.
+                                </div>
+                                <button type="button" class="btn" onclick="startSequentialYearClosing()" style="width:100%; background:linear-gradient(135deg,#2563eb,#7c3aed); color:#ffffff; border:none; padding:11px; border-radius:8px; font-weight:800; font-size:14px; cursor:pointer;">
+                                    🚀 Naya Saal Shuru Karein (Year Closing)
+                                </button>
+                            </div>
+
+                            <div style="background:#fef2f2; border:1.5px solid #fecaca; border-radius:10px; padding:14px;">
+                                <div style="font-weight:800; color:#b91c1c; font-size:13.5px; margin-bottom:8px;">⚠️ Delete Zone (Purana / Test Session Hatayein)</div>
+                                <div style="margin-bottom:8px;">
+                                    <label style="font-size:11.5px; font-weight:700; color:#7f1d1d;">Delete Karne Ke Liye Session Chunein:</label>
+                                    <select id="session-delete-select" style="width:100%; padding:8px; border:1px solid #fca5a5; border-radius:6px; background:#ffffff; margin-top:4px; font-weight:700; box-sizing:border-box;"></select>
+                                </div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+                                    <div>
+                                        <label style="font-size:11px; font-weight:700; color:#7f1d1d;">User ID:</label>
+                                        <input type="text" id="session-del-user-id" placeholder="User ID" style="width:100%; padding:7px; border:1px solid #fca5a5; border-radius:6px; margin-top:3px; box-sizing:border-box;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:11px; font-weight:700; color:#7f1d1d;">Password:</label>
+                                        <input type="password" id="session-del-password" placeholder="Password" style="width:100%; padding:7px; border:1px solid #fca5a5; border-radius:6px; margin-top:3px; box-sizing:border-box;">
+                                    </div>
+                                </div>
+                                <button type="button" onclick="confirmAndDeleteSessionWithAuth()" style="width:100%; background:#dc2626; color:#ffffff; border:none; padding:9px; border-radius:7px; font-weight:800; font-size:13px; cursor:pointer;">
+                                    🗑️ Session Delete Karein
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.insertAdjacentHTML('beforeend', closingHtml);
+        }
+
+        if (!document.getElementById('session-transfer-modal')) {
+            const transferHtml = `
+                <div id="session-transfer-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.8); z-index:99999; align-items:center; justify-content:center; padding:14px; box-sizing:border-box;" role="dialog" aria-modal="true">
+                    <div class="modal-card" style="background:#ffffff; width:100%; max-width:480px; border-radius:14px; overflow:hidden; box-shadow:0 25px 50px -12px rgba(0,0,0,0.45);">
+                        <div class="modal-header" style="background:#0f172a; color:#ffffff; padding:14px 18px;">
+                            <h3 style="margin:0; font-size:16px; color:#ffffff;">⚙️ Year Closing Chal Rahi Hai...</h3>
+                        </div>
+                        <div class="modal-body" style="padding:18px;"></div>
+                    </div>
+                </div>`;
+            document.body.insertAdjacentHTML('beforeend', transferHtml);
+        }
     };
 
     /**
@@ -250,6 +327,7 @@
     };
 
     const openSessionClosingModal = () => {
+        ensureSessionModals();
         const modal = document.getElementById('session-closing-modal');
         if (!modal) return;
 
@@ -275,6 +353,11 @@
                 delSel.innerHTML += `<option value="${s}">${s}</option>`;
             });
         }
+
+        const delUid = document.getElementById('session-del-user-id');
+        const delPass = document.getElementById('session-del-password');
+        if (delUid) delUid.value = '';
+        if (delPass) delPass.value = '';
 
         modal.style.display = 'flex';
     };
@@ -391,7 +474,6 @@
                 window.detachSupabaseRealtime();
             }
 
-            // 1. Session list aur active session update karein
             sessions = sessions.filter((s) => s !== targetSess);
             if (sessions.length === 0) sessions = [DEFAULT_BOOTSTRAP_SESSION];
             localStorage.setItem(`${uId}_app_sessions_list`, JSON.stringify(sessions));
@@ -404,7 +486,6 @@
 
             localStorage.removeItem(`${uId}_app_deleted_sessions`);
 
-            // 2. Supabase Cloud se 1 Atomic RPC call me saaf karein
             const sb = window.supabaseClient || window.supabase;
             if (sb && typeof sb.rpc === 'function' && navigator.onLine) {
                 const { data: rpcRes, error: rpcErr } = await sb.rpc('delete_user_session_data', {
@@ -418,7 +499,6 @@
                 await saveToAppStoreSafe(`${uId}_app_active_session`, nextActive, nextActive);
             }
 
-            // 3. LocalStorage + Delta Sync Cursors saaf karein
             const keysToRemove = [];
             const sessPrefix = `${uId}_${targetSess}_`;
             const cursorSuffix = `_${uId}_${targetSess}`;
@@ -431,10 +511,8 @@
             }
             keysToRemove.forEach((k) => localStorage.removeItem(k));
 
-            // 4. IndexedDB (app_store + sync_queue) se saaf karein
             await clearSessionFromIndexedDB(uId, targetSess);
 
-            // 5. RAM cache clear karein
             if (typeof window.clearMemoryCache === 'function') {
                 window.clearMemoryCache();
             }
@@ -456,7 +534,8 @@
         openSessionClosingModal,
         closeSessionClosingModal,
         confirmAndDeleteSessionWithAuth,
-        initCloudSessionSync
+        initCloudSessionSync,
+        ensureSessionModals
     };
 
     Object.keys(sessionAPI).forEach((fnName) => {
@@ -469,6 +548,7 @@
         const uId = getEffectiveUserId();
         try { localStorage.removeItem(`${uId}_app_deleted_sessions`); } catch (_) {}
 
+        ensureSessionModals();
         populateSessionDropdown();
         initCloudSessionSync();
     };
