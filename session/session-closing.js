@@ -1,7 +1,7 @@
 /* ============================================================================
    SIMPLICITY ERP - 5-STAGE ENTERPRISE BULLETPROOF YEAR CLOSING ENGINE
    File: session/session-closing.js • Developed by Farhan Jawed
-   Architecture: Row-by-Row Delta Sync + IndexedDB + Zero-Freeze Batch Commit
+   Architecture: Row-by-Row Delta Sync + IndexedDB + Strict Session Isolation
 ============================================================================ */
 
 (() => {
@@ -183,6 +183,10 @@
         }
 
         const uId = getSafeUserId();
+
+        if (typeof window.ensureSessionModals === 'function') {
+            window.ensureSessionModals();
+        }
 
         if (typeof window.detachSupabaseRealtime === 'function') {
             window.detachSupabaseRealtime();
@@ -528,189 +532,170 @@
         const tid = getSafeTenantId(uId);
         const sb = window.supabaseClient || window.supabase || window.CloudEngine?.supabase || null;
 
-        // Naye session ke liye stale delta cursors aur preview data saaf karein
+        // Naye session ke stale cursors saaf karein; curSess ko abhi bilkul touch na karein
         clearSessionDeltaCursors(uId, newSess);
 
-        // Temporarily set active session ONLY for CloudEngine context during commit
-        const prevSessionLS = localStorage.getItem(`${uId}_app_active_session`);
+        const generalPayloads = [
+            { key: 'kariger_list', data: pipelineState.stage1_oldKarigers },
+            { key: 'saree_history', data: pipelineState.stage2_newSareeHistory },
+            { key: 'bana_stock', data: pipelineState.stage3_newBanaStock },
+            { key: 'bana_history', data: pipelineState.stage3_newBanaHistory },
+            { key: 'zari_stock', data: pipelineState.stage3_newZariStock },
+            { key: 'zari_history', data: pipelineState.stage3_newZariHistory },
+            { key: 'sancha_items', data: pipelineState.stage4_newSanchaItems },
+            { key: 'sancha_history', data: pipelineState.stage4_newSanchaHistory },
+            { key: 'jobwork_workers', data: pipelineState.stage4_oldJwWorkers }
+        ];
+
+        // 1. General stores: IndexedDB + RAM + Snapshot + Await Cloud Delta (with explicit newSess)
+        for (let idx = 0; idx < generalPayloads.length; idx++) {
+            const { key, data } = generalPayloads[idx];
+            const fullKey = `${uId}_${newSess}_${key}`;
+
+            if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = data;
+            if (typeof window.StorageEngine?.updateRowSnapshot === 'function') {
+                window.StorageEngine.updateRowSnapshot(fullKey, data);
+            }
+            if (typeof window.idbPut === 'function') {
+                await window.idbPut(fullKey, data);
+            }
+
+            let ok = false;
+            if (navigator.onLine && typeof window.CloudEngine?.cloudWriteDelta === 'function') {
+                ok = await window.CloudEngine.cloudWriteDelta(fullKey, data, [], newSess);
+            }
+            if (!ok && data.length > 0) {
+                await enqueueDeltaFallback(uId, fullKey, data);
+            }
+
+            const pct = 10 + Math.floor(((idx + 1) / generalPayloads.length) * 35);
+            updateProgressUI(5, `💾 Core Module ${idx + 1}/${generalPayloads.length} Saved`, pct, 82 + Math.floor(pct * 0.08));
+            await yieldThread();
+        }
+
+        // 2. Kariger Tani Sheets: Local IndexedDB in chunks + Supabase 200-row batch upsert
+        const karigerKeys = Object.keys(pipelineState.stage1_newKarigerSheetsMap);
+        const totalKarigers = karigerKeys.length;
+        const taniSchema = window.CloudEngine?.ROW_SYNC_SCHEMAS?.tani_sheets;
+        const allSqlTaniRows = [];
+
+        for (let i = 0; i < totalKarigers; i += STAGE5_IDB_CHUNK_SIZE) {
+            const end = Math.min(i + STAGE5_IDB_CHUNK_SIZE, totalKarigers);
+
+            for (let j = i; j < end; j++) {
+                const kId = karigerKeys[j];
+                const sheetData = pipelineState.stage1_newKarigerSheetsMap[kId];
+                const sourceKey = `kariger_sheets_${kId}`;
+                const fullKey = `${uId}_${newSess}_${sourceKey}`;
+
+                if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = sheetData;
+                if (typeof window.StorageEngine?.updateRowSnapshot === 'function') {
+                    window.StorageEngine.updateRowSnapshot(fullKey, sheetData);
+                }
+                if (typeof window.idbPut === 'function') {
+                    await window.idbPut(fullKey, sheetData);
+                }
+
+                if (taniSchema && typeof taniSchema.toSqlRow === 'function') {
+                    const ctx = { uid: uId, tid, sess: newSess, sourceKey, shortKey: sourceKey, fullKey };
+                    sheetData.forEach((sh) => {
+                        allSqlTaniRows.push({
+                            fullKey,
+                            sheetObj: sh,
+                            sqlRow: taniSchema.toSqlRow(sh, ctx)
+                        });
+                    });
+                }
+            }
+
+            const localPct = 45 + (totalKarigers > 0 ? Math.floor((end / totalKarigers) * 25) : 25);
+            updateProgressUI(5, `💾 Local Save: ${end} / ${totalKarigers} Karigers`, localPct, 89);
+            await yieldThread();
+        }
+
+        // Supabase 200-row batch upsert for tani_sheets
+        const totalSqlRows = allSqlTaniRows.length;
+        if (totalSqlRows > 0) {
+            for (let i = 0; i < totalSqlRows; i += STAGE5_CLOUD_ROW_CHUNK) {
+                const end = Math.min(i + STAGE5_CLOUD_ROW_CHUNK, totalSqlRows);
+                const batchItems = allSqlTaniRows.slice(i, end);
+                let chunkOk = false;
+
+                if (navigator.onLine && sb && typeof sb.from === 'function') {
+                    try {
+                        const { error } = await sb
+                            .from('tani_sheets')
+                            .upsert(batchItems.map((x) => x.sqlRow), { onConflict: 'id' });
+                        if (!error) {
+                            chunkOk = true;
+                        } else {
+                            console.error('[SessionClosing tani_sheets batch error]:', error.message);
+                        }
+                    } catch (err) {
+                        console.error('[SessionClosing tani_sheets batch exception]:', err);
+                    }
+                }
+
+                if (!chunkOk) {
+                    for (const item of batchItems) {
+                        await enqueueDeltaFallback(uId, item.fullKey, [item.sheetObj]);
+                    }
+                }
+
+                const cloudPct = 70 + Math.floor((end / totalSqlRows) * 25);
+                updateProgressUI(5, `☁️ Cloud Upload: ${end} / ${totalSqlRows} Sheets`, cloudPct, 90 + Math.floor((end / totalSqlRows) * 9));
+                await yieldThread();
+            }
+        }
+
+        // 3. Sabse Aakhri Me: Session List aur Active Session commit karein
+        const sessions = window.getAppSessions ? window.getAppSessions().slice() : [];
+        if (!sessions.includes(newSess)) sessions.push(newSess);
+        sessions.sort();
+
+        safeSetLocalStorage(`${uId}_app_sessions_list`, sessions);
         safeSetLocalStorage(`${uId}_app_active_session`, newSess);
+        localStorage.removeItem(`${uId}_app_deleted_sessions`);
+
         if (window.APP_MEMORY_CACHE) {
+            window.APP_MEMORY_CACHE[`${uId}_app_sessions_list`] = sessions;
             window.APP_MEMORY_CACHE[`${uId}_app_active_session`] = newSess;
         }
 
-        try {
-            const generalPayloads = [
-                { key: 'kariger_list', data: pipelineState.stage1_oldKarigers },
-                { key: 'saree_history', data: pipelineState.stage2_newSareeHistory },
-                { key: 'bana_stock', data: pipelineState.stage3_newBanaStock },
-                { key: 'bana_history', data: pipelineState.stage3_newBanaHistory },
-                { key: 'zari_stock', data: pipelineState.stage3_newZariStock },
-                { key: 'zari_history', data: pipelineState.stage3_newZariHistory },
-                { key: 'sancha_items', data: pipelineState.stage4_newSanchaItems },
-                { key: 'sancha_history', data: pipelineState.stage4_newSanchaHistory },
-                { key: 'jobwork_workers', data: pipelineState.stage4_oldJwWorkers }
-            ];
-
-            // 1. General stores: IndexedDB + RAM + Snapshot + Await Cloud Delta
-            for (let idx = 0; idx < generalPayloads.length; idx++) {
-                const { key, data } = generalPayloads[idx];
-                const fullKey = `${uId}_${newSess}_${key}`;
-
-                if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = data;
-                if (typeof window.StorageEngine?.updateRowSnapshot === 'function') {
-                    window.StorageEngine.updateRowSnapshot(fullKey, data);
-                }
-                if (typeof window.idbPut === 'function') {
-                    await window.idbPut(fullKey, data);
-                }
-
-                let ok = false;
-                if (navigator.onLine && typeof window.CloudEngine?.cloudWriteDelta === 'function') {
-                    ok = await window.CloudEngine.cloudWriteDelta(fullKey, data, []);
-                }
-                if (!ok && data.length > 0) {
-                    await enqueueDeltaFallback(uId, fullKey, data);
-                }
-
-                const pct = 10 + Math.floor(((idx + 1) / generalPayloads.length) * 35);
-                updateProgressUI(5, `💾 Core Module ${idx + 1}/${generalPayloads.length} Saved`, pct, 82 + Math.floor(pct * 0.08));
-                await yieldThread();
-            }
-
-            // 2. Kariger Tani Sheets: Local IndexedDB in chunks + Supabase 200-row batch upsert
-            const karigerKeys = Object.keys(pipelineState.stage1_newKarigerSheetsMap);
-            const totalKarigers = karigerKeys.length;
-            const taniSchema = window.CloudEngine?.ROW_SYNC_SCHEMAS?.tani_sheets;
-            const allSqlTaniRows = [];
-
-            for (let i = 0; i < totalKarigers; i += STAGE5_IDB_CHUNK_SIZE) {
-                const end = Math.min(i + STAGE5_IDB_CHUNK_SIZE, totalKarigers);
-
-                for (let j = i; j < end; j++) {
-                    const kId = karigerKeys[j];
-                    const sheetData = pipelineState.stage1_newKarigerSheetsMap[kId];
-                    const sourceKey = `kariger_sheets_${kId}`;
-                    const fullKey = `${uId}_${newSess}_${sourceKey}`;
-
-                    if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = sheetData;
-                    if (typeof window.StorageEngine?.updateRowSnapshot === 'function') {
-                        window.StorageEngine.updateRowSnapshot(fullKey, sheetData);
+        if (navigator.onLine && sb && typeof sb.from === 'function') {
+            const nowIso = new Date().toISOString();
+            try {
+                await sb.from('app_store').upsert([
+                    {
+                        id: `${uId}_app_sessions_list`,
+                        user_id: uId,
+                        tenant_id: tid,
+                        session: newSess,
+                        data: sessions,
+                        key: `${uId}_app_sessions_list`,
+                        value: sessions,
+                        updated_at: nowIso
+                    },
+                    {
+                        id: `${uId}_app_active_session`,
+                        user_id: uId,
+                        tenant_id: tid,
+                        session: newSess,
+                        data: newSess,
+                        key: `${uId}_app_active_session`,
+                        value: newSess,
+                        updated_at: nowIso
                     }
-                    if (typeof window.idbPut === 'function') {
-                        await window.idbPut(fullKey, sheetData);
-                    }
-
-                    if (taniSchema && typeof taniSchema.toSqlRow === 'function') {
-                        const ctx = { uid: uId, tid, sess: newSess, sourceKey, shortKey: sourceKey, fullKey };
-                        sheetData.forEach((sh) => {
-                            allSqlTaniRows.push({
-                                fullKey,
-                                sheetObj: sh,
-                                sqlRow: taniSchema.toSqlRow(sh, ctx)
-                            });
-                        });
-                    }
-                }
-
-                const localPct = 45 + (totalKarigers > 0 ? Math.floor((end / totalKarigers) * 25) : 25);
-                updateProgressUI(5, `💾 Local Save: ${end} / ${totalKarigers} Karigers`, localPct, 89);
-                await yieldThread();
+                ], { onConflict: 'id' });
+            } catch (cErr) {
+                console.warn('[SessionClosing app_store upsert]:', cErr);
             }
-
-            // Supabase 200-row batch upsert for tani_sheets
-            const totalSqlRows = allSqlTaniRows.length;
-            if (totalSqlRows > 0) {
-                for (let i = 0; i < totalSqlRows; i += STAGE5_CLOUD_ROW_CHUNK) {
-                    const end = Math.min(i + STAGE5_CLOUD_ROW_CHUNK, totalSqlRows);
-                    const batchItems = allSqlTaniRows.slice(i, end);
-                    let chunkOk = false;
-
-                    if (navigator.onLine && sb && typeof sb.from === 'function') {
-                        try {
-                            const { error } = await sb
-                                .from('tani_sheets')
-                                .upsert(batchItems.map((x) => x.sqlRow), { onConflict: 'id' });
-                            if (!error) {
-                                chunkOk = true;
-                            } else {
-                                console.error('[SessionClosing tani_sheets batch error]:', error.message);
-                            }
-                        } catch (err) {
-                            console.error('[SessionClosing tani_sheets batch exception]:', err);
-                        }
-                    }
-
-                    if (!chunkOk) {
-                        for (const item of batchItems) {
-                            await enqueueDeltaFallback(uId, item.fullKey, [item.sheetObj]);
-                        }
-                    }
-
-                    const cloudPct = 70 + Math.floor((end / totalSqlRows) * 25);
-                    updateProgressUI(5, `☁️ Cloud Upload: ${end} / ${totalSqlRows} Sheets`, cloudPct, 90 + Math.floor((end / totalSqlRows) * 9));
-                    await yieldThread();
-                }
-            }
-
-            // 3. Sabse Aakhri Me: Session List aur Active Session commit karein
-            const sessions = window.getAppSessions ? window.getAppSessions().slice() : [];
-            if (!sessions.includes(newSess)) sessions.push(newSess);
-            sessions.sort();
-
-            safeSetLocalStorage(`${uId}_app_sessions_list`, sessions);
-            safeSetLocalStorage(`${uId}_app_active_session`, newSess);
-            localStorage.removeItem(`${uId}_app_deleted_sessions`);
-
-            if (window.APP_MEMORY_CACHE) {
-                window.APP_MEMORY_CACHE[`${uId}_app_sessions_list`] = sessions;
-                window.APP_MEMORY_CACHE[`${uId}_app_active_session`] = newSess;
-            }
-
-            if (navigator.onLine && sb && typeof sb.from === 'function') {
-                const nowIso = new Date().toISOString();
-                try {
-                    await sb.from('app_store').upsert([
-                        {
-                            id: `${uId}_app_sessions_list`,
-                            user_id: uId,
-                            tenant_id: tid,
-                            session: newSess,
-                            data: sessions,
-                            key: `${uId}_app_sessions_list`,
-                            value: sessions,
-                            updated_at: nowIso
-                        },
-                        {
-                            id: `${uId}_app_active_session`,
-                            user_id: uId,
-                            tenant_id: tid,
-                            session: newSess,
-                            data: newSess,
-                            key: `${uId}_app_active_session`,
-                            value: newSess,
-                            updated_at: nowIso
-                        }
-                    ], { onConflict: 'id' });
-                } catch (cErr) {
-                    console.warn('[SessionClosing app_store upsert]:', cErr);
-                }
-            }
-
-            updateProgressUI(5, '✅ All Data Committed Successfully', 100, 100, true);
-            await yieldThread(80);
-
-            showClosingCelebrationScreen(newSess);
-        } catch (stage5Err) {
-            // Rollback active session pointer if Stage 5 aborted before completion
-            if (prevSessionLS !== null) {
-                safeSetLocalStorage(`${uId}_app_active_session`, prevSessionLS);
-                if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[`${uId}_app_active_session`] = prevSessionLS;
-            } else {
-                safeSetLocalStorage(`${uId}_app_active_session`, curSess);
-                if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[`${uId}_app_active_session`] = curSess;
-            }
-            throw stage5Err;
         }
+
+        updateProgressUI(5, '✅ All Data Committed Successfully', 100, 100, true);
+        await yieldThread(80);
+
+        showClosingCelebrationScreen(newSess);
     };
 
     const showClosingCelebrationScreen = (newSess) => {
