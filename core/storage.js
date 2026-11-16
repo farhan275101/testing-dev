@@ -13,15 +13,15 @@
     let isBackupPreviewMode = false;
     let PREVIEW_BACKUP_DATA = null;
 
+    let resolvePreloadPromise = null;
+    const preloadPromise = new Promise((resolve) => {
+        resolvePreloadPromise = resolve;
+    });
+    window.StoragePreloadPromise = preloadPromise;
+
     const SYNC_DEBOUNCE_TIMERS = new Map();
     const DEBOUNCE_DELAY_MS = 300;
     let isSyncQueueFlushing = false;
-
-    let resolvePreloadPromise = null;
-    const StoragePreloadPromise = new Promise((resolve) => {
-        resolvePreloadPromise = resolve;
-    });
-    window.StoragePreloadPromise = StoragePreloadPromise;
 
     // Generic Row-Level Diff & Delta Buffers (Permanent for all Row-by-Row modules)
     const LAST_SYNCED_SNAPSHOTS = new Map(); // fullKey -> Map<rowId, jsonString>
@@ -847,12 +847,13 @@
                         ERPLoader.setProgress(35, 'Local Data Ready • Cloud Sync Chalu Hai...', 'Supabase se taza data check ho raha hai...');
                     }
                 }
+
+                if (typeof callback === 'function') callback();
             } finally {
-                if (typeof resolvePreloadPromise === 'function') {
+                if (resolvePreloadPromise) {
                     resolvePreloadPromise(true);
                     resolvePreloadPromise = null;
                 }
-                if (typeof callback === 'function') callback();
             }
         };
 
@@ -1056,10 +1057,10 @@
         idbPut,
         idbDelete,
         initIndexedDBPreload,
+        preloadPromise,
         flushSyncQueue,
         isLightweightKey,
         GLOBAL_APP_KEYS,
-        preloadPromise: StoragePreloadPromise,
         get isRemoteUpdating() { return isRemoteUpdating; },
         set isRemoteUpdating(val) { isRemoteUpdating = Boolean(val); },
         get isBackupPreviewMode() { return isBackupPreviewMode; },
