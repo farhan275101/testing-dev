@@ -1,7 +1,7 @@
 /* ============================================================================
    SIMPLICITY ERP - LIVE ADMIN CONTROL, STORAGE MONITOR & PER-KARIGER BILLING
    File: admin/admin.js • Developed by Farhan Jawed
-   Architecture: Supabase Realtime + Accurate TOAST Storage RPC + Kariger Billing
+   Architecture: Supabase Realtime + Accurate Storage RPC + Full User Purge
 ============================================================================ */
 
 (() => {
@@ -795,24 +795,44 @@
     }
 
     async function deleteUserByAdmin(uid) {
-        if (String(uid).toLowerCase() === 'farhan') return alert('⛔ Master Admin delete nahi ho sakta!');
-        if (!confirm('Kya aap sach me is User ko delete/reject karna chahte hain?')) return;
+        const cleanUid = String(uid || '').trim();
+        const uidLower = cleanUid.toLowerCase();
+        if (!uidLower || uidLower === 'farhan' || uidLower === 'app' || uidLower === 'admin') {
+            return alert('⛔ Master Admin delete nahi ho sakta!');
+        }
+
+        const targetUser = (window.adminUsersData || []).find((x) => String(x.id || '').trim().toLowerCase() === uidLower);
+        const st = String(targetUser?.status || '').toLowerCase().trim();
+        const isPending = (st === 'pending' || st === 'pending_approval' || st === 'waiting');
+
+        if (!confirm(`⚠️ KYA AAP USER '${cleanUid}' KO PERMANENTLY ${isPending ? 'REJECT' : 'DELETE'} KARNA CHAHTE HAIN?\n\nIsse is user ka login aur Supabase par maujood SAARA data (Karigers, Sheets, Stock, Payments, Portals) hamesha ke liye delete ho jayega!`)) {
+            return;
+        }
+
+        if (!isPending) {
+            const typed = prompt(`⚠️ FINAL CONFIRMATION:\nPermanently delete karne ke liye User ID '${cleanUid}' type karein:`);
+            if (!typed || typed.trim().toLowerCase() !== uidLower) {
+                return alert('❌ User ID match nahi hua — Delete cancel kar diya gaya.');
+            }
+        }
 
         const sb = getSupabaseAdmin();
         if (!sb) return alert('Supabase connect nahi hai!');
 
         try {
-            const { error } = await sb
-                .from('karkhana_users')
-                .delete()
-                .eq('user_id', uid);
+            const { data: deletedRows, error } = await sb.rpc('delete_user_completely', {
+                p_user_id: cleanUid
+            });
 
             if (error) throw error;
 
-            alert('🗑️ User delete ho gaya!');
+            if (window.adminStorageMap) delete window.adminStorageMap[uidLower];
+            if (window.adminKarigerCountMap) delete window.adminKarigerCountMap[uidLower];
+
+            alert(`🗑️ User '${cleanUid}' aur uska poora Supabase data (${Number(deletedRows) || 0} records) permanently delete ho gaya!\n\nAb agar '${cleanUid}' naam se naya account banega toh 100% fresh khulega.`);
             refreshAdminUsersList();
         } catch (err) {
-            alert('Delete error: ' + err.message);
+            alert('Delete error: ' + (err.message || err));
         }
     }
 
