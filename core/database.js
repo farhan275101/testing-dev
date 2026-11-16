@@ -58,6 +58,44 @@
 
     const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+    const waitForStoragePreload = async () => {
+        try {
+            if (window.StoragePreloadPromise && typeof window.StoragePreloadPromise.then === 'function') {
+                await window.StoragePreloadPromise;
+            }
+        } catch (_) {}
+    };
+
+    const readIdbArraySafe = async (fullStorageKey) => {
+        try {
+            if (typeof window.idbGet === 'function') {
+                const v = await window.idbGet(fullStorageKey);
+                return Array.isArray(v) ? v : null;
+            }
+            if (!('indexedDB' in window)) return null;
+            return await new Promise((resolve) => {
+                const req = window.indexedDB.open('SimplicityERP_DB', 2);
+                req.onsuccess = (e) => {
+                    try {
+                        const dbase = e.target.result;
+                        if (!dbase.objectStoreNames.contains('app_store')) return resolve(null);
+                        const tx = dbase.transaction('app_store', 'readonly');
+                        const getReq = tx.objectStore('app_store').get(fullStorageKey);
+                        getReq.onsuccess = () => {
+                            resolve(Array.isArray(getReq.result) ? getReq.result : null);
+                        };
+                        getReq.onerror = () => resolve(null);
+                    } catch (_) {
+                        resolve(null);
+                    }
+                };
+                req.onerror = () => resolve(null);
+            });
+        } catch (_) {
+            return null;
+        }
+    };
+
     try {
         if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
             supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
@@ -1172,6 +1210,15 @@
         return '2026-2027';
     };
 
+    const extractSessionFromKey = (fullKey, fallbackSess = null) => {
+        if (fallbackSess && /^\d{4}-\d{4}$/.test(String(fallbackSess).trim())) {
+            return String(fallbackSess).trim();
+        }
+        const m = String(fullKey || '').match(/_(\d{4}-\d{4})_/);
+        if (m && m[1]) return m[1];
+        return getActiveSessionVal();
+    };
+
     /**
      * ⭐ AUTO PUSH KARKHANAS (Main Godown + Bahadurganj)
      */
@@ -1257,7 +1304,6 @@
             k.includes('payment_list') ||
             k.includes('payments')
         ) {
-            // jw_payments_list ko job_work_bills me hi rakhna hai
             if (!k.includes('jw_payment')) {
                 return 'payments';
             }
@@ -1301,7 +1347,6 @@
             return 'job_work_bills';
         }
 
-        // Fallback: Agar kisi nayi/bina-table wali key ka data aaye toh app_store me safe sync ho
         console.warn('[CloudEngine] Unmapped key synced to app_store fallback:', fullKey);
         return 'app_store';
     };
@@ -1349,7 +1394,7 @@
             case 'tani_orders': return 'Tani Orders & Rangai Chart (Delta Sync) load ho raha hai...';
             case 'tani_learned': return 'Tani Learned Colors & Rangi load ho raha hai...';
             case 'info_ledger':
-            case 'billing_config': return 'Ledger & Billing Config load rahi hai...';
+            case 'billing_config': return 'Ledger & Billing Config load ho rahi hai...';
             default: return 'Company Data load ho raha hai...';
         }
     };
@@ -1488,7 +1533,6 @@
                 window.idbPut(fullStorageKey, rowData);
             }
 
-            // Sirf chhoti keys localStorage me rakhein; 800 karigers ka heavy data sirf IndexedDB me rahega
             if (isLight && newStr !== null) {
                 try {
                     localStorage.setItem(fullStorageKey, newStr);
@@ -1503,7 +1547,7 @@
     /* ========================================================================
        GENERIC ROW-BY-ROW WRITE ENGINE (UPSERT + SOFT DELETE)
     ======================================================================== */
-    const cloudWriteDelta = async (fullKey, upserts = [], deletes = []) => {
+    const cloudWriteDelta = async (fullKey, upserts = [], deletes = [], sessionOverride = null) => {
         if (!supabaseClient) return false;
 
         const targetTable = resolveTargetTable(fullKey);
@@ -1512,10 +1556,20 @@
 
         const uid = getSafeUserId();
         const tid = getSafeTenantId();
-        const sess = getActiveSessionVal();
         if (!uid) return false;
 
-        const shortKey = String(fullKey).replace(`${uid}_${sess}_`, '').replace(`${uid}_`, '');
+        // Exact session fullKey ya sessionOverride se nikaalein (taaki naye saal ka data purane saal me kabhi leak na ho)
+        const sess = extractSessionFromKey(fullKey, sessionOverride);
+
+        let shortKey = String(fullKey || '');
+        const fullPrefix = `${uid}_${sess}_`;
+        const uidPrefix = `${uid}_`;
+        if (shortKey.startsWith(fullPrefix)) {
+            shortKey = shortKey.slice(fullPrefix.length);
+        } else if (shortKey.startsWith(uidPrefix)) {
+            shortKey = shortKey.slice(uidPrefix.length);
+        }
+
         const sourceKey = schema.resolveSourceKey
             ? schema.resolveSourceKey(shortKey)
             : (schema.defaultSourceKey || shortKey);
@@ -1578,6 +1632,29 @@
        GENERIC ROW-BY-ROW DELTA PULL ENGINE (updated_at > last_sync)
     ======================================================================== */
     const getDeltaSyncCursorKey = (tbl, uid, sess) => `erp_delta_sync_${tbl}_${uid}_${sess}`;
+
+    const fetchFullSourceRows = async (tbl, uid, sess, sKey) => {
+        const allRows = [];
+        let from = 0;
+        while (true) {
+            const { data, error } = await supabaseClient
+                .from(tbl)
+                .select('*')
+                .eq('user_id', uid)
+                .eq('session', sess)
+                .eq('source_key', sKey)
+                .eq('is_deleted', false)
+                .order('updated_at', { ascending: true })
+                .order('id', { ascending: true })
+                .range(from, from + ROW_PAGE_SIZE - 1);
+
+            if (error || !Array.isArray(data) || data.length === 0) break;
+            allRows.push(...data);
+            if (data.length < ROW_PAGE_SIZE) break;
+            from += ROW_PAGE_SIZE;
+        }
+        return allRows;
+    };
 
     const pullRowSyncTable = async (tbl, uid) => {
         const schema = ROW_SYNC_SCHEMAS[tbl];
@@ -1646,19 +1723,36 @@
 
             let hasNewData = false;
 
-            groupedBySource.forEach((rows, sKey) => {
-                // Sheet order (jaise Tani 1, Tani 2, Month 1, Month 2...) barabar rakhne ke liye sort karein
-                if (rows.length > 1 && rows[0] && rows[0].sheet_order !== undefined) {
-                    rows.sort((a, b) => (Number(a.sheet_order) || 0) - (Number(b.sheet_order) || 0));
-                }
-
+            for (const [sKey, rows] of groupedBySource.entries()) {
                 const fullStorageKey = (typeof window.getStorageKey === 'function')
                     ? window.getStorageKey(sKey)
                     : `${uid}_${sess}_${sKey}`;
 
-                const currentArr = (!isInitialPull && window.APP_MEMORY_CACHE && Array.isArray(window.APP_MEMORY_CACHE[fullStorageKey]))
-                    ? window.APP_MEMORY_CACHE[fullStorageKey]
-                    : [];
+                let effectiveRows = rows;
+                let currentArr = null;
+
+                if (!isInitialPull) {
+                    if (window.APP_MEMORY_CACHE && Array.isArray(window.APP_MEMORY_CACHE[fullStorageKey])) {
+                        currentArr = window.APP_MEMORY_CACHE[fullStorageKey];
+                    } else {
+                        currentArr = await readIdbArraySafe(fullStorageKey);
+                    }
+
+                    // Self-healing: Agar cursor tha par RAM/IndexedDB khali mila, toh full non-deleted rows pull karein
+                    if (currentArr === null) {
+                        const fullRows = await fetchFullSourceRows(tbl, uid, sess, sKey);
+                        if (fullRows.length > 0) {
+                            effectiveRows = fullRows;
+                        }
+                        currentArr = [];
+                    }
+                } else {
+                    currentArr = [];
+                }
+
+                if (effectiveRows.length > 1 && effectiveRows[0] && effectiveRows[0].sheet_order !== undefined) {
+                    effectiveRows.sort((a, b) => (Number(a.sheet_order) || 0) - (Number(b.sheet_order) || 0));
+                }
 
                 const mergedMap = new Map();
                 for (let i = 0; i < currentArr.length; i++) {
@@ -1668,8 +1762,8 @@
                     }
                 }
 
-                for (let i = 0; i < rows.length; i++) {
-                    const row = rows[i];
+                for (let i = 0; i < effectiveRows.length; i++) {
+                    const row = effectiveRows[i];
                     const rid = String(row.record_id || row.id || '').trim();
                     if (!rid) continue;
 
@@ -1688,7 +1782,7 @@
                 if (smartApplyRemoteData(sKey, mergedArr)) {
                     hasNewData = true;
                 }
-            });
+            }
 
             if (maxUpdatedAt) {
                 try { localStorage.setItem(cursorKey, maxUpdatedAt); } catch (_) {}
@@ -1709,14 +1803,13 @@
         const targetTable = resolveTargetTable(fullKey);
         if (!targetTable) return false;
 
-        // Agar kisi caller ne direct cloudWrite call kiya ho Row-Sync table ke liye, toh delta engine me route karein
         if (Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, targetTable) && Array.isArray(data)) {
             return await cloudWriteDelta(fullKey, data, []);
         }
 
         const uid = getSafeUserId();
         const tid = getSafeTenantId();
-        const sess = getActiveSessionVal();
+        const sess = extractSessionFromKey(fullKey);
 
         if (!uid) return false;
 
@@ -1728,7 +1821,13 @@
         showSyncStatus('syncing');
 
         try {
-            const cleanKey = String(fullKey).replace(`${uid}_${sess}_`, '').replace(`${uid}_`, '');
+            let cleanKey = String(fullKey);
+            if (cleanKey.startsWith(`${uid}_${sess}_`)) {
+                cleanKey = cleanKey.slice(`${uid}_${sess}_`.length);
+            } else if (cleanKey.startsWith(`${uid}_`)) {
+                cleanKey = cleanKey.slice(`${uid}_`.length);
+            }
+
             const isGlobal = Array.isArray(window.GLOBAL_APP_KEYS) && window.GLOBAL_APP_KEYS.includes(cleanKey);
             const recordId = isGlobal ? `${uid}_${cleanKey}` : `${uid}_${sess}_${cleanKey}`;
             recentSelfWrites[targetTable] = Date.now();
@@ -1795,12 +1894,10 @@
             const rawId = String(row.id || row.key || '');
             if (!rawId) return;
 
-            // Global billing config ko skip karein (wo admin.js handle karta hai)
             if (rawId.toLowerCase().includes('global_billing_config')) return;
 
             const isGlobalSessionKey = (rawId === `${uid}_app_active_session` || rawId === `${uid}_app_sessions_list`);
 
-            // Purane/doosre session ki rows ko active session me mix hone se strictly rokein
             if (!isGlobalSessionKey) {
                 if (row.session && String(row.session).trim() !== '' && String(row.session).trim() !== sess) {
                     return;
@@ -1810,7 +1907,6 @@
                     return;
                 }
                 if (rawId.includes('app_active_session') || rawId.includes('app_sessions_list')) {
-                    // Stale session-prefixed duplicates ignore karein
                     return;
                 }
             }
@@ -1822,7 +1918,6 @@
                 localKey = localKey.slice(globalPrefix.length);
             }
 
-            // Purane JSONB tables (jaise app_store / material_transfers) ke stale records ko ignore karein jo ab Row-by-Row tables me hain
             if (localKey && !Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, tbl)) {
                 const resolved = resolveTargetTable(localKey);
                 if (resolved !== tbl && Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, resolved)) {
@@ -1844,6 +1939,8 @@
         if (!supabaseClient || !navigator.onLine || !tbl) return;
         const uid = getSafeUserId();
         if (!uid) return;
+
+        await waitForStoragePreload();
 
         try {
             if (Object.prototype.hasOwnProperty.call(ROW_SYNC_SCHEMAS, tbl)) {
@@ -1914,6 +2011,9 @@
                 window.ERPLoader.show('Cloud Data Sync Ho Raha Hai...', 'Fast Parallel Sync chal raha hai...', 40);
             }
         }
+
+        // IndexedDB preload poora hone ka wait karein taaki delta sync purane data ko overwrite na kare
+        await waitForStoragePreload();
 
         let hasNewData = false;
 
@@ -2005,14 +2105,12 @@
         } finally {
             isSyncingInProgress = false;
 
-            // Pehle poore Dashboard / Desktop ko 100% data ke saath paint karein
             if (hasNewData || !silent) {
                 triggerSmartUIRepaint(!silent);
             }
 
             showSyncStatus('online');
 
-            // Phir 100% dikha kar loader ko smoothly hata dein
             if (!silent && window.ERPLoader) {
                 window.ERPLoader.setProgress(100, 'Saara Data 100% Load Ho Gaya! ✅', 'Simplicity ERP Taiyar Hai');
                 window.ERPLoader.hide(120);
@@ -2041,12 +2139,10 @@
             }
         }
 
-        // Apne khud ke abhi-abhi kiye gaye write ka echo skip karein
         if (tbl && recentSelfWrites[tbl] && (Date.now() - recentSelfWrites[tbl]) < 3000) {
             return;
         }
 
-        // Sirf wahi 1 table refresh karein jisme badlav aaya
         if (tbl && !isSyncingInProgress) {
             if (tablePullTimers[tbl]) clearTimeout(tablePullTimers[tbl]);
             tablePullTimers[tbl] = setTimeout(() => {
@@ -2058,7 +2154,7 @@
     const initSupabaseRealtime = () => {
         if (!supabaseClient) return;
         const uid = getSafeUserId();
-        if (!uid) return; // Login se pehle sync mat chalao
+        if (!uid) return;
 
         detachSupabaseRealtime();
 
