@@ -1,10 +1,10 @@
 /* ============================================================================
    SIMPLICITY ERP - HIGH-PERFORMANCE OFFLINE-FIRST PWA SERVICE WORKER
    File: sw.js • Developed by Farhan Jawed
-   Architecture: Network-First for Fresh Updates | Offline Cache Fallback (v6)
+   Architecture: Network-First for Fresh Updates | Safe Offline Fallback (v7)
 ============================================================================ */
 
-const CACHE_NAME = 'simplicity-cache-v6';
+const CACHE_NAME = 'simplicity-cache-v7';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -50,6 +50,7 @@ const ASSETS_TO_CACHE = [
   './dukan/dukan.js',
   './payment/payment.js',
   './jobwork.js',
+  './jobwork-express/jobwork-express.js',
   './daybook/daybook.js',
   './tani/tani-order.js',
   './tani/tani-express.js',
@@ -104,7 +105,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-First with Offline Cache Fallback
+  // Network-First with Safe Offline Cache Fallback
   event.respondWith(
     fetch(request, { cache: 'no-cache' })
       .then((networkResponse) => {
@@ -116,13 +117,26 @@ self.addEventListener('fetch', (event) => {
         }
         return networkResponse;
       })
-      .catch(() => {
-        return caches.match(request).then((cachedResponse) => {
-          if (cachedResponse) return cachedResponse;
-          if (request.mode === 'navigate') {
-            return caches.match('./index.html');
+      .catch(async () => {
+        const cachedResponse = await caches.match(request, { ignoreSearch: true });
+        if (cachedResponse) return cachedResponse;
+
+        if (request.mode === 'navigate') {
+          const isSubPortal =
+            url.pathname.includes('/kariger-portal/') ||
+            url.pathname.includes('/sancha-portal/') ||
+            url.pathname.includes('/rangai-portal/');
+
+          if (!isSubPortal) {
+            const indexFallback = await caches.match('./index.html');
+            if (indexFallback) return indexFallback;
           }
-          return null;
+        }
+
+        return new Response('Offline - Internet connection check karein.', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
         });
       })
   );
