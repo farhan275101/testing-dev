@@ -1,7 +1,7 @@
 /* ============================================================================
    SIMPLICITY ERP - LIVE ADMIN CONTROL, STORAGE MONITOR & PER-KARIGER BILLING
    File: admin/admin.js • Developed by Farhan Jawed
-   Architecture: Supabase Realtime + Storage RPC + Kariger-Based Billing (x ₹15)
+   Architecture: Supabase Realtime + Accurate TOAST Storage RPC + Kariger Billing
 ============================================================================ */
 
 (() => {
@@ -35,6 +35,18 @@
 
     const getSupabaseAdmin = () => {
         return window.supabaseClient || (window.CloudEngine && window.CloudEngine.supabase) || null;
+    };
+
+    const getLocalTodayIso = () => {
+        if (typeof window.getTodayDate === 'function') {
+            const d = window.getTodayDate();
+            if (d && /^\d{4}-\d{2}-\d{2}$/.test(String(d))) return String(d);
+        }
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
     };
 
     const esc = (s) => {
@@ -238,17 +250,24 @@
         if (!sb) return {};
         try {
             const { data, error } = await sb.rpc('get_all_users_storage_usage');
-            if (!error && Array.isArray(data)) {
+            if (error) {
+                console.warn('[Admin] Storage usage RPC error:', error.message);
+            } else if (Array.isArray(data)) {
                 const map = {};
                 data.forEach((r) => {
                     if (r && r.uid) {
-                        map[String(r.uid).trim().toLowerCase()] = Number(r.total_bytes) || 0;
+                        const key = String(r.uid).trim().toLowerCase();
+                        if (key) {
+                            map[key] = (map[key] || 0) + (Number(r.total_bytes) || 0);
+                        }
                     }
                 });
                 window.adminStorageMap = map;
                 return map;
             }
-        } catch (_) {}
+        } catch (err) {
+            console.warn('[Admin] Storage usage exception:', err);
+        }
         return window.adminStorageMap || {};
     };
 
@@ -256,17 +275,24 @@
         if (!sb) return {};
         try {
             const { data, error } = await sb.rpc('get_all_users_kariger_counts');
-            if (!error && Array.isArray(data)) {
+            if (error) {
+                console.warn('[Admin] Kariger counts RPC error:', error.message);
+            } else if (Array.isArray(data)) {
                 const map = {};
                 data.forEach((r) => {
                     if (r && r.uid) {
-                        map[String(r.uid).trim().toLowerCase()] = Number(r.kariger_count) || 0;
+                        const key = String(r.uid).trim().toLowerCase();
+                        if (key) {
+                            map[key] = (map[key] || 0) + (Number(r.kariger_count) || 0);
+                        }
                     }
                 });
                 window.adminKarigerCountMap = map;
                 return map;
             }
-        } catch (_) {}
+        } catch (err) {
+            console.warn('[Admin] Kariger counts exception:', err);
+        }
         return window.adminKarigerCountMap || {};
     };
 
@@ -399,7 +425,7 @@
         let totalServerBytes = 0;
         let totalKarigers = 0;
         const pendingUsersList = [];
-        const todayIso = new Date().toISOString().split('T')[0];
+        const todayIso = getLocalTodayIso();
 
         Object.keys(storageMap).forEach((k) => {
             totalServerBytes += Number(storageMap[k]) || 0;
@@ -636,7 +662,7 @@
     async function approveUserByAdmin(uid) {
         const exp = new Date();
         exp.setDate(exp.getDate() + 30);
-        const formattedExp = exp.toISOString().split('T')[0];
+        const formattedExp = `${exp.getFullYear()}-${String(exp.getMonth() + 1).padStart(2, '0')}-${String(exp.getDate()).padStart(2, '0')}`;
 
         const sb = getSupabaseAdmin();
         if (!sb) return alert('Supabase connect nahi hai!');
@@ -686,8 +712,14 @@
                 .update({ validity_date: dateVal })
                 .eq('user_id', uid);
             if (error) throw error;
+
+            const target = (window.adminUsersData || []).find((x) => String(x.id) === String(uid));
+            if (target) target.expiryDate = dateVal || '';
+            renderAdminUsersTable();
         } catch (err) {
             console.error('Expiry update error:', err);
+            alert('Expiry update error: ' + (err.message || err));
+            renderAdminUsersTable();
         }
     }
 
@@ -695,7 +727,7 @@
         const u = (window.adminUsersData || []).find((x) => String(x.id) === String(uid));
         const base = (u && u.expiryDate && new Date(u.expiryDate) > new Date()) ? new Date(u.expiryDate) : new Date();
         base.setDate(base.getDate() + days);
-        const formatted = base.toISOString().split('T')[0];
+        const formatted = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`;
 
         const sb = getSupabaseAdmin();
         if (!sb) return alert('Supabase connect nahi hai!');
@@ -786,7 +818,6 @@
 
     /* ========================================================================
        6. ADMIN PAYMENT / QR SETTINGS MODAL (PER KARIGER RATE x ₹15)
-       ------------------------------------------------------------------------
     ======================================================================== */
     const renderAdminQrPreview = (base64Img, upiId, holderName) => {
         const box = document.getElementById('adm-bill-qr-preview');
