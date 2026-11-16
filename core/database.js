@@ -1,7 +1,7 @@
 /* ============================================================================
    SIMPLICITY ERP - ENTERPRISE AUTO-POLLING, DELTA SYNC & LIVE REALTIME ENGINE
    File: core/database.js • Developed by Farhan Jawed
-   Modules: Multi-Godam + Jobwork + Tani Orders & Rangai + Row-by-Row Delta Sync
+   Modules: Multi-Godam + Jobwork + Tani Orders & Rangai + 19 Row-by-Row Tables
 ============================================================================ */
 
 (() => {
@@ -39,9 +39,9 @@
         'calender_history',
         'job_work_bills',
         'material_transfers',
+        'info_ledger',
         'tani_learned',
         'saree_stock',
-        'info_ledger',
         'billing_config'
     ];
 
@@ -170,8 +170,7 @@
     });
 
     /* ========================================================================
-       GENERIC ROW-BY-ROW & DELTA SYNC SCHEMA REGISTRY
-       (Naya module convert karte waqt bas yahin 1 block add karna hoga)
+       GENERIC ROW-BY-ROW & DELTA SYNC SCHEMA REGISTRY (19 TABLES)
     ======================================================================== */
     const ROW_SYNC_SCHEMAS = {
         payments: {
@@ -1142,6 +1141,88 @@
                     timestamp: row.client_ts ? Number(row.client_ts) : Date.now()
                 };
             }
+        },
+
+        // 19. INFO LEDGER (Global across sessions, Row-by-Row per Kariger + __columns__ meta)
+        info_ledger: {
+            isGlobal: true,
+            defaultSourceKey: 'info_ledger',
+            resolveSourceKey: () => 'info_ledger',
+            toSqlRow: (item, ctx) => {
+                const known = new Set([
+                    'id', 'rowType', 'karigerId', 'name', 'saree', 'mobile', 'address',
+                    'bana', 'zari', 'chukka', 'tani', 'bani', 'kadi', 'baithka',
+                    'custom', 'customCols'
+                ]);
+                const extra = {};
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach((k) => {
+                        if (!known.has(k) && item[k] !== undefined) {
+                            extra[k] = item[k];
+                        }
+                    });
+                }
+                const rid = String(item.id).trim();
+                const isMeta = (rid === '__columns__' || item.rowType === 'columns_meta');
+                return {
+                    id: `${ctx.uid}_global_${ctx.sourceKey}_${rid}`,
+                    record_id: rid,
+                    user_id: ctx.uid,
+                    tenant_id: ctx.tid,
+                    session: 'global',
+                    source_key: ctx.sourceKey,
+                    kariger_id: isMeta ? null : String(item.karigerId || rid),
+                    row_type: isMeta ? 'columns_meta' : 'kariger_info',
+                    name: item.name || '',
+                    saree: item.saree || '',
+                    mobile: item.mobile || '',
+                    address: item.address || '',
+                    bana: item.bana || '',
+                    zari: item.zari || '',
+                    chukka: item.chukka || '',
+                    tani: item.tani || '',
+                    bani: item.bani || '',
+                    kadi: item.kadi || '',
+                    baithka: item.baithka || '',
+                    custom: (item.custom && typeof item.custom === 'object' && !Array.isArray(item.custom)) ? item.custom : {},
+                    custom_cols: Array.isArray(item.customCols) ? item.customCols : [],
+                    extra,
+                    is_deleted: false
+                };
+            },
+            fromSqlRow: (row) => {
+                const extraObj = (row.extra && typeof row.extra === 'object' && !Array.isArray(row.extra))
+                    ? row.extra
+                    : {};
+                const rid = String(row.record_id || row.id || '').trim();
+                const isMeta = (rid === '__columns__' || row.row_type === 'columns_meta');
+                if (isMeta) {
+                    return {
+                        ...extraObj,
+                        id: '__columns__',
+                        rowType: 'columns_meta',
+                        customCols: Array.isArray(row.custom_cols) ? row.custom_cols : []
+                    };
+                }
+                return {
+                    ...extraObj,
+                    id: rid,
+                    rowType: 'kariger_info',
+                    karigerId: row.kariger_id || rid,
+                    name: row.name || '',
+                    saree: row.saree || '',
+                    mobile: row.mobile || '',
+                    address: row.address || '',
+                    bana: row.bana || '',
+                    zari: row.zari || '',
+                    chukka: row.chukka || '',
+                    tani: row.tani || '',
+                    bani: row.bani || '',
+                    kadi: row.kadi || '',
+                    baithka: row.baithka || '',
+                    custom: (row.custom && typeof row.custom === 'object' && !Array.isArray(row.custom)) ? row.custom : {}
+                };
+            }
         }
         // === ADD NEW ROW-BY-ROW MODULES HERE IN FUTURE ===
     };
@@ -1366,6 +1447,7 @@
         if (tableName === 'tani_orders' || k.includes('tani_orders')) return 'tani_orders_list';
         if (tableName === 'dukan_challans' || k.includes('dukan_transfer')) return 'dukan_transfer_history';
         if (tableName === 'material_transfers' || k.includes('material_transfer')) return 'material_transfers';
+        if (tableName === 'info_ledger' || k.includes('info_ledger')) return 'info_ledger';
         return cloudKey;
     };
 
@@ -1393,8 +1475,8 @@
             case 'jobwork_workers': return 'Jobwork Workers, Sheets & Bills (Delta Sync) load ho rahe hain...';
             case 'tani_orders': return 'Tani Orders & Rangai Chart (Delta Sync) load ho raha hai...';
             case 'tani_learned': return 'Tani Learned Colors & Rangi load ho raha hai...';
-            case 'info_ledger':
-            case 'billing_config': return 'Ledger & Billing Config load ho rahi hai...';
+            case 'info_ledger': return 'Info Ledger (Kariger Directory • Delta Sync) load ho raha hai...';
+            case 'billing_config': return 'Billing Config load ho rahi hai...';
             default: return 'Company Data load ho raha hai...';
         }
     };
@@ -1444,6 +1526,8 @@
         if (typeof window.populateNavbarKarkhanaDropdown === 'function') window.populateNavbarKarkhanaDropdown();
         if (typeof window.renderSheetTabs === 'function') window.renderSheetTabs();
         if (typeof window.renderKarigerTable === 'function') window.renderKarigerTable();
+        if (typeof window.renderInfoLedgerTable === 'function') window.renderInfoLedgerTable();
+        if (typeof window.updateInfoLedgerBadge === 'function') window.updateInfoLedgerBadge();
         if (typeof window.renderBanaTable === 'function') window.renderBanaTable();
         if (typeof window.renderZariTable === 'function') window.renderZariTable();
         if (typeof window.renderSareeTable === 'function') window.renderSareeTable();
@@ -1558,8 +1642,7 @@
         const tid = getSafeTenantId();
         if (!uid) return false;
 
-        // Exact session fullKey ya sessionOverride se nikaalein (taaki naye saal ka data purane saal me kabhi leak na ho)
-        const sess = extractSessionFromKey(fullKey, sessionOverride);
+        const sess = schema.isGlobal ? 'global' : extractSessionFromKey(fullKey, sessionOverride);
 
         let shortKey = String(fullKey || '');
         const fullPrefix = `${uid}_${sess}_`;
@@ -1664,7 +1747,7 @@
         tablePullInFlight[tbl] = true;
 
         try {
-            const sess = getActiveSessionVal();
+            const sess = schema.isGlobal ? 'global' : getActiveSessionVal();
             const cursorKey = getDeltaSyncCursorKey(tbl, uid, sess);
             let lastSyncIso = null;
             try { lastSyncIso = localStorage.getItem(cursorKey); } catch (_) {}
@@ -1726,7 +1809,7 @@
             for (const [sKey, rows] of groupedBySource.entries()) {
                 const fullStorageKey = (typeof window.getStorageKey === 'function')
                     ? window.getStorageKey(sKey)
-                    : `${uid}_${sess}_${sKey}`;
+                    : (schema.isGlobal ? `${uid}_${sKey}` : `${uid}_${sess}_${sKey}`);
 
                 let effectiveRows = rows;
                 let currentArr = null;
