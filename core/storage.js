@@ -13,11 +13,10 @@
     let isBackupPreviewMode = false;
     let PREVIEW_BACKUP_DATA = null;
 
-    let resolvePreloadPromise = null;
-    const preloadPromise = new Promise((resolve) => {
-        resolvePreloadPromise = resolve;
+    let resolveStoragePreload = null;
+    const StoragePreloadPromise = new Promise((resolve) => {
+        resolveStoragePreload = resolve;
     });
-    window.StoragePreloadPromise = preloadPromise;
 
     const SYNC_DEBOUNCE_TIMERS = new Map();
     const DEBOUNCE_DELAY_MS = 300;
@@ -475,19 +474,19 @@
     const idbGet = async (key) => {
         try {
             const dbase = await getIndexedDBPromise();
-            if (!dbase) return undefined;
+            if (!dbase) return null;
             return await new Promise((resolve) => {
                 try {
                     const tx = dbase.transaction(DB_CONFIG.STORE_APP, 'readonly');
                     const req = tx.objectStore(DB_CONFIG.STORE_APP).get(key);
-                    req.onsuccess = () => resolve(req.result);
-                    req.onerror = () => resolve(undefined);
+                    req.onsuccess = () => resolve(req.result !== undefined ? req.result : null);
+                    req.onerror = () => resolve(null);
                 } catch (_) {
-                    resolve(undefined);
+                    resolve(null);
                 }
             });
         } catch (_) {
-            return undefined;
+            return null;
         }
     };
 
@@ -831,30 +830,31 @@
         const finishPreload = async () => {
             try {
                 await migrateLocalStorageToCache();
-                flushSyncQueue();
-
-                if (typeof window.triggerActiveSectionRefresh === 'function') {
-                    window.triggerActiveSectionRefresh();
-                } else if (typeof window.renderDashboardDayBook === 'function') {
-                    window.renderDashboardDayBook();
-                }
-
-                if (showLoader) {
-                    if (!navigator.onLine) {
-                        ERPLoader.setProgress(100, 'Offline Mode Taiyar Hai ✅', 'Local IndexedDB se data load ho gaya');
-                        ERPLoader.hide(400);
-                    } else {
-                        ERPLoader.setProgress(35, 'Local Data Ready • Cloud Sync Chalu Hai...', 'Supabase se taza data check ho raha hai...');
-                    }
-                }
-
-                if (typeof callback === 'function') callback();
             } finally {
-                if (resolvePreloadPromise) {
-                    resolvePreloadPromise(true);
-                    resolvePreloadPromise = null;
+                if (typeof resolveStoragePreload === 'function') {
+                    resolveStoragePreload(true);
+                    resolveStoragePreload = null;
                 }
             }
+
+            flushSyncQueue();
+
+            if (typeof window.triggerActiveSectionRefresh === 'function') {
+                window.triggerActiveSectionRefresh();
+            } else if (typeof window.renderDashboardDayBook === 'function') {
+                window.renderDashboardDayBook();
+            }
+
+            if (showLoader) {
+                if (!navigator.onLine) {
+                    ERPLoader.setProgress(100, 'Offline Mode Taiyar Hai ✅', 'Local IndexedDB se data load ho gaya');
+                    ERPLoader.hide(400);
+                } else {
+                    ERPLoader.setProgress(35, 'Local Data Ready • Cloud Sync Chalu Hai...', 'Supabase se taza data check ho raha hai...');
+                }
+            }
+
+            if (typeof callback === 'function') callback();
         };
 
         if (showLoader) {
@@ -928,7 +928,6 @@
                     return cachedVal;
                 }
                 const arrVal = safeArr(cachedVal);
-                // Ensure immutable snapshot exists before caller mutates array via .push() etc.
                 if (isRowSyncKey(fullKey) && !LAST_SYNCED_SNAPSHOTS.has(fullKey)) {
                     updateRowSnapshot(fullKey, arrVal);
                 }
@@ -975,7 +974,6 @@
             window.APP_MEMORY_CACHE[fullKey] = toSave;
             idbPut(fullKey, toSave);
 
-            // Sirf chhoti keys localStorage me rakhein; heavy data sirf IndexedDB me jaayega
             if (isLightweightKey(fullKey)) {
                 try {
                     localStorage.setItem(fullKey, JSON.stringify(toSave));
@@ -1057,10 +1055,10 @@
         idbPut,
         idbDelete,
         initIndexedDBPreload,
-        preloadPromise,
         flushSyncQueue,
         isLightweightKey,
         GLOBAL_APP_KEYS,
+        StoragePreloadPromise,
         get isRemoteUpdating() { return isRemoteUpdating; },
         set isRemoteUpdating(val) { isRemoteUpdating = Boolean(val); },
         get isBackupPreviewMode() { return isBackupPreviewMode; },
@@ -1072,6 +1070,7 @@
 
     window.APP_MEMORY_CACHE = APP_MEMORY_CACHE;
     window.GLOBAL_APP_KEYS = GLOBAL_APP_KEYS;
+    window.StoragePreloadPromise = StoragePreloadPromise;
     window.clearMemoryCache = clearMemoryCache;
     window.openEnterpriseIndexedDB = openEnterpriseIndexedDB;
     window.idbGet = idbGet;
