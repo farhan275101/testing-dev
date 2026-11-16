@@ -1,14 +1,15 @@
 /* ============================================================================
    SIMPLICITY ERP - 5-STAGE ENTERPRISE BULLETPROOF YEAR CLOSING ENGINE
    File: session/session-closing.js • Developed by Farhan Jawed
-   Architecture: Instant Transfer & Guaranteed Session Advancement
+   Architecture: Row-by-Row Delta Sync + IndexedDB + Zero-Freeze Batch Commit
 ============================================================================ */
 
 (() => {
     'use strict';
 
     const STAGE1_KARIGER_CHUNK_SIZE = 25;
-    const STAGE5_KARIGER_COMMIT_BATCH = 15;
+    const STAGE5_IDB_CHUNK_SIZE = 40;
+    const STAGE5_CLOUD_ROW_CHUNK = 200;
     const UI_THREAD_YIELD_MS = 16;
 
     let pendingTransferNewSession = null;
@@ -29,32 +30,46 @@
 
     const getSafeUserId = () => {
         try {
+            if (window.StorageEngine && typeof window.StorageEngine.getEffectiveUserId === 'function') {
+                const sid = window.StorageEngine.getEffectiveUserId();
+                if (sid && sid !== 'app') return String(sid).trim();
+            }
+            if (window.currentUserId && String(window.currentUserId).trim() && window.currentUserId !== 'app') {
+                return String(window.currentUserId).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+            }
             if (window.currentUserProfile && window.currentUserProfile.id) {
-                return String(window.currentUserProfile.id).trim();
+                return String(window.currentUserProfile.id).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
             }
             const authData = localStorage.getItem('app_active_session_auth');
             if (authData) {
                 const parsed = JSON.parse(authData);
-                if (parsed.id) return String(parsed.id).trim();
+                if (parsed && parsed.id) {
+                    return String(parsed.id).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                }
             }
-            if (typeof window.getEffectiveUserId === 'function') {
-                const id = window.getEffectiveUserId();
-                if (id && id !== 'app') return id;
-            }
-            const stored = localStorage.getItem('app_current_user_id') || 
-                           localStorage.getItem('currentUserId') || 
+            const stored = localStorage.getItem('app_current_user_id') ||
+                           localStorage.getItem('currentUserId') ||
                            sessionStorage.getItem('currentUserId');
             if (stored) {
                 const clean = String(stored).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
                 if (clean && clean !== 'app') return clean;
             }
         } catch (_) {}
-        return '10001';
+        return 'farhan';
+    };
+
+    const getSafeTenantId = (uid) => {
+        try {
+            if (window.currentTenantId) return String(window.currentTenantId).trim();
+            const stored = localStorage.getItem('app_current_tenant_id') || localStorage.getItem('tenantId');
+            if (stored) return String(stored).trim();
+        } catch (_) {}
+        return uid;
     };
 
     const getUniqueItemNamesCaseInsensitive = (list) => {
         const map = new Map();
-        list.forEach((it) => {
+        (list || []).forEach((it) => {
             const n = (it?.name || '').trim();
             if (n && !map.has(n.toLowerCase())) {
                 map.set(n.toLowerCase(), n);
@@ -66,6 +81,49 @@
     const safeSetLocalStorage = (key, val) => {
         try {
             localStorage.setItem(key, typeof val === 'string' ? val : JSON.stringify(val));
+        } catch (_) {}
+    };
+
+    const clearSessionDeltaCursors = (uId, sess) => {
+        try {
+            const suffix = `_${uId}_${sess}`;
+            const toDel = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('erp_delta_sync_') && k.endsWith(suffix)) {
+                    toDel.push(k);
+                }
+            }
+            toDel.forEach((k) => localStorage.removeItem(k));
+        } catch (_) {}
+    };
+
+    const enqueueDeltaFallback = async (uId, fullKey, rows) => {
+        if (!Array.isArray(rows) || rows.length === 0) return;
+        try {
+            const req = window.indexedDB.open('SimplicityERP_DB', 2);
+            await new Promise((resolve) => {
+                req.onsuccess = (e) => {
+                    try {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains('sync_queue')) return resolve(false);
+                        const tx = db.transaction('sync_queue', 'readwrite');
+                        tx.objectStore('sync_queue').put({
+                            id: `delta_${uId}_${fullKey}`,
+                            mode: 'ROW_DELTA',
+                            targetKey: fullKey,
+                            upserts: rows,
+                            deletes: [],
+                            timestamp: Date.now()
+                        });
+                        tx.oncomplete = () => resolve(true);
+                        tx.onerror = () => resolve(false);
+                    } catch (_) {
+                        resolve(false);
+                    }
+                };
+                req.onerror = () => resolve(false);
+            });
         } catch (_) {}
     };
 
@@ -95,7 +153,6 @@
     const initPipelineState = () => ({
         stage1_oldKarigers: [],
         stage1_newKarigerSheetsMap: {},
-        stage2_newSareeStock: [],
         stage2_newSareeHistory: [],
         stage2_totFreshPcs: 0,
         stage2_totFinPcs: 0,
@@ -106,8 +163,7 @@
         stage3_newZariHistory: [],
         stage4_newSanchaItems: [],
         stage4_newSanchaHistory: [],
-        stage4_oldJwWorkers: [],
-        stage4_newJwSheetsMap: {}
+        stage4_oldJwWorkers: []
     });
 
     const startSequentialYearClosing = async () => {
@@ -118,6 +174,7 @@
         const newSess = String(newSessEl?.value || '').trim();
 
         if (!newSess) return alert('Naye Saal ka naam daalein! (Jaise: 2027-2028)');
+        if (!/^\d{4}-\d{4}$/.test(newSess)) return alert('Sahi format daalein! (Jaise: 2027-2028)');
         if (newSess === curSess) return alert('Naya session purane se alag hona chahiye!');
 
         const sessions = window.getAppSessions ? window.getAppSessions() : [];
@@ -140,7 +197,10 @@
         pipelineState = initPipelineState();
 
         const modal = document.getElementById('session-transfer-modal');
-        if (!modal) return;
+        if (!modal) {
+            isClosingInProgress = false;
+            return;
+        }
 
         const modalBody = modal.querySelector('.modal-body');
         if (modalBody) {
@@ -149,16 +209,16 @@
                     <div id="transfer-main-bar" style="background:#2563eb; width:0%; height:100%; transition:width 0.2s;"></div>
                 </div>
                 <div><span id="stage-badge-1" class="badge-blue">Waiting</span> <small id="stage-status-1">1. Kariger Opening</small><div style="background:#e2e8f0; height:4px; margin-top:4px;"><div id="stage-bar-1" style="background:#2563eb; width:0%; height:100%;"></div></div></div>
-                <div style="margin-top:10px;"><span id="stage-badge-2" class="badge-blue">Waiting</span> <small id="stage-status-2">2. Saree Opening Stock</small><div style="background:#e2e8f0; height:4px; margin-top:4px;"><div id="stage-bar-2" style="background:#2563eb; width:0%; height:100%;"></div></div></div>
+                <div style="margin-top:10px;"><span id="stage-badge-2" class="badge-blue">Waiting</span> <small id="stage-status-2">2. Saree Opening Stock (All 5 Stages)</small><div style="background:#e2e8f0; height:4px; margin-top:4px;"><div id="stage-bar-2" style="background:#2563eb; width:0%; height:100%;"></div></div></div>
                 <div style="margin-top:10px;"><span id="stage-badge-3" class="badge-blue">Waiting</span> <small id="stage-status-3">3. Bana & Zari Exact Match</small><div style="background:#e2e8f0; height:4px; margin-top:4px;"><div id="stage-bar-3" style="background:#2563eb; width:0%; height:100%;"></div></div></div>
-                <div style="margin-top:10px;"><span id="stage-badge-4" class="badge-blue">Waiting</span> <small id="stage-status-4">4. Sancha (Tani/Chukka) Exact Match</small><div style="background:#e2e8f0; height:4px; margin-top:4px;"><div id="stage-bar-4" style="background:#2563eb; width:0%; height:100%;"></div></div></div>
-                <div style="margin-top:10px;"><span id="stage-badge-5" class="badge-blue">Waiting</span> <small id="stage-status-5">5. Safe Cloud Commit</small><div style="background:#e2e8f0; height:4px; margin-top:4px;"><div id="stage-bar-5" style="background:#2563eb; width:0%; height:100%;"></div></div></div>`;
+                <div style="margin-top:10px;"><span id="stage-badge-4" class="badge-blue">Waiting</span> <small id="stage-status-4">4. Sancha & Jobwork Workers</small><div style="background:#e2e8f0; height:4px; margin-top:4px;"><div id="stage-bar-4" style="background:#2563eb; width:0%; height:100%;"></div></div></div>
+                <div style="margin-top:10px;"><span id="stage-badge-5" class="badge-blue">Waiting</span> <small id="stage-status-5">5. Safe IndexedDB & Cloud Commit</small><div style="background:#e2e8f0; height:4px; margin-top:4px;"><div id="stage-bar-5" style="background:#2563eb; width:0%; height:100%;"></div></div></div>`;
         }
 
         modal.style.display = 'flex';
 
         try {
-            await yieldThread(100);
+            await yieldThread(80);
             await runStage1_KarigersAsync(curSess, newSess);
             await runStage2_SareeStockAsync(curSess, newSess);
             await runStage3_BanaZariStockAsync(curSess, newSess);
@@ -167,14 +227,19 @@
         } catch (pipelineErr) {
             console.error('[SessionClosing] Pipeline error:', pipelineErr);
             alert(`Year closing me dikkat: ${pipelineErr.message || pipelineErr}`);
+            if (modal) modal.style.display = 'none';
+            if (typeof window.initSupabaseRealtime === 'function') {
+                window.initSupabaseRealtime();
+            }
         } finally {
             isClosingInProgress = false;
         }
     };
 
     const runStage1_KarigersAsync = async (curSess, newSess) => {
-        const rawKarigers = window.safeArray ? window.safeArray(window.getStore('kariger_list')) : [];
-        pipelineState.stage1_oldKarigers = rawKarigers;
+        const rawList = window.safeArray ? window.safeArray(window.getStore('kariger_list')) : [];
+        const rawKarigers = rawList.filter((k) => k && k.id && k.name && String(k.name).trim() !== '');
+        pipelineState.stage1_oldKarigers = rawKarigers.map((k) => ({ ...k }));
         const total = rawKarigers.length;
 
         for (let i = 0; i < total; i += STAGE1_KARIGER_CHUNK_SIZE) {
@@ -182,8 +247,6 @@
 
             for (let j = i; j < end; j++) {
                 const k = rawKarigers[j];
-                if (!k || !k.id) continue;
-
                 const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(k.id) : [];
                 const lastSheet = sheets.length ? sheets[sheets.length - 1] : null;
 
@@ -194,23 +257,25 @@
                 pipelineState.stage1_newKarigerSheetsMap[k.id] = [{
                     id: 'tani_1',
                     title: `Tani 1 (Opening ${newSess})`,
-                    pichlaBana: safeNum(calc.remainingBana),
-                    pichlaZari: safeNum(calc.remainingZari),
-                    pichlaBani: safeNum(calc.remainingAmt),
+                    pichlaBana: safeNum(calc.remainingBana, 0, 3),
+                    pichlaZari: safeNum(calc.remainingZari, 0, 3),
+                    pichlaBani: safeNum(calc.remainingAmt, 0, 2),
                     banaWaste: 0,
                     zariWaste: 0,
-                    rateBana: lastSheet ? (parseFloat(lastSheet.rateBana) || 0.311) : 0.311,
-                    rateZari: lastSheet ? (parseFloat(lastSheet.rateZari) || 0.110) : 0.110,
-                    rateBani: lastSheet ? (parseFloat(lastSheet.rateBani) || 240) : 240,
-                    taniPcs: lastSheet ? safeNum(lastSheet.taniPcs, 72) : 72,
-                    chukkaPcs: lastSheet ? safeNum(lastSheet.chukkaPcs, 72) : 72,
+                    rateBana: (lastSheet && lastSheet.rateBana !== undefined && lastSheet.rateBana !== null) ? safeNum(lastSheet.rateBana, 0.311, 3) : 0.311,
+                    rateZari: (lastSheet && lastSheet.rateZari !== undefined && lastSheet.rateZari !== null) ? safeNum(lastSheet.rateZari, 0.110, 3) : 0.110,
+                    rateBani: (lastSheet && lastSheet.rateBani !== undefined && lastSheet.rateBani !== null) ? safeNum(lastSheet.rateBani, 240, 2) : 240,
+                    taniPcs: lastSheet ? safeInt(lastSheet.taniPcs, 72) : 72,
+                    chukkaPcs: lastSheet ? safeInt(lastSheet.chukkaPcs, 72) : 72,
                     colors: (lastSheet && Array.isArray(lastSheet.colors)) ? [...lastSheet.colors] : [],
                     banaItem: lastSheet ? (lastSheet.banaItem || '') : '',
                     zariItem: lastSheet ? (lastSheet.zariItem || '') : '',
                     taniItem: lastSheet ? (lastSheet.taniItem || '') : '',
                     taniSancha: lastSheet ? (lastSheet.taniSancha || '') : '',
+                    taniWazan: 0,
                     chukkaItem: lastSheet ? (lastSheet.chukkaItem || '') : '',
                     chukkaSancha: lastSheet ? (lastSheet.chukkaSancha || '') : '',
+                    chukkaWazan: 0,
                     note: `📦 31st March (${curSess}) Closing se Aaya Opening Balance`,
                     rows: []
                 }];
@@ -222,18 +287,22 @@
         }
 
         updateProgressUI(1, `✅ Done (${total} Karigers)`, 100, 20, true);
-        await yieldThread(50);
+        await yieldThread(30);
     };
 
     const runStage2_SareeStockAsync = async (curSess, newSess) => {
+        if (typeof window.invalidateSareeCalcCache === 'function') {
+            window.invalidateSareeCalcCache();
+        }
         const rawHistory = window.safeArray ? window.safeArray(window.getStore('saree_history')) : [];
-        let karkhanas = (typeof window.getKarkhanasSafe === 'function') 
-            ? window.getKarkhanasSafe() 
+        let karkhanas = (typeof window.getKarkhanasSafe === 'function')
+            ? window.getKarkhanasSafe()
             : (window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : []);
         if (!karkhanas.length) karkhanas = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
 
         const todayStr = (typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0];
-        const tabs = ['fresh', 'cutting', 'finished', 'lott'];
+        const tabs = ['fresh', 'cutting', 'embroidery', 'finished', 'lott'];
+        const baseTs = Date.now();
         let seq = 0;
 
         for (const k of karkhanas) {
@@ -244,59 +313,50 @@
 
                 for (const r of rows) {
                     const bachiQty = safeInt(r.bachi !== undefined ? r.bachi : (r.aai - r.gai));
+                    if (bachiQty <= 0) continue;
 
-                    if (bachiQty > 0) {
-                        if (tb === 'fresh') pipelineState.stage2_totFreshPcs += bachiQty;
-                        else if (tb === 'finished') pipelineState.stage2_totFinPcs += bachiQty;
-                        else if (tb === 'lott') pipelineState.stage2_totLottPcs += bachiQty;
+                    if (tb === 'fresh') pipelineState.stage2_totFreshPcs += bachiQty;
+                    else if (tb === 'finished') pipelineState.stage2_totFinPcs += bachiQty;
+                    else if (tb === 'lott') pipelineState.stage2_totLottPcs += bachiQty;
 
-                        const sUniqueId = `saree_open_${tb}_${Date.now()}_${++seq}`;
+                    seq++;
+                    const sUniqueId = `saree_open_${tb}_${baseTs}_${seq}`;
+                    const maker = r.karigerName || '📦 Pichla Bacha Stock';
 
-                        pipelineState.stage2_newSareeHistory.push({
-                            id: sUniqueId,
-                            date: todayStr,
-                            sareeName: r.sareeName || 'Standard Saree',
-                            karigerName: r.karigerName || '📦 Pichla Bacha Stock',
-                            kariger: r.karigerName || '📦 Pichla Bacha Stock',
-                            partyName: '📦 Pichla Bacha Stock',
-                            karkhanaId: k.id,
-                            type: tb,
-                            typeLabel: `📦 Opening Stock (${curSess} Se Aaya)`,
-                            aai: bachiQty,
-                            gai: 0,
-                            isOut: false,
-                            isOpening: true,
-                            note: 'Opening Stock',
-                            timestamp: Date.now()
-                        });
-
-                        pipelineState.stage2_newSareeStock.push({
-                            id: sUniqueId,
-                            sareeName: r.sareeName || 'Standard Saree',
-                            karigerName: r.karigerName || '📦 Pichla Bacha Stock',
-                            karkhanaId: k.id,
-                            stage: tb,
-                            qty: bachiQty,
-                            date: todayStr,
-                            isOpening: true
-                        });
-                    }
+                    pipelineState.stage2_newSareeHistory.push({
+                        id: sUniqueId,
+                        date: todayStr,
+                        sareeName: r.sareeName || 'GENERAL SAREE',
+                        karigerName: maker,
+                        kariger: maker,
+                        partyName: '📦 Pichla Bacha Stock',
+                        karkhanaId: k.id,
+                        type: tb,
+                        typeLabel: `📦 Opening Stock (${curSess} Se Aaya)`,
+                        aai: bachiQty,
+                        gai: 0,
+                        isOut: false,
+                        isOpening: true,
+                        note: 'Opening Stock',
+                        timestamp: baseTs + seq
+                    });
                 }
                 await yieldThread();
             }
         }
 
-        updateProgressUI(2, `✅ Saree Stock Ready (${pipelineState.stage2_totFreshPcs} Pcs)`, 100, 40, true);
-        await yieldThread(50);
+        updateProgressUI(2, `✅ Saree Ready (Fresh: ${pipelineState.stage2_totFreshPcs}, Fin: ${pipelineState.stage2_totFinPcs})`, 100, 40, true);
+        await yieldThread(30);
     };
 
     const runStage3_BanaZariStockAsync = async (curSess, newSess) => {
-        let karkhanas = (typeof window.getKarkhanasSafe === 'function') 
-            ? window.getKarkhanasSafe() 
+        let karkhanas = (typeof window.getKarkhanasSafe === 'function')
+            ? window.getKarkhanasSafe()
             : (window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : []);
         if (!karkhanas.length) karkhanas = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
 
         const todayStr = (typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0];
+        const baseTs = Date.now();
         let bSeq = 0, zSeq = 0;
 
         const rawBana = window.safeArray ? window.safeArray(window.getStore('bana_stock')) : [];
@@ -304,41 +364,38 @@
         const uniqueBanaNames = getUniqueItemNamesCaseInsensitive([...rawBana, ...rawBHist]);
 
         for (const bName of uniqueBanaNames) {
-            const statsAll = (typeof window.getBanaItemStats === 'function') ? window.getBanaItemStats(bName, 'all') : { bacha: 0 };
-            const totalTargetBacha = Math.max(0, safeNum(statsAll.bacha));
-            if (totalTargetBacha <= 0) continue;
-
             for (const k of karkhanas) {
                 const statsK = (typeof window.getBanaItemStats === 'function') ? window.getBanaItemStats(bName, k.id) : { bacha: 0 };
                 const bachaVal = Math.max(0, safeNum(statsK.bacha));
+                if (bachaVal <= 0) continue;
 
-                if (bachaVal > 0) {
-                    const uniqueId = `bana_open_${Date.now()}_${++bSeq}`;
-                    pipelineState.stage3_newBanaStock.push({
-                        id: uniqueId,
-                        name: bName,
-                        date: todayStr,
-                        aaya: bachaVal,
-                        openingAaya: bachaVal,
-                        gaya: 0,
-                        bacha: bachaVal,
-                        karkhanaId: k.id,
-                        isOpening: true,
-                        note: `📦 Opening Stock (${curSess} Se Aaya)`
-                    });
+                bSeq++;
+                pipelineState.stage3_newBanaStock.push({
+                    id: `bana_open_${baseTs}_${bSeq}`,
+                    name: bName,
+                    date: todayStr,
+                    aaya: bachaVal,
+                    openingAaya: bachaVal,
+                    gaya: 0,
+                    bacha: bachaVal,
+                    karkhanaId: k.id,
+                    isOpening: true,
+                    note: `📦 Opening Stock (${curSess} Se Aaya)`,
+                    timestamp: baseTs + bSeq
+                });
 
-                    pipelineState.stage3_newBanaHistory.push({
-                        id: `bhist_open_${Date.now()}_${bSeq}`,
-                        date: todayStr,
-                        name: bName,
-                        kariger: '📦 Pichla Bacha Stock',
-                        type: `📦 Opening Stock (${curSess} Se Aaya)`,
-                        aaya: bachaVal,
-                        gaya: 0,
-                        karkhanaId: k.id,
-                        isOpening: true
-                    });
-                }
+                pipelineState.stage3_newBanaHistory.push({
+                    id: `bhist_open_${baseTs}_${bSeq}`,
+                    date: todayStr,
+                    name: bName,
+                    kariger: '📦 Pichla Bacha Stock',
+                    type: `📦 Opening Stock (${curSess} Se Aaya)`,
+                    aaya: bachaVal,
+                    gaya: 0,
+                    karkhanaId: k.id,
+                    isOpening: true,
+                    timestamp: baseTs + bSeq
+                });
             }
             await yieldThread();
         }
@@ -348,185 +405,312 @@
         const uniqueZariNames = getUniqueItemNamesCaseInsensitive([...rawZari, ...rawZHist]);
 
         for (const zName of uniqueZariNames) {
-            const statsZAll = (typeof window.getZariItemStats === 'function') ? window.getZariItemStats(zName, 'all') : { bacha: 0 };
-            const totalZTarget = Math.max(0, safeNum(statsZAll.bacha));
-            if (totalZTarget <= 0) continue;
-
             for (const k of karkhanas) {
                 const statsZK = (typeof window.getZariItemStats === 'function') ? window.getZariItemStats(zName, k.id) : { bacha: 0 };
                 const bachaValZ = Math.max(0, safeNum(statsZK.bacha));
+                if (bachaValZ <= 0) continue;
 
-                if (bachaValZ > 0) {
-                    pipelineState.stage3_newZariStock.push({
-                        id: `zari_open_${Date.now()}_${++zSeq}`,
-                        name: zName,
-                        date: todayStr,
-                        aaya: bachaValZ,
-                        openingAaya: bachaValZ,
-                        gaya: 0,
-                        bacha: bachaValZ,
-                        karkhanaId: k.id,
-                        isOpening: true,
-                        note: `📦 Opening Stock (${curSess} Se Aaya)`
-                    });
+                zSeq++;
+                pipelineState.stage3_newZariStock.push({
+                    id: `zari_open_${baseTs}_${zSeq}`,
+                    name: zName,
+                    date: todayStr,
+                    aaya: bachaValZ,
+                    openingAaya: bachaValZ,
+                    gaya: 0,
+                    bacha: bachaValZ,
+                    karkhanaId: k.id,
+                    isOpening: true,
+                    note: `📦 Opening Stock (${curSess} Se Aaya)`,
+                    timestamp: baseTs + zSeq
+                });
 
-                    pipelineState.stage3_newZariHistory.push({
-                        id: `zhist_open_${Date.now()}_${zSeq}`,
-                        date: todayStr,
-                        name: zName,
-                        kariger: '📦 Pichla Bacha Stock',
-                        type: `📦 Opening Stock (${curSess} Se Aaya)`,
-                        aaya: bachaValZ,
-                        gaya: 0,
-                        karkhanaId: k.id,
-                        isOpening: true
-                    });
-                }
+                pipelineState.stage3_newZariHistory.push({
+                    id: `zhist_open_${baseTs}_${zSeq}`,
+                    date: todayStr,
+                    name: zName,
+                    kariger: '📦 Pichla Bacha Stock',
+                    type: `📦 Opening Stock (${curSess} Se Aaya)`,
+                    aaya: bachaValZ,
+                    gaya: 0,
+                    karkhanaId: k.id,
+                    isOpening: true,
+                    timestamp: baseTs + zSeq
+                });
             }
             await yieldThread();
         }
 
         updateProgressUI(3, `✅ Bana & Zari Reconciled`, 100, 60, true);
-        await yieldThread(50);
+        await yieldThread(30);
     };
 
     const runStage4_SanchaAndJobworkAsync = async (curSess, newSess) => {
+        let karkhanas = (typeof window.getKarkhanasSafe === 'function')
+            ? window.getKarkhanasSafe()
+            : (window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : []);
+        if (!karkhanas.length) karkhanas = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
+
         const todayStr = (typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0];
         const rawSancha = window.safeArray ? window.safeArray(window.getStore('sancha_items')) : [];
+        const rawSHist = window.safeArray ? window.safeArray(window.getStore('sancha_history')) : [];
+        const baseTs = Date.now();
         let sSeq = 0;
 
-        rawSancha.forEach((s) => {
-            if (!s || !s.name) return;
-            const bacha = safeNum(s.bacha !== undefined ? s.bacha : s.aaya);
-            if (bacha <= 0) return;
+        for (const cat of ['tani', 'chukka']) {
+            const catCombined = [...rawSancha, ...rawSHist].filter(
+                (s) => s && s.name && String(s.category || 'tani').toLowerCase() === cat
+            );
+            const uniqueCatNames = getUniqueItemNamesCaseInsensitive(catCombined);
 
-            const cat = String(s.category || 'tani').toLowerCase();
-            const sId = `sancha_open_${cat}_${Date.now()}_${++sSeq}`;
-            const kId = s.karkhanaId || 'k_main';
+            for (const itemName of uniqueCatNames) {
+                const origItem = rawSancha.find(
+                    (x) => x && x.name && x.name.trim().toLowerCase() === itemName.toLowerCase() &&
+                           String(x.category || 'tani').toLowerCase() === cat
+                );
+                const personLabel = (origItem && origItem.person) ? origItem.person : '-';
 
-            pipelineState.stage4_newSanchaItems.push({
-                id: sId,
-                name: s.name,
-                category: cat,
-                aaya: bacha,
-                openingAaya: bacha,
-                gaya: 0,
-                bacha: bacha,
-                person: s.person || '-',
-                date: todayStr,
-                karkhanaId: kId,
-                isOpening: true,
-                note: `📦 Opening Stock (${curSess} Se Aaya)`
-            });
+                for (const k of karkhanas) {
+                    const stats = (typeof window.getSanchaItemStats === 'function')
+                        ? window.getSanchaItemStats(null, itemName, cat, k.id)
+                        : { bacha: 0 };
+                    const bacha = Math.max(0, safeNum(stats.bacha));
+                    if (bacha <= 0) continue;
 
-            pipelineState.stage4_newSanchaHistory.push({
-                id: `shist_open_${cat}_${Date.now()}_${sSeq}`,
-                date: todayStr,
-                name: s.name,
-                category: cat,
-                kariger: s.person || '📦 Pichla Bacha Stock',
-                type: `📦 Opening Stock (${curSess} Se Aaya)`,
-                aaya: bacha,
-                gaya: 0,
-                karkhanaId: kId,
-                isOpening: true
-            });
-        });
+                    sSeq++;
+                    pipelineState.stage4_newSanchaItems.push({
+                        id: `sancha_open_${cat}_${baseTs}_${sSeq}`,
+                        name: itemName,
+                        category: cat,
+                        aaya: bacha,
+                        openingAaya: bacha,
+                        gaya: 0,
+                        bacha: bacha,
+                        person: personLabel,
+                        date: todayStr,
+                        karkhanaId: k.id,
+                        isOpening: true,
+                        note: `📦 Opening Stock (${curSess} Se Aaya)`,
+                        timestamp: baseTs + sSeq
+                    });
 
-        const rawWorkers = window.safeArray ? window.safeArray(window.getStore('jobwork_workers')) : [];
-        pipelineState.stage4_oldJwWorkers = rawWorkers;
-
-        for (const w of rawWorkers) {
-            if (!w || !w.id) continue;
-            const sheets = window.safeArray ? window.safeArray(window.getStore(`jobwork_sheets_${w.id}`)) : [];
-            const lastSh = sheets.length ? sheets[sheets.length - 1] : null;
-
-            let pSaree = 0;
-            if (lastSh && typeof window.calculateJobWorkSheetTotals === 'function') {
-                pSaree = safeNum(window.calculateJobWorkSheetTotals(lastSh).pendingSaree);
+                    pipelineState.stage4_newSanchaHistory.push({
+                        id: `shist_open_${cat}_${baseTs}_${sSeq}`,
+                        date: todayStr,
+                        name: itemName,
+                        category: cat,
+                        kariger: personLabel !== '-' ? personLabel : '📦 Pichla Bacha Stock',
+                        type: `📦 Opening Stock (${curSess} Se Aaya)`,
+                        aaya: bacha,
+                        gaya: 0,
+                        karkhanaId: k.id,
+                        isOpening: true,
+                        timestamp: baseTs + sSeq
+                    });
+                }
+                await yieldThread();
             }
-
-            pipelineState.stage4_newJwSheetsMap[w.id] = [{
-                id: 'jws_open_1',
-                title: `Khata 1 (Opening ${newSess})`,
-                closingPendingSaree: pSaree,
-                closingBakiAmt: 0,
-                rows: []
-            }];
-            await yieldThread();
         }
 
-        updateProgressUI(4, '✅ Sancha & Job Work Ready', 100, 80, true);
-        await yieldThread(50);
+        // Jobwork: Sirf Workers Master List (bina purane hisab/sheets/bills ke)
+        const rawWorkers = window.safeArray ? window.safeArray(window.getStore('jobwork_workers')) : [];
+        pipelineState.stage4_oldJwWorkers = rawWorkers
+            .filter((w) => w && w.id && w.name)
+            .map((w) => ({ ...w }));
+
+        updateProgressUI(4, '✅ Sancha & Job Work Workers Ready', 100, 80, true);
+        await yieldThread(30);
     };
 
     const runStage5_FinalizeCommitAsync = async (curSess, newSess, uId) => {
-        updateProgressUI(5, '⏳ Storing Core Data...', 10, 82);
+        updateProgressUI(5, '⏳ Local IndexedDB me Save ho raha hai...', 10, 82);
 
-        const sessions = window.getAppSessions ? window.getAppSessions() : [];
-        if (!sessions.includes(newSess)) sessions.push(newSess);
+        const tid = getSafeTenantId(uId);
+        const sb = window.supabaseClient || window.supabase || window.CloudEngine?.supabase || null;
 
-        safeSetLocalStorage(`${uId}_app_sessions_list`, sessions);
+        // Naye session ke liye stale delta cursors aur preview data saaf karein
+        clearSessionDeltaCursors(uId, newSess);
+
+        // Temporarily set active session ONLY for CloudEngine context during commit
+        const prevSessionLS = localStorage.getItem(`${uId}_app_active_session`);
         safeSetLocalStorage(`${uId}_app_active_session`, newSess);
-
         if (window.APP_MEMORY_CACHE) {
-            window.APP_MEMORY_CACHE[`${uId}_app_sessions_list`] = sessions;
             window.APP_MEMORY_CACHE[`${uId}_app_active_session`] = newSess;
         }
 
-        const persistGeneralStore = (key, data) => {
-            const fullKey = `${uId}_${newSess}_${key}`;
-            if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = data;
-            safeSetLocalStorage(fullKey, data);
+        try {
+            const generalPayloads = [
+                { key: 'kariger_list', data: pipelineState.stage1_oldKarigers },
+                { key: 'saree_history', data: pipelineState.stage2_newSareeHistory },
+                { key: 'bana_stock', data: pipelineState.stage3_newBanaStock },
+                { key: 'bana_history', data: pipelineState.stage3_newBanaHistory },
+                { key: 'zari_stock', data: pipelineState.stage3_newZariStock },
+                { key: 'zari_history', data: pipelineState.stage3_newZariHistory },
+                { key: 'sancha_items', data: pipelineState.stage4_newSanchaItems },
+                { key: 'sancha_history', data: pipelineState.stage4_newSanchaHistory },
+                { key: 'jobwork_workers', data: pipelineState.stage4_oldJwWorkers }
+            ];
 
-            if (typeof window.CloudEngine?.cloudWrite === 'function') {
-                window.CloudEngine.cloudWrite(fullKey, data);
+            // 1. General stores: IndexedDB + RAM + Snapshot + Await Cloud Delta
+            for (let idx = 0; idx < generalPayloads.length; idx++) {
+                const { key, data } = generalPayloads[idx];
+                const fullKey = `${uId}_${newSess}_${key}`;
+
+                if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = data;
+                if (typeof window.StorageEngine?.updateRowSnapshot === 'function') {
+                    window.StorageEngine.updateRowSnapshot(fullKey, data);
+                }
+                if (typeof window.idbPut === 'function') {
+                    await window.idbPut(fullKey, data);
+                }
+
+                let ok = false;
+                if (navigator.onLine && typeof window.CloudEngine?.cloudWriteDelta === 'function') {
+                    ok = await window.CloudEngine.cloudWriteDelta(fullKey, data, []);
+                }
+                if (!ok && data.length > 0) {
+                    await enqueueDeltaFallback(uId, fullKey, data);
+                }
+
+                const pct = 10 + Math.floor(((idx + 1) / generalPayloads.length) * 35);
+                updateProgressUI(5, `💾 Core Module ${idx + 1}/${generalPayloads.length} Saved`, pct, 82 + Math.floor(pct * 0.08));
+                await yieldThread();
             }
-        };
 
-        persistGeneralStore('kariger_list', pipelineState.stage1_oldKarigers);
-        persistGeneralStore('saree_stock', pipelineState.stage2_newSareeStock);
-        persistGeneralStore('saree_history', pipelineState.stage2_newSareeHistory);
-        persistGeneralStore('bana_stock', pipelineState.stage3_newBanaStock);
-        persistGeneralStore('bana_history', pipelineState.stage3_newBanaHistory);
-        persistGeneralStore('zari_stock', pipelineState.stage3_newZariStock);
-        persistGeneralStore('zari_history', pipelineState.stage3_newZariHistory);
-        persistGeneralStore('sancha_items', pipelineState.stage4_newSanchaItems);
-        persistGeneralStore('sancha_history', pipelineState.stage4_newSanchaHistory);
-        persistGeneralStore('jobwork_workers', pipelineState.stage4_oldJwWorkers);
+            // 2. Kariger Tani Sheets: Local IndexedDB in chunks + Supabase 200-row batch upsert
+            const karigerKeys = Object.keys(pipelineState.stage1_newKarigerSheetsMap);
+            const totalKarigers = karigerKeys.length;
+            const taniSchema = window.CloudEngine?.ROW_SYNC_SCHEMAS?.tani_sheets;
+            const allSqlTaniRows = [];
 
-        for (const wId in pipelineState.stage4_newJwSheetsMap) {
-            persistGeneralStore(`jobwork_sheets_${wId}`, pipelineState.stage4_newJwSheetsMap[wId]);
-        }
+            for (let i = 0; i < totalKarigers; i += STAGE5_IDB_CHUNK_SIZE) {
+                const end = Math.min(i + STAGE5_IDB_CHUNK_SIZE, totalKarigers);
 
-        const karigerKeys = Object.keys(pipelineState.stage1_newKarigerSheetsMap);
-        const totalKarigers = karigerKeys.length;
+                for (let j = i; j < end; j++) {
+                    const kId = karigerKeys[j];
+                    const sheetData = pipelineState.stage1_newKarigerSheetsMap[kId];
+                    const sourceKey = `kariger_sheets_${kId}`;
+                    const fullKey = `${uId}_${newSess}_${sourceKey}`;
 
-        for (let i = 0; i < totalKarigers; i += STAGE5_KARIGER_COMMIT_BATCH) {
-            const end = Math.min(i + STAGE5_KARIGER_COMMIT_BATCH, totalKarigers);
+                    if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = sheetData;
+                    if (typeof window.StorageEngine?.updateRowSnapshot === 'function') {
+                        window.StorageEngine.updateRowSnapshot(fullKey, sheetData);
+                    }
+                    if (typeof window.idbPut === 'function') {
+                        await window.idbPut(fullKey, sheetData);
+                    }
 
-            for (let j = i; j < end; j++) {
-                const kId = karigerKeys[j];
-                const sheetData = pipelineState.stage1_newKarigerSheetsMap[kId];
-                const fullKey = `${uId}_${newSess}_kariger_sheets_${kId}`;
+                    if (taniSchema && typeof taniSchema.toSqlRow === 'function') {
+                        const ctx = { uid: uId, tid, sess: newSess, sourceKey, shortKey: sourceKey, fullKey };
+                        sheetData.forEach((sh) => {
+                            allSqlTaniRows.push({
+                                fullKey,
+                                sheetObj: sh,
+                                sqlRow: taniSchema.toSqlRow(sh, ctx)
+                            });
+                        });
+                    }
+                }
 
-                if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[fullKey] = sheetData;
-                safeSetLocalStorage(fullKey, sheetData);
+                const localPct = 45 + (totalKarigers > 0 ? Math.floor((end / totalKarigers) * 25) : 25);
+                updateProgressUI(5, `💾 Local Save: ${end} / ${totalKarigers} Karigers`, localPct, 89);
+                await yieldThread();
+            }
 
-                if (typeof window.CloudEngine?.cloudWrite === 'function') {
-                    window.CloudEngine.cloudWrite(fullKey, sheetData);
+            // Supabase 200-row batch upsert for tani_sheets
+            const totalSqlRows = allSqlTaniRows.length;
+            if (totalSqlRows > 0) {
+                for (let i = 0; i < totalSqlRows; i += STAGE5_CLOUD_ROW_CHUNK) {
+                    const end = Math.min(i + STAGE5_CLOUD_ROW_CHUNK, totalSqlRows);
+                    const batchItems = allSqlTaniRows.slice(i, end);
+                    let chunkOk = false;
+
+                    if (navigator.onLine && sb && typeof sb.from === 'function') {
+                        try {
+                            const { error } = await sb
+                                .from('tani_sheets')
+                                .upsert(batchItems.map((x) => x.sqlRow), { onConflict: 'id' });
+                            if (!error) {
+                                chunkOk = true;
+                            } else {
+                                console.error('[SessionClosing tani_sheets batch error]:', error.message);
+                            }
+                        } catch (err) {
+                            console.error('[SessionClosing tani_sheets batch exception]:', err);
+                        }
+                    }
+
+                    if (!chunkOk) {
+                        for (const item of batchItems) {
+                            await enqueueDeltaFallback(uId, item.fullKey, [item.sheetObj]);
+                        }
+                    }
+
+                    const cloudPct = 70 + Math.floor((end / totalSqlRows) * 25);
+                    updateProgressUI(5, `☁️ Cloud Upload: ${end} / ${totalSqlRows} Sheets`, cloudPct, 90 + Math.floor((end / totalSqlRows) * 9));
+                    await yieldThread();
                 }
             }
 
-            const pct = totalKarigers > 0 ? Math.floor((end / totalKarigers) * 100) : 100;
-            updateProgressUI(5, `💾 Saving: ${end} / ${totalKarigers} Karigers (${pct}%)`, pct, 80 + Math.floor(pct * 0.20));
-            await yieldThread(20);
+            // 3. Sabse Aakhri Me: Session List aur Active Session commit karein
+            const sessions = window.getAppSessions ? window.getAppSessions().slice() : [];
+            if (!sessions.includes(newSess)) sessions.push(newSess);
+            sessions.sort();
+
+            safeSetLocalStorage(`${uId}_app_sessions_list`, sessions);
+            safeSetLocalStorage(`${uId}_app_active_session`, newSess);
+            localStorage.removeItem(`${uId}_app_deleted_sessions`);
+
+            if (window.APP_MEMORY_CACHE) {
+                window.APP_MEMORY_CACHE[`${uId}_app_sessions_list`] = sessions;
+                window.APP_MEMORY_CACHE[`${uId}_app_active_session`] = newSess;
+            }
+
+            if (navigator.onLine && sb && typeof sb.from === 'function') {
+                const nowIso = new Date().toISOString();
+                try {
+                    await sb.from('app_store').upsert([
+                        {
+                            id: `${uId}_app_sessions_list`,
+                            user_id: uId,
+                            tenant_id: tid,
+                            session: newSess,
+                            data: sessions,
+                            key: `${uId}_app_sessions_list`,
+                            value: sessions,
+                            updated_at: nowIso
+                        },
+                        {
+                            id: `${uId}_app_active_session`,
+                            user_id: uId,
+                            tenant_id: tid,
+                            session: newSess,
+                            data: newSess,
+                            key: `${uId}_app_active_session`,
+                            value: newSess,
+                            updated_at: nowIso
+                        }
+                    ], { onConflict: 'id' });
+                } catch (cErr) {
+                    console.warn('[SessionClosing app_store upsert]:', cErr);
+                }
+            }
+
+            updateProgressUI(5, '✅ All Data Committed Successfully', 100, 100, true);
+            await yieldThread(80);
+
+            showClosingCelebrationScreen(newSess);
+        } catch (stage5Err) {
+            // Rollback active session pointer if Stage 5 aborted before completion
+            if (prevSessionLS !== null) {
+                safeSetLocalStorage(`${uId}_app_active_session`, prevSessionLS);
+                if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[`${uId}_app_active_session`] = prevSessionLS;
+            } else {
+                safeSetLocalStorage(`${uId}_app_active_session`, curSess);
+                if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[`${uId}_app_active_session`] = curSess;
+            }
+            throw stage5Err;
         }
-
-        updateProgressUI(5, '✅ All Data Committed Successfully', 100, 100, true);
-        await yieldThread(100);
-
-        showClosingCelebrationScreen(newSess);
     };
 
     const showClosingCelebrationScreen = (newSess) => {
@@ -537,6 +721,7 @@
 
         const kCount = pipelineState.stage1_oldKarigers.length;
         const freshPcs = pipelineState.stage2_totFreshPcs;
+        const finPcs = pipelineState.stage2_totFinPcs;
 
         modalBody.innerHTML = `
             <div style="text-align:center; padding:15px;">
@@ -544,8 +729,10 @@
                 <h2 style="color:#1e3a8a; font-size:22px; font-weight:800; margin-bottom:6px;">NAYA SAAL MUBARAK HO!</h2>
                 <p style="color:#059669; font-size:14px; font-weight:700;">Session '${newSess}' 100% Shuru Ho Gaya!</p>
                 <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:14px; margin:16px 0; text-align:left; font-size:13px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                    <div>🧵 <strong>Kariger:</strong> ${kCount} Karigers Safe</div>
-                    <div>🥻 <strong>Saree:</strong> ${freshPcs} Fresh Pcs</div>
+                    <div>🧵 <strong>Kariger:</strong> ${kCount} Safe</div>
+                    <div>🥻 <strong>Fresh Saree:</strong> ${freshPcs} Pcs</div>
+                    <div>✨ <strong>Finished Saree:</strong> ${finPcs} Pcs</div>
+                    <div>👷 <strong>Job Workers:</strong> ${pipelineState.stage4_oldJwWorkers.length} Ready</div>
                 </div>
                 <button type="button" class="btn" style="background:linear-gradient(135deg, #10b981, #059669); font-size:15px; font-weight:bold; padding:12px 24px; border-radius:8px; border:none; color:#ffffff; cursor:pointer;" onclick="completeNewSessionStartup('${newSess}')">🚀 Naye Saal Me Kaam Shuru Karein</button>
             </div>`;
@@ -561,45 +748,45 @@
         if (modal) modal.style.display = 'none';
 
         const uId = getSafeUserId();
+        const tid = getSafeTenantId(uId);
         const s = targetSess || pendingTransferNewSession || '2026-2027';
 
-        // 1. Blacklist saaf
         localStorage.removeItem(`${uId}_app_deleted_sessions`);
-
-        // 2. Active Session set karein
-        localStorage.setItem(`${uId}_app_active_session`, s);
+        safeSetLocalStorage(`${uId}_app_active_session`, s);
         if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[`${uId}_app_active_session`] = s;
 
-        // 3. Session list me jodein
-        let curSessions = window.getAppSessions ? window.getAppSessions() : [];
+        let curSessions = window.getAppSessions ? window.getAppSessions().slice() : [];
         if (!curSessions.includes(s)) curSessions.push(s);
-        localStorage.setItem(`${uId}_app_sessions_list`, JSON.stringify(curSessions));
+        curSessions.sort();
+        safeSetLocalStorage(`${uId}_app_sessions_list`, curSessions);
         if (window.APP_MEMORY_CACHE) window.APP_MEMORY_CACHE[`${uId}_app_sessions_list`] = curSessions;
 
-        // 4. ⭐ SUPABASE APP_STORE ME DIRECT PUSH (Delete + Insert)
-        const sb = window.supabaseClient || window.supabase;
-        if (sb && typeof sb.from === 'function') {
+        const sb = window.supabaseClient || window.supabase || window.CloudEngine?.supabase || null;
+        if (navigator.onLine && sb && typeof sb.from === 'function') {
             const now = new Date().toISOString();
             try {
-                await sb.from('app_store').delete().eq('id', `${uId}_app_active_session`);
-                await sb.from('app_store').insert({
-                    id: `${uId}_app_active_session`,
-                    user_id: uId,
-                    data: s,
-                    key: `${uId}_app_active_session`,
-                    value: s,
-                    updated_at: now
-                });
-
-                await sb.from('app_store').delete().eq('id', `${uId}_app_sessions_list`);
-                await sb.from('app_store').insert({
-                    id: `${uId}_app_sessions_list`,
-                    user_id: uId,
-                    data: curSessions,
-                    key: `${uId}_app_sessions_list`,
-                    value: curSessions,
-                    updated_at: now
-                });
+                await sb.from('app_store').upsert([
+                    {
+                        id: `${uId}_app_active_session`,
+                        user_id: uId,
+                        tenant_id: tid,
+                        session: s,
+                        data: s,
+                        key: `${uId}_app_active_session`,
+                        value: s,
+                        updated_at: now
+                    },
+                    {
+                        id: `${uId}_app_sessions_list`,
+                        user_id: uId,
+                        tenant_id: tid,
+                        session: s,
+                        data: curSessions,
+                        key: `${uId}_app_sessions_list`,
+                        value: curSessions,
+                        updated_at: now
+                    }
+                ], { onConflict: 'id' });
             } catch (cErr) {
                 console.error('[SessionClosing app_store write]:', cErr);
             }
@@ -609,10 +796,9 @@
             window.clearMemoryCache();
         }
 
-        // 5. Naye saal me direct entry
         setTimeout(() => {
             window.location.reload();
-        }, 300);
+        }, 250);
     };
 
     const sessionClosingAPI = {
