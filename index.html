@@ -51,6 +51,415 @@
             border-color: #1d4ed8 !important;
             box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
         }
+
+        /* ====================================================================
+           DRIBBBLE-STYLE SPLIT LOGIN UI (STRICTLY SCOPED TO #login-wrapper)
+        ==================================================================== */
+        #login-wrapper {
+            --sl-brand: #f2b71d;
+            --sl-brand-hover: #e0a60d;
+            min-height: 100vh;
+            width: 100%;
+            padding: 0 !important;
+            background: #ffffff !important;
+            display: flex;
+            align-items: stretch;
+            justify-content: stretch;
+        }
+
+        #login-wrapper .sl-split {
+            width: 100%;
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 1fr 1.05fr;
+        }
+
+        #login-wrapper .sl-left {
+            padding: 34px 36px 24px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            background: #ffffff;
+        }
+
+        #login-wrapper .sl-brand-top {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: #1f2937;
+            margin-top: 6px;
+        }
+
+        #login-wrapper .sl-logo-badge {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: var(--sl-brand);
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 16px rgba(242, 183, 29, 0.35);
+        }
+
+        #login-wrapper .sl-brand-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #1f2937;
+            letter-spacing: -0.02em;
+        }
+
+        #login-wrapper .sl-brand-by {
+            font-size: 11px;
+            font-weight: 600;
+            color: #9ca3af;
+            border-left: 1px solid #e5e7eb;
+            padding-left: 10px;
+        }
+
+        #login-wrapper .sl-form-slot {
+            width: 100%;
+            max-width: 360px;
+            margin: auto 0;
+            padding: 24px 0;
+        }
+
+        /* Override default .card cleanly only inside #login-wrapper */
+        #login-wrapper .card {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 0;
+            border-radius: 0;
+            max-width: 100%;
+            width: 100%;
+            text-align: center;
+        }
+
+        #login-wrapper .card h2 {
+            color: #374151;
+            font-size: 21px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        #login-wrapper .card-subtitle {
+            font-size: 12.5px;
+            color: #9ca3af;
+            margin-bottom: 24px;
+        }
+
+        #login-wrapper .sl-input-wrap {
+            position: relative;
+            margin-bottom: 14px;
+            text-align: left;
+        }
+
+        #login-wrapper .sl-input-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            color: #b8bec8;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        #login-wrapper .sl-input-wrap input {
+            width: 100%;
+            height: 44px;
+            padding: 0 40px 0 42px;
+            background: #fbfbfc;
+            border: 1px solid #eef0f4;
+            border-radius: 6px;
+            color: #1f2937;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+
+        #login-wrapper .sl-input-wrap input::placeholder {
+            color: #b4bac5;
+        }
+
+        #login-wrapper .sl-input-wrap input:focus {
+            background: #ffffff;
+            border-color: var(--sl-brand);
+            box-shadow: 0 0 0 3px rgba(242, 183, 29, 0.14);
+        }
+
+        #login-wrapper .sl-eye-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px;
+            z-index: 2;
+        }
+
+        #login-wrapper .sl-action-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-top: 20px;
+            margin-bottom: 22px;
+        }
+
+        #login-wrapper .sl-btn-primary {
+            flex: 1;
+            height: 42px;
+            background: var(--sl-brand);
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            font-size: 13.5px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 6px 16px rgba(242, 183, 29, 0.28);
+            transition: background 0.18s, transform 0.15s;
+            margin-top: 0;
+        }
+
+        #login-wrapper .sl-btn-primary:hover {
+            background: var(--sl-brand-hover);
+            transform: translateY(-1px);
+        }
+
+        #login-wrapper .sl-forgot-link {
+            flex: 1;
+            text-align: center;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--sl-brand);
+            text-decoration: none;
+            cursor: pointer;
+        }
+        #login-wrapper .sl-forgot-link:hover {
+            text-decoration: underline;
+        }
+
+        #login-wrapper .sl-signup-line {
+            text-align: center;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        #login-wrapper .sl-signup-line a {
+            color: var(--sl-brand);
+            font-weight: 600;
+            text-decoration: none;
+            margin-left: 4px;
+        }
+        #login-wrapper .sl-signup-line a:hover {
+            text-decoration: underline;
+        }
+
+        /* Clean styling for Signup & Forgot boxes + dynamically injected Gmail OTP UI */
+        #login-wrapper #signup-box .input-group,
+        #login-wrapper #forgot-box .input-group {
+            margin-bottom: 11px;
+            text-align: left;
+        }
+
+        #login-wrapper #signup-box .input-group label,
+        #login-wrapper #forgot-box .input-group label {
+            font-size: 11px;
+            color: #6b7280;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        #login-wrapper #signup-box .input-group input,
+        #login-wrapper #forgot-box .input-group input {
+            height: 41px;
+            padding: 0 12px;
+            background: #fbfbfc;
+            border: 1px solid #eef0f4;
+            border-radius: 6px;
+        }
+
+        #login-wrapper #signup-box .input-group input:focus,
+        #login-wrapper #forgot-box .input-group input:focus {
+            background: #ffffff;
+            border-color: var(--sl-brand);
+            box-shadow: 0 0 0 3px rgba(242, 183, 29, 0.14);
+        }
+
+        #login-wrapper .sl-signup-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        #login-wrapper #signup-box .btn,
+        #login-wrapper #forgot-box .btn {
+            background: var(--sl-brand);
+            color: #ffffff;
+            height: 42px;
+            border-radius: 6px;
+            font-weight: 700;
+            box-shadow: 0 6px 16px rgba(242, 183, 29, 0.25);
+        }
+        #login-wrapper #signup-box .btn:hover,
+        #login-wrapper #forgot-box .btn:hover {
+            background: var(--sl-brand-hover);
+        }
+
+        #login-wrapper .sl-left-footer {
+            font-size: 11px;
+            color: #9ca3af;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        #login-wrapper .sl-left-footer a {
+            color: #9ca3af;
+            text-decoration: none;
+        }
+        #login-wrapper .sl-left-footer a:hover {
+            color: #374151;
+        }
+
+        /* Right Panel (Dribbble Organic Artwork + Floating Card) */
+        #login-wrapper .sl-right {
+            padding: 24px 28px 24px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #login-wrapper .sl-art-stage {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            min-height: 590px;
+            max-width: 680px;
+            border-radius: 14px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #ffffff;
+        }
+
+        #login-wrapper .sl-bg-svg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        #login-wrapper .sl-promo-card {
+            position: relative;
+            z-index: 2;
+            width: 310px;
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 36px 26px 30px;
+            text-align: center;
+            box-shadow: 0 24px 55px rgba(133, 92, 0, 0.18), 0 4px 14px rgba(0, 0, 0, 0.05);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+
+        #login-wrapper .sl-promo-card.sl-fade {
+            opacity: 0.45;
+            transform: translateY(4px);
+        }
+
+        #login-wrapper .sl-promo-circle {
+            width: 106px;
+            height: 106px;
+            margin: 0 auto 22px;
+            border-radius: 50%;
+            background: #fdf6e2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 44px;
+        }
+
+        #login-wrapper .sl-promo-card h3 {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+
+        #login-wrapper .sl-promo-card p {
+            font-size: 12.5px;
+            line-height: 1.65;
+            color: #6b7280;
+            margin-bottom: 24px;
+            min-height: 62px;
+        }
+
+        #login-wrapper .sl-promo-btn {
+            display: inline-block;
+            background: var(--sl-brand);
+            color: #ffffff;
+            border-radius: 5px;
+            padding: 10px 28px;
+            font-size: 12.5px;
+            font-weight: 700;
+            text-decoration: none;
+            box-shadow: 0 6px 14px rgba(242, 183, 29, 0.26);
+        }
+        #login-wrapper .sl-promo-btn:hover {
+            background: var(--sl-brand-hover);
+        }
+
+        #login-wrapper .sl-dots {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 26px;
+        }
+
+        #login-wrapper .sl-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.48);
+            cursor: pointer;
+            padding: 0;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        #login-wrapper .sl-dot.active {
+            background: #ffffff;
+            transform: scale(1.25);
+        }
+
+        @media (max-width: 900px) {
+            #login-wrapper .sl-split {
+                grid-template-columns: 1fr;
+            }
+            #login-wrapper .sl-right {
+                display: none;
+            }
+            #login-wrapper .sl-left {
+                padding: 28px 20px 20px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -61,60 +470,131 @@
         <button type="button" onclick="exitBackupPreviewMode()" style="background:#dc2626; color:white; border:none; padding:6px 14px; border-radius:6px; cursor:pointer; font-weight:bold;">✕ Exit Preview</button>
     </aside>
 
-    <!-- 1. AUTHENTICATION SCREENS -->
+    <!-- 1. AUTHENTICATION SCREENS (DRIBBBLE SPLIT-SCREEN UI) -->
     <main id="login-wrapper">
-        <div class="card" id="login-box">
-            <h2>Welcome to Simplicity</h2>
-            <div><span class="creator-tag">by Farhan Jawed</span></div>
-            <p class="card-subtitle">Karkhana Business Management Portal</p>
-            
-            <div class="input-group">
-                <label for="login-id">User ID, Mobile ya Gmail</label>
-                <input type="text" id="login-id" placeholder="User ID / Mobile / Gmail" autocomplete="username">
-            </div>
-            <div class="input-group">
-                <label for="login-pass">Password</label>
-                <input type="password" id="login-pass" placeholder="Password" autocomplete="current-password">
+        <div class="sl-split">
+            <!-- LEFT SIDE: LOGIN / SIGNUP / FORGOT FORMS -->
+            <div class="sl-left">
+                <a href="landing.html" class="sl-brand-top">
+                    <span class="sl-logo-badge">S</span>
+                    <span class="sl-brand-title">Simplicity</span>
+                    <span class="sl-brand-by">by Farhan Jawed</span>
+                </a>
+
+                <div class="sl-form-slot">
+                    <!-- LOGIN BOX -->
+                    <div class="card" id="login-box">
+                        <h2>Sign in</h2>
+                        <p class="card-subtitle">Karkhana Business Management Portal</p>
+
+                        <div class="sl-input-wrap">
+                            <svg class="sl-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                                <path d="m22 7-10 6L2 7"></path>
+                            </svg>
+                            <input type="text" id="login-id" placeholder="User ID, Mobile ya Gmail" autocomplete="username" onkeydown="if(event.key==='Enter') handleLogin()">
+                        </div>
+
+                        <div class="sl-input-wrap">
+                            <svg class="sl-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="11" width="18" height="11" rx="2"></rect>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                            </svg>
+                            <input type="password" id="login-pass" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter') handleLogin()">
+                            <button type="button" class="sl-eye-btn" onclick="slToggleLoginPass()" title="Show/Hide Password">👁️</button>
+                        </div>
+
+                        <div class="sl-action-row">
+                            <button type="button" class="sl-btn-primary" onclick="handleLogin()">Sign in</button>
+                            <a href="javascript:void(0)" class="sl-forgot-link" onclick="showForgotPassword()">Forgot password?</a>
+                        </div>
+
+                        <p class="sl-signup-line">
+                            Don't have an account?
+                            <a href="javascript:void(0)" onclick="showSignup()">Naya Account</a>
+                        </p>
+
+                        <p id="login-error" class="message error" style="display:none;"></p>
+                    </div>
+
+                    <!-- SIGNUP BOX -->
+                    <div class="card" id="signup-box" style="display:none;">
+                        <h2>Naya Account</h2>
+                        <p class="card-subtitle">Apna Digital Karkhana Account Banayein</p>
+
+                        <div class="input-group"><label for="reg-name">Naam</label><input type="text" id="reg-name" placeholder="Aapka Pura Naam"></div>
+                        <div class="sl-signup-grid">
+                            <div class="input-group"><label for="reg-mobile">Mobile</label><input type="tel" id="reg-mobile" placeholder="10-digit Mobile"></div>
+                            <div class="input-group"><label for="reg-pin" style="color:#b91c1c;">4-Digit PIN</label><input type="password" maxlength="4" id="reg-pin" placeholder="Security PIN"></div>
+                        </div>
+                        <div class="input-group"><label for="reg-email">Gmail / Email ID</label><input type="email" id="reg-email" placeholder="example@gmail.com"></div>
+                        <div class="sl-signup-grid">
+                            <div class="input-group"><label for="reg-id">User ID</label><input type="text" id="reg-id" placeholder="Unique User ID"></div>
+                            <div class="input-group"><label for="reg-pass">Password</label><input type="password" id="reg-pass" placeholder="Password"></div>
+                        </div>
+
+                        <button type="button" class="btn" onclick="handleRegister()">Account Banayein</button>
+                        <p id="signup-msg" class="message" style="display:none;"></p>
+                        <div class="sl-signup-line" style="margin-top:14px;">
+                            Already have an account?
+                            <a href="javascript:void(0)" onclick="showLogin()">Login Karein</a>
+                        </div>
+                    </div>
+
+                    <!-- FORGOT PASSWORD BOX -->
+                    <div class="card" id="forgot-box" style="display:none;">
+                        <h2>Password Reset</h2>
+                        <p class="card-subtitle">4-Digit PIN ya Gmail OTP se reset karein</p>
+
+                        <div id="forgot-step-1">
+                            <div class="input-group"><label for="forgot-query">User ID / Mobile / Gmail</label><input type="text" id="forgot-query" placeholder="User ID / Mobile / Gmail"></div>
+                            <div class="input-group"><label for="forgot-pin">4-Digit PIN</label><input type="password" maxlength="4" id="forgot-pin" placeholder="4-digit PIN"></div>
+                            <button type="button" class="btn" onclick="verifyForgotPin()">Verify PIN</button>
+                        </div>
+                        <div id="forgot-step-2" style="display:none;">
+                            <div class="input-group"><label for="forgot-new-pass">Naya Password</label><input type="password" id="forgot-new-pass" placeholder="Naya Password"></div>
+                            <div class="input-group"><label for="forgot-confirm-pass">Confirm Password</label><input type="password" id="forgot-confirm-pass" placeholder="Confirm Password"></div>
+                            <button type="button" class="btn" onclick="saveNewPassword()">Update Password</button>
+                        </div>
+                        <p id="forgot-msg" class="message" style="display:none;"></p>
+                        <div class="sl-signup-line" style="margin-top:14px;">
+                            <a href="javascript:void(0)" onclick="showLogin()">← Wapas Login</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sl-left-footer">
+                    <a href="landing.html">Home</a>
+                    <span>·</span>
+                    <a href="landing.html#faq-section">FAQ</a>
+                    <span>·</span>
+                    <a href="https://wa.me/917985402962" target="_blank">Support</a>
+                </div>
             </div>
 
-            <button type="button" class="btn" onclick="handleLogin()">Login Karein</button>
-            <div class="auth-links-row">
-                <a href="javascript:void(0)" onclick="showForgotPassword()">Password Bhool Gaye?</a>
-                <a href="javascript:void(0)" onclick="showSignup()">Naya Account</a>
-            </div>
-            <p id="login-error" class="message error" style="display:none;"></p>
-        </div>
+            <!-- RIGHT SIDE: ORGANIC GOLDEN SHAPE + FLOATING FEATURE CARD -->
+            <div class="sl-right">
+                <div class="sl-art-stage">
+                    <svg class="sl-bg-svg" viewBox="0 0 600 660" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M250,0 L600,0 L600,660 L130,660 C60,510 50,360 155,210 Z" fill="#fef3d6"/>
+                        <path d="M475,0 L600,0 L600,660 L150,660 C70,570 40,460 120,385 L270,245 C350,170 410,80 475,0 Z" fill="#f3b722"/>
+                        <path d="M600,320 L600,660 L260,660 C340,560 470,450 600,320 Z" fill="#eab01e" opacity="0.55"/>
+                    </svg>
 
-        <div class="card" id="signup-box" style="display:none;">
-            <h2>Naya Account</h2>
-            <div class="input-group"><label for="reg-name">Naam</label><input type="text" id="reg-name" placeholder="Aapka Pura Naam"></div>
-            <div class="input-group"><label for="reg-mobile">Mobile</label><input type="tel" id="reg-mobile" placeholder="10-digit Mobile Number"></div>
-            <div class="input-group"><label for="reg-email">Gmail / Email ID</label><input type="email" id="reg-email" placeholder="example@gmail.com"></div>
-            <div class="input-group"><label for="reg-id">User ID</label><input type="text" id="reg-id" placeholder="Unique User ID"></div>
-            <div class="input-group"><label for="reg-pass">Password</label><input type="password" id="reg-pass" placeholder="Password"></div>
-            <div class="input-group"><label for="reg-pin" style="color:#b91c1c;">4-Digit PIN</label><input type="password" maxlength="4" id="reg-pin" placeholder="Security PIN"></div>
-            <button type="button" class="btn" onclick="handleRegister()">Account Banayein</button>
-            <p id="signup-msg" class="message" style="display:none;"></p>
-            <div class="auth-links-row" style="justify-content:center; margin-top:10px;">
-                <a href="javascript:void(0)" onclick="showLogin()">Login Karein</a>
-            </div>
-        </div>
+                    <div class="sl-promo-card" id="slPromoCard">
+                        <div class="sl-promo-circle" id="slPromoIcon">🧵</div>
+                        <h3 id="slPromoTitle">Kariger Mobile Portal</h3>
+                        <p id="slPromoDesc">Ab har kariger apne mobile par 4-digit PIN se apna Loom Progress, Bana, Zari aur Baki Mazdoori 24×7 live dekh sakta hai.</p>
+                        <a href="landing.html#kariger_portal" id="slPromoBtn" class="sl-promo-btn">Get more</a>
+                    </div>
 
-        <div class="card" id="forgot-box" style="display:none;">
-            <h2>Password Reset</h2>
-            <div id="forgot-step-1">
-                <div class="input-group"><label for="forgot-query">User ID / Mobile / Gmail</label><input type="text" id="forgot-query"></div>
-                <div class="input-group"><label for="forgot-pin">4-Digit PIN</label><input type="password" maxlength="4" id="forgot-pin"></div>
-                <button type="button" class="btn" onclick="verifyForgotPin()">Verify PIN</button>
-            </div>
-            <div id="forgot-step-2" style="display:none;">
-                <div class="input-group"><label for="forgot-new-pass">Naya Password</label><input type="password" id="forgot-new-pass"></div>
-                <div class="input-group"><label for="forgot-confirm-pass">Confirm Password</label><input type="password" id="forgot-confirm-pass"></div>
-                <button type="button" class="btn" onclick="saveNewPassword()">Update Password</button>
-            </div>
-            <p id="forgot-msg" class="message" style="display:none;"></p>
-            <div class="auth-links-row" style="justify-content:center; margin-top:10px;">
-                <a href="javascript:void(0)" onclick="showLogin()">Wapas Login</a>
+                    <div class="sl-dots">
+                        <button type="button" class="sl-dot active" onclick="slSetSlide(0)" aria-label="Slide 1"></button>
+                        <button type="button" class="sl-dot" onclick="slSetSlide(1)" aria-label="Slide 2"></button>
+                        <button type="button" class="sl-dot" onclick="slSetSlide(2)" aria-label="Slide 3"></button>
+                        <button type="button" class="sl-dot" onclick="slSetSlide(3)" aria-label="Slide 4"></button>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
@@ -929,6 +1409,77 @@
 
     <!-- APPLICATION INITIALIZER -->
     <script>
+        function slToggleLoginPass() {
+            const p = document.getElementById('login-pass');
+            if (p) p.type = p.type === 'password' ? 'text' : 'password';
+        }
+
+        const slSlides = [
+            {
+                icon: '🧵',
+                title: 'Kariger Mobile Portal',
+                desc: 'Ab har kariger apne mobile par 4-digit PIN se apna Loom Progress, Bana, Zari aur Baki Mazdoori 24×7 live dekh sakta hai.',
+                link: 'landing.html#kariger_portal',
+                cta: 'Get more'
+            },
+            {
+                icon: '📜',
+                title: 'Auto Tani & Rangai Order',
+                desc: 'Parchi banate hi automatic Sancha aur phir Rangai wale ke mobile par chali jaati hai. Ready hone par hi Loom sheet khulti hai.',
+                link: 'landing.html#tani_order',
+                cta: 'Explore'
+            },
+            {
+                icon: '⚡',
+                title: 'Zero-Mouse Express Counter',
+                desc: 'Baithak aur mandi ke rush mein sirf Enter dabakar Saree, Bana, Zari, Rokad entry aur A6 thermal parchi 1 second mein print karein.',
+                link: 'landing.html#express',
+                cta: 'Dekhein'
+            },
+            {
+                icon: '🔄',
+                title: '1-Click Year Closing & Sync',
+                desc: 'Offline PWA speed ke saath 1 click mein pichla balance naye saal mein shift karein aur multi-device live cloud sync payein.',
+                link: 'landing.html#closing_backup',
+                cta: 'Learn more'
+            }
+        ];
+
+        let slCurrentSlide = 0;
+        function slSetSlide(idx) {
+            slCurrentSlide = idx;
+            const card = document.getElementById('slPromoCard');
+            const item = slSlides[idx];
+            if (!card || !item) return;
+
+            card.classList.add('sl-fade');
+            setTimeout(() => {
+                const iconEl = document.getElementById('slPromoIcon');
+                const titleEl = document.getElementById('slPromoTitle');
+                const descEl = document.getElementById('slPromoDesc');
+                const btnEl = document.getElementById('slPromoBtn');
+                if (iconEl) iconEl.textContent = item.icon;
+                if (titleEl) titleEl.textContent = item.title;
+                if (descEl) descEl.textContent = item.desc;
+                if (btnEl) {
+                    btnEl.href = item.link;
+                    btnEl.textContent = item.cta;
+                }
+                card.classList.remove('sl-fade');
+            }, 160);
+
+            document.querySelectorAll('#login-wrapper .sl-dot').forEach((d, i) => {
+                d.classList.toggle('active', i === idx);
+            });
+        }
+
+        setInterval(() => {
+            const wrap = document.getElementById('login-wrapper');
+            if (wrap && wrap.style.display !== 'none') {
+                slSetSlide((slCurrentSlide + 1) % slSlides.length);
+            }
+        }, 4500);
+
         function populateNavbarKarkhanaDropdown() {
             const sel = document.getElementById("app-karkhana-select");
             if (!sel) return;
