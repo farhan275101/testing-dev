@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
     <title>Simplicity ERP • Saree Manufacturer Karkhana Portal</title>
-    <meta name="description" content="Purani Diary Chhodo, Karkhana Digital Karo! Kariger Express, Stock Express, JobWork Express, Tani & Rangai Order, Kariger Portal, Sancha Portal, Rangai Portal.">
+    <meta name="description" content="Purani Diary Chhodo, Karkhana Digital Karo! TallyPrime White & Gold ERP, 4 Express Counters, Tani & Rangai Order, Kariger Portal, Sancha Portal, Rangai Portal.">
     <meta name="theme-color" content="#ffffff">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,26 +15,24 @@
     <style>
         :root {
             --bg-page: #ffffff;
-            --bg-soft: #f7f7f7;
-            --bg-muted: #f1f5f9;
+            --bg-soft: #fdfcf7;
+            --bg-cream: #fdf6e2;
             --border-light: #e5e7eb;
-            --border-card: #e2e8f0;
+            --border-gold: #e5d5a7;
+            --border-gold-strong: #d9b86c;
 
-            --text-main: #18181b;
-            --text-secondary: #52525b;
-            --text-muted: #71717a;
+            --text-main: #1f2937;
+            --text-secondary: #4b5563;
+            --text-muted: #6b7280;
 
-            /* Golden-Amber Brand Theme (Synced with Login Screen) */
             --brand-gold: #f2b71d;
             --brand-gold-hover: #e0a60d;
-            --brand-gold-text: #b45309;
-            --brand-gold-accent: #d97706;
-            --brand-gold-soft: #fffbeb;
-            --brand-gold-tint: #fde68a;
+            --brand-gold-border: #d9a425;
+            --brand-gold-text: #b47d00;
+            --brand-gold-dark: #92400e;
+            --brand-gold-soft: #fdf6e2;
 
-            --accent-green: #16a34a;
             --accent-wa: #25d366;
-            --accent-blue: #0284c7;
 
             --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
             --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.06);
@@ -54,7 +52,7 @@
         body {
             background-color: var(--bg-page);
             color: var(--text-main);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
             overflow-x: hidden;
             line-height: 1.55;
             letter-spacing: -0.01em;
@@ -67,7 +65,7 @@
         }
 
         /* ====================================================================
-           1. PATREON-STYLE CLEAN TOP NAVBAR (GOLDEN THEME)
+           1. TOP NAVBAR
         ==================================================================== */
         .top-nav {
             position: sticky;
@@ -75,10 +73,10 @@
             left: 0;
             width: 100%;
             height: 66px;
-            background: rgba(255, 255, 255, 0.96);
+            background: rgba(255, 255, 255, 0.97);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border-bottom: 1px solid var(--border-light);
+            border-bottom: 1.5px solid var(--border-gold);
             z-index: 1000;
         }
 
@@ -114,15 +112,15 @@
         .brand-mark {
             width: 28px;
             height: 28px;
-            border-radius: 8px;
+            border-radius: 7px;
             background: var(--brand-gold);
-            color: #ffffff;
+            color: #1f2937;
+            border: 1px solid var(--brand-gold-border);
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 15px;
             font-weight: 900;
-            box-shadow: 0 4px 12px rgba(242, 183, 29, 0.35);
         }
 
         .nav-menu {
@@ -131,9 +129,7 @@
             gap: 6px;
         }
 
-        .nav-item {
-            position: relative;
-        }
+        .nav-item { position: relative; }
 
         .nav-trigger {
             background: transparent;
@@ -155,11 +151,7 @@
         .nav-trigger:hover,
         .nav-item.open .nav-trigger {
             background: var(--brand-gold-soft);
-            color: var(--brand-gold-text);
-        }
-
-        .nav-trigger.is-active {
-            color: var(--brand-gold-text);
+            color: var(--brand-gold-dark);
         }
 
         .nav-chevron {
@@ -167,19 +159,16 @@
             opacity: 0.7;
             transition: transform 0.2s;
         }
-        .nav-item.open .nav-chevron {
-            transform: rotate(180deg);
-        }
+        .nav-item.open .nav-chevron { transform: rotate(180deg); }
 
-        /* Clean Dropdown Panel */
         .nav-dropdown {
             position: absolute;
             top: calc(100% + 8px);
             left: 0;
-            min-width: 280px;
+            min-width: 290px;
             background: #ffffff;
-            border: 1px solid var(--border-light);
-            border-radius: 14px;
+            border: 1.5px solid var(--border-gold);
+            border-radius: 12px;
             box-shadow: var(--shadow-pop);
             padding: 8px;
             display: none;
@@ -203,7 +192,7 @@
             border: none;
             text-align: left;
             padding: 10px 12px;
-            border-radius: 9px;
+            border-radius: 8px;
             cursor: pointer;
             display: flex;
             align-items: flex-start;
@@ -220,12 +209,13 @@
         .drop-icon {
             width: 32px;
             height: 32px;
-            border-radius: 8px;
-            background: var(--bg-soft);
+            border-radius: 7px;
+            background: var(--bg-cream);
+            border: 1px solid var(--border-gold);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
+            font-size: 15px;
             flex-shrink: 0;
         }
 
@@ -243,37 +233,33 @@
             margin-top: 1px;
         }
 
-        /* Nav Right Side */
         .nav-right {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
 
         .nav-pill-note {
-            background: var(--bg-soft);
-            border: 1px solid var(--border-light);
+            background: var(--bg-cream);
+            border: 1px solid var(--border-gold);
             border-radius: 999px;
             padding: 7px 14px;
             font-size: 12.5px;
-            color: var(--text-secondary);
-            font-weight: 500;
+            color: var(--brand-gold-dark);
+            font-weight: 700;
             text-decoration: none;
             white-space: nowrap;
             display: inline-flex;
             align-items: center;
             gap: 6px;
         }
-        .nav-pill-note:hover {
-            border-color: var(--brand-gold-tint);
-            color: var(--text-main);
-        }
+        .nav-pill-note:hover { border-color: var(--brand-gold-border); }
 
         .nav-login-link {
             color: var(--text-main);
             text-decoration: none;
-            font-size: 13.5px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 700;
             padding: 7px 10px;
             white-space: nowrap;
         }
@@ -281,18 +267,17 @@
 
         .btn-gold-pill {
             background: var(--brand-gold);
-            color: #ffffff;
+            color: #1f2937;
             padding: 9px 18px;
             border-radius: 999px;
             text-decoration: none;
             font-size: 13.5px;
-            font-weight: 700;
-            border: none;
+            font-weight: 800;
+            border: 1px solid var(--brand-gold-border);
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             gap: 7px;
-            box-shadow: 0 6px 16px rgba(242, 183, 29, 0.28);
             transition: background 0.18s, transform 0.18s;
             white-space: nowrap;
         }
@@ -303,13 +288,13 @@
 
         .btn-soft-pill {
             background: var(--brand-gold-soft);
-            color: var(--brand-gold-text);
+            color: var(--brand-gold-dark);
             padding: 9px 18px;
             border-radius: 999px;
             text-decoration: none;
             font-size: 13.5px;
             font-weight: 700;
-            border: 1px solid var(--brand-gold-tint);
+            border: 1px solid var(--border-gold);
             cursor: pointer;
             display: inline-flex;
             align-items: center;
@@ -317,9 +302,7 @@
             transition: background 0.18s;
             white-space: nowrap;
         }
-        .btn-soft-pill:hover {
-            background: var(--brand-gold-tint);
-        }
+        .btn-soft-pill:hover { background: #fbe8b6; }
 
         .btn-green-pill {
             background: var(--accent-wa);
@@ -336,11 +319,10 @@
         }
         .btn-green-pill:hover { background: #1fb858; transform: translateY(-1px); }
 
-        /* Mobile Hamburger */
         .mobile-menu-btn {
             display: none;
-            background: var(--bg-soft);
-            border: 1px solid var(--border-light);
+            background: var(--bg-cream);
+            border: 1px solid var(--border-gold);
             border-radius: 8px;
             padding: 7px 11px;
             font-size: 16px;
@@ -351,7 +333,7 @@
         .mobile-drawer {
             display: none;
             background: #ffffff;
-            border-bottom: 1px solid var(--border-light);
+            border-bottom: 1.5px solid var(--border-gold);
             padding: 14px 20px 18px;
         }
         .mobile-drawer.open { display: block; }
@@ -359,7 +341,7 @@
             font-size: 11px;
             font-weight: 800;
             text-transform: uppercase;
-            color: var(--text-muted);
+            color: var(--brand-gold-dark);
             margin: 12px 0 6px;
             letter-spacing: 0.06em;
         }
@@ -370,32 +352,30 @@
         }
         .mobile-link-btn {
             background: var(--bg-soft);
-            border: 1px solid var(--border-light);
+            border: 1px solid var(--border-gold);
             border-radius: 8px;
             padding: 9px 10px;
             font-size: 12.5px;
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text-main);
             text-align: left;
             cursor: pointer;
             font-family: inherit;
         }
         .mobile-link-btn.active {
-            background: var(--brand-gold-soft);
-            border-color: var(--brand-gold);
-            color: var(--brand-gold-text);
+            background: var(--brand-gold);
+            border-color: var(--brand-gold-border);
+            color: #1f2937;
         }
 
-        @media (max-width: 1020px) {
-            .nav-pill-note { display: none; }
-        }
+        @media (max-width: 1020px) { .nav-pill-note { display: none; } }
         @media (max-width: 860px) {
             .nav-menu, .nav-login-link { display: none; }
             .mobile-menu-btn { display: inline-flex; align-items: center; }
         }
 
         /* ====================================================================
-           2. HERO & PATREON-STYLE 4 PORTAL CARDS
+           2. HERO & 4 PORTAL CARDS
         ==================================================================== */
         .view-page { display: none; animation: pageFade 0.28s ease-out; }
         .view-page.active { display: block; }
@@ -405,22 +385,22 @@
         }
 
         .hero-section {
-            background: linear-gradient(180deg, #ffffff 0%, #fffdf5 55%, #f7f7f7 100%);
-            padding: 58px 0 54px;
+            background: linear-gradient(180deg, #ffffff 0%, #fdfcf7 60%, #fdf6e2 100%);
+            padding: 54px 0 50px;
             text-align: center;
-            border-bottom: 1px solid var(--border-light);
+            border-bottom: 1.5px solid var(--border-gold);
         }
 
         .hero-eyebrow {
             display: inline-block;
-            background: var(--brand-gold-soft);
-            color: var(--brand-gold-text);
-            border: 1px solid var(--brand-gold-tint);
+            background: var(--bg-cream);
+            color: var(--brand-gold-dark);
+            border: 1px solid var(--border-gold);
             padding: 5px 14px;
             border-radius: 999px;
             font-size: 12px;
-            font-weight: 700;
-            margin-bottom: 18px;
+            font-weight: 800;
+            margin-bottom: 16px;
         }
 
         .hero-title {
@@ -434,10 +414,10 @@
         }
 
         .hero-subtitle {
-            font-size: 16px;
+            font-size: 15.5px;
             color: var(--text-secondary);
-            max-width: 680px;
-            margin: 0 auto 28px;
+            max-width: 700px;
+            margin: 0 auto 26px;
             line-height: 1.6;
         }
 
@@ -447,24 +427,23 @@
             align-items: center;
             gap: 12px;
             flex-wrap: wrap;
-            margin-bottom: 44px;
+            margin-bottom: 42px;
         }
 
-        /* 4 Portal Cards */
         .portal-cards-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 18px;
             align-items: stretch;
             text-align: left;
-            margin-bottom: 34px;
+            margin-bottom: 32px;
         }
         @media (max-width: 1024px) { .portal-cards-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 580px) { .portal-cards-grid { grid-template-columns: 1fr; } }
 
         .patreon-card {
             background: #ffffff;
-            border: 1px solid var(--border-card);
+            border: 1.5px solid var(--border-gold);
             border-radius: var(--radius-card);
             box-shadow: var(--shadow-card);
             display: flex;
@@ -477,29 +456,29 @@
         .patreon-card:hover {
             transform: translateY(-4px);
             box-shadow: var(--shadow-pop);
+            border-color: var(--brand-gold-border);
         }
         .patreon-card.featured {
             border: 2px solid var(--brand-gold);
         }
         .card-rec-banner {
             background: var(--brand-gold);
-            color: #ffffff;
+            color: #1f2937;
             text-align: center;
             font-size: 11px;
             font-weight: 800;
             padding: 6px 10px;
-            letter-spacing: 0.02em;
-            text-shadow: 0 1px 1px rgba(0,0,0,0.12);
+            border-bottom: 1px solid var(--brand-gold-border);
         }
 
         .card-body {
-            padding: 24px 20px 20px;
+            padding: 22px 18px 18px;
             display: flex;
             flex-direction: column;
             flex: 1;
         }
         .card-title {
-            font-size: 19px;
+            font-size: 18px;
             font-weight: 800;
             color: var(--text-main);
             margin-bottom: 6px;
@@ -508,18 +487,18 @@
             font-size: 13px;
             color: var(--text-secondary);
             line-height: 1.5;
-            min-height: 58px;
-            margin-bottom: 16px;
+            min-height: 56px;
+            margin-bottom: 14px;
         }
         .card-highlight-stat {
-            border-top: 1px solid var(--border-light);
-            border-bottom: 1px solid var(--border-light);
-            padding: 14px 0;
-            margin-bottom: 16px;
+            border-top: 1px solid var(--border-gold);
+            border-bottom: 1px solid var(--border-gold);
+            padding: 12px 0;
+            margin-bottom: 14px;
         }
         .card-highlight-stat strong {
             display: block;
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 800;
             color: var(--brand-gold-text);
             line-height: 1.1;
@@ -527,15 +506,15 @@
         .card-highlight-stat span {
             font-size: 11.5px;
             color: var(--text-muted);
-            font-weight: 500;
+            font-weight: 600;
         }
 
         .card-checklist {
             list-style: none;
             display: flex;
             flex-direction: column;
-            gap: 9px;
-            margin-bottom: 22px;
+            gap: 8px;
+            margin-bottom: 20px;
             flex: 1;
         }
         .card-checklist li {
@@ -548,24 +527,23 @@
         }
         .card-checklist li::before {
             content: "✓";
-            color: var(--brand-gold-accent);
-            font-weight: 800;
+            color: var(--brand-gold-text);
+            font-weight: 900;
             flex-shrink: 0;
         }
 
         .card-btn {
             width: 100%;
             justify-content: center;
-            padding: 11px 14px;
+            padding: 10px 14px;
             font-size: 13px;
         }
 
-        /* Pipeline Strip & Stats */
         .pipeline-card {
             background: #ffffff;
-            border: 1px solid var(--border-light);
+            border: 1.5px solid var(--border-gold);
             border-radius: var(--radius-card);
-            padding: 20px;
+            padding: 18px 20px;
             box-shadow: var(--shadow-sm);
             margin-bottom: 26px;
         }
@@ -574,7 +552,7 @@
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            color: var(--brand-gold-text);
+            color: var(--brand-gold-dark);
             margin-bottom: 12px;
         }
         .pipeline-flow {
@@ -583,14 +561,14 @@
             align-items: center;
             gap: 8px;
             flex-wrap: wrap;
-            font-size: 13px;
-            font-weight: 600;
+            font-size: 12.5px;
+            font-weight: 700;
         }
         .pipeline-pill {
             padding: 6px 13px;
             border-radius: 999px;
             background: var(--bg-soft);
-            border: 1px solid var(--border-light);
+            border: 1px solid var(--border-gold);
             color: var(--text-main);
         }
 
@@ -598,7 +576,7 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 16px;
-            padding-top: 10px;
+            padding-top: 8px;
         }
         @media (max-width: 720px) { .stats-bar { grid-template-columns: repeat(2, 1fr); } }
         .stat-box strong {
@@ -609,29 +587,27 @@
         }
         .stat-box span {
             font-size: 12px;
-            color: var(--text-muted);
-            font-weight: 600;
+            color: var(--brand-gold-dark);
+            font-weight: 700;
         }
 
         /* ====================================================================
-           3. COMMON SECTIONS, TILES, ALL PLANS INCLUDE GRID, SLIPS, FAQ
+           3. TALLYPRIME WHITE & GOLD APP MOCKUP STYLES
         ==================================================================== */
-        .page-section {
-            padding: 68px 0;
-        }
+        .page-section { padding: 64px 0; }
         .page-section.soft-bg {
             background: var(--bg-soft);
-            border-top: 1px solid var(--border-light);
-            border-bottom: 1px solid var(--border-light);
+            border-top: 1px solid var(--border-gold);
+            border-bottom: 1px solid var(--border-gold);
         }
 
         .section-head {
             text-align: center;
-            max-width: 700px;
-            margin: 0 auto 40px;
+            max-width: 720px;
+            margin: 0 auto 32px;
         }
         .section-head h2 {
-            font-size: clamp(1.65rem, 3.2vw, 2.3rem);
+            font-size: clamp(1.65rem, 3.2vw, 2.25rem);
             font-weight: 800;
             letter-spacing: -0.025em;
             color: var(--text-main);
@@ -642,63 +618,351 @@
             color: var(--text-secondary);
         }
 
-        /* 12 Live Modules Laptop Showcase */
-        .laptop-frame {
+        /* Preview Screen Switch Tabs */
+        .preview-tabs-bar {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+        .preview-tab-btn {
             background: #ffffff;
-            color: #0f172a;
-            border-radius: 16px;
-            border: 1px solid var(--border-card);
+            color: var(--text-main);
+            border: 1.5px solid var(--border-gold);
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.14s ease;
+        }
+        .preview-tab-btn:hover { background: var(--bg-cream); }
+        .preview-tab-btn.active {
+            background: var(--brand-gold);
+            border-color: var(--brand-gold-border);
+            color: #1f2937;
+            font-weight: 800;
+        }
+        .preview-pane { display: none; }
+        .preview-pane.active { display: block; animation: pageFade 0.2s ease-out; }
+
+        /* Authentic White & Gold App Frame */
+        .tp-app-frame {
+            background: #ffffff;
+            border: 1.5px solid var(--border-gold-strong);
+            border-radius: 12px;
             box-shadow: var(--shadow-card);
             overflow: hidden;
             font-size: 12px;
+            color: var(--text-main);
         }
-        .laptop-bar {
-            background: #141414;
-            color: #ffffff;
-            padding: 12px 16px;
+        .tp-slim-navbar {
+            background: #ffffff;
+            border-bottom: 1.5px solid var(--border-gold);
+            padding: 9px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 10px;
             flex-wrap: wrap;
+            gap: 10px;
         }
-        .mac-dots { display: flex; gap: 6px; align-items: center; }
-        .mac-dot { width: 10px; height: 10px; border-radius: 50%; }
-        .laptop-body { padding: 18px; background: #f8fafc; }
-
-        .erp-tiles-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 13px;
+        .tp-nav-chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
         }
-        .erp-tile {
+        .tp-nav-chip {
+            background: var(--bg-soft);
+            border: 1px solid var(--border-gold);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        .tp-nav-btn {
             background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 16px 12px;
-            text-align: center;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        .tp-nav-btn.gold {
+            background: var(--brand-gold);
+            border-color: var(--brand-gold-border);
+            font-weight: 800;
+        }
+
+        .tp-body {
+            padding: 16px;
+            background: #ffffff;
+        }
+
+        /* Dashboard Split (2x2 Gold Cards Left + Gateway of Simplicity Right) */
+        .tp-dash-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+            gap: 16px;
+            align-items: start;
+        }
+        @media (max-width: 900px) { .tp-dash-grid { grid-template-columns: 1fr; } }
+
+        .tp-welcome-strip {
+            background: var(--bg-cream);
+            border: 1px solid var(--border-gold);
+            border-radius: 8px;
+            padding: 10px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .tp-controls-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .tp-tab-strip { display: flex; gap: 5px; flex-wrap: wrap; }
+        .tp-tab-pill {
+            background: #ffffff;
+            border: 1px solid var(--border-gold);
+            border-radius: 5px;
+            padding: 4px 9px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .tp-tab-pill.active {
+            background: var(--brand-gold);
+            border-color: var(--brand-gold-border);
+            font-weight: 800;
+        }
+
+        .tp-2x2-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        @media (max-width: 560px) { .tp-2x2-cards { grid-template-columns: 1fr; } }
+
+        .tp-gold-card {
+            background: #ffffff;
+            border: 1.5px solid var(--border-gold);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .tp-gold-card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-gold);
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        .tp-gold-card-head span {
+            color: var(--brand-gold-dark);
+            font-weight: 700;
+            font-size: 11px;
+        }
+        .tp-bars-row {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 8px;
+            height: 82px;
+            padding-top: 10px;
+        }
+        .tp-bar-col {
+            flex: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 6px;
-            border-top: 4px solid #0284c7;
+            height: 100%;
+            justify-content: flex-end;
+            gap: 3px;
+        }
+        .tp-bar-col small { font-size: 9.5px; font-weight: 800; color: var(--brand-gold-text); }
+        .tp-bar-fill {
+            width: 100%;
+            max-width: 24px;
+            background: linear-gradient(180deg, #f2b71d, #fbe094);
+            border: 1px solid var(--brand-gold-border);
+            border-radius: 4px 4px 0 0;
+        }
+        .tp-bar-col span { font-size: 10px; font-weight: 700; color: var(--text-secondary); }
+
+        /* Gateway of Simplicity Mock */
+        .tp-gateway-box {
+            background: #ffffff;
+            border: 1.5px solid var(--border-gold-strong);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .tp-gw-header {
+            background: var(--bg-cream);
+            border-bottom: 1.5px solid var(--border-gold);
+            padding: 9px 14px;
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--text-main);
+            display: flex;
+            justify-content: space-between;
+        }
+        .tp-gw-sec {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: var(--brand-gold-dark);
+            padding: 6px 12px 2px;
+            letter-spacing: 0.4px;
+        }
+        .tp-gw-item {
+            width: 100%;
+            background: #ffffff;
+            border: none;
+            padding: 6px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-main);
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            font-family: inherit;
+            text-align: left;
         }
-        .erp-tile:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
+        .tp-gw-item:hover { background: #fef9ea; }
+        .tp-gw-item.active {
+            background: var(--brand-gold);
+            font-weight: 800;
         }
-        .erp-tile .icon-box { font-size: 24px; }
-        .erp-tile .tile-title { font-size: 13px; font-weight: 800; color: #0f172a; }
-        .erp-tile .tile-badge {
-            font-size: 10.5px;
+        .tp-gw-key { color: var(--brand-gold-text); font-weight: 800; }
+        .tp-gw-item.active .tp-gw-key { color: #1f2937; }
+        .tp-gw-val { font-size: 11px; color: var(--text-muted); font-weight: 700; }
+        .tp-gw-item.active .tp-gw-val { color: #1f2937; }
+        .tp-gw-div { height: 1px; background: var(--border-gold); margin: 4px 10px; }
+
+        /* Kariger Tani Khata Sheet Mock */
+        .tp-sheet-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr);
+            gap: 14px;
+            align-items: stretch;
+        }
+        @media (max-width: 860px) { .tp-sheet-grid { grid-template-columns: 1fr; } }
+
+        .tp-panel {
+            background: #ffffff;
+            border: 1px solid var(--border-gold);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .tp-panel-head {
+            background: var(--bg-cream);
+            border-bottom: 1px solid var(--border-gold);
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 800;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .tp-form-row {
+            display: grid;
+            grid-template-columns: 118px minmax(0, 1fr);
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .tp-form-lbl { font-size: 11.5px; font-weight: 600; color: var(--text-secondary); }
+        .tp-form-inp {
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            padding: 5px 8px;
+            font-size: 12px;
             font-weight: 700;
-            padding: 3px 9px;
-            border-radius: 20px;
-            background: #f0fdf4;
-            color: #16a34a;
-            border: 1px solid #bbf7d0;
+            color: var(--text-main);
+            width: 100%;
+        }
+        .tp-form-inp.focus {
+            border-color: var(--brand-gold-border);
+            background: #fffdf5;
+        }
+        .tp-form-inp.ghost {
+            background: #fef9c3;
+            border-color: #eab308;
+            color: #713f12;
+        }
+        .tp-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11.5px;
+            background: #ffffff;
+        }
+        .tp-table th {
+            background: var(--bg-cream);
+            color: var(--text-main);
+            border-bottom: 1.5px solid var(--border-gold);
+            padding: 6px 8px;
+            text-align: left;
+            font-size: 10.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+        .tp-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #f3f4f6;
+            font-weight: 600;
+        }
+        .tp-3cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 12px;
+        }
+        @media (max-width: 640px) { .tp-3cards { grid-template-columns: 1fr; } }
+
+        /* Voucher Split (Left Form + Right Picker + Bottom Batch + Accept Bar) */
+        .tp-voucher-split {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+            gap: 14px;
+            align-items: stretch;
+        }
+        @media (max-width: 820px) { .tp-voucher-split { grid-template-columns: 1fr; } }
+
+        .tp-picker-item {
+            padding: 6px 10px;
+            border-bottom: 1px solid #f3f4f6;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11.5px;
+            font-weight: 600;
+        }
+        .tp-picker-item.active {
+            background: var(--brand-gold);
+            font-weight: 800;
+        }
+        .tp-accept-bar {
+            background: var(--bg-cream);
+            border: 1.5px solid var(--brand-gold-border);
+            border-radius: 5px;
+            padding: 7px 12px;
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         /* 3x2 Feature Grid */
@@ -712,9 +976,9 @@
             width: 38px;
             height: 38px;
             border-radius: 10px;
-            background: var(--brand-gold-soft);
-            color: var(--brand-gold-accent);
-            border: 1px solid var(--brand-gold-tint);
+            background: var(--bg-cream);
+            color: var(--brand-gold-text);
+            border: 1px solid var(--border-gold);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -724,7 +988,7 @@
         .include-item h4 {
             font-size: 16px;
             font-weight: 700;
-            color: var(--brand-gold-text);
+            color: var(--brand-gold-dark);
             margin-bottom: 6px;
         }
         .include-item p {
@@ -745,30 +1009,31 @@
 
         .slip-card {
             background: #ffffff;
-            color: #0f172a;
-            border-radius: 14px;
+            color: #1f2937;
+            border-radius: 12px;
             padding: 22px;
             font-family: monospace, sans-serif;
             font-size: 12px;
             position: relative;
-            border: 2px dashed #cbd5e1;
+            border: 2px dashed var(--border-gold-strong);
             box-shadow: var(--shadow-sm);
         }
         .slip-badge-tag {
             position: absolute;
             top: -11px;
             right: 18px;
-            background: #141414;
-            color: var(--brand-gold);
+            background: var(--brand-gold);
+            color: #1f2937;
+            border: 1px solid var(--brand-gold-border);
             padding: 3px 11px;
             border-radius: 20px;
             font-size: 10.5px;
-            font-weight: 700;
+            font-weight: 800;
             font-family: 'Inter', sans-serif;
         }
         .wa-box {
             background: #0b141a;
-            border-radius: 14px;
+            border-radius: 12px;
             padding: 20px;
             color: #e9edef;
             font-size: 13px;
@@ -784,16 +1049,9 @@
         }
 
         /* Clean FAQ */
-        .faq-wrap {
-            max-width: 780px;
-            margin: 0 auto;
-        }
-        .faq-item {
-            border-bottom: 1px solid var(--border-light);
-        }
-        .faq-item:first-child {
-            border-top: 1px solid var(--border-light);
-        }
+        .faq-wrap { max-width: 780px; margin: 0 auto; }
+        .faq-item { border-bottom: 1px solid var(--border-gold); }
+        .faq-item:first-child { border-top: 1px solid var(--border-gold); }
         .faq-question {
             padding: 20px 4px;
             font-size: 15px;
@@ -806,15 +1064,13 @@
             gap: 16px;
         }
         .faq-question span.arrow {
-            color: var(--brand-gold-accent);
+            color: var(--brand-gold-text);
             font-size: 22px;
             font-weight: 500;
             transition: transform 0.2s;
             line-height: 1;
         }
-        .faq-item.active .faq-question span.arrow {
-            transform: rotate(45deg);
-        }
+        .faq-item.active .faq-question span.arrow { transform: rotate(45deg); }
         .faq-answer {
             padding: 0 4px 18px;
             color: var(--text-secondary);
@@ -822,17 +1078,15 @@
             line-height: 1.6;
             display: none;
         }
-        .faq-item.active .faq-answer {
-            display: block;
-        }
+        .faq-item.active .faq-answer { display: block; }
 
         /* ====================================================================
-           4. SPOTLIGHT SUB-PAGES, MOCKUPS & STEP CARDS
+           4. SPOTLIGHT SUB-PAGES, PHONE PORTALS & STEP CARDS
         ==================================================================== */
         .spotlight-hero {
-            padding: 36px 0 26px;
-            border-bottom: 1px solid var(--border-light);
-            margin-bottom: 28px;
+            padding: 34px 0 24px;
+            border-bottom: 1.5px solid var(--border-gold);
+            margin-bottom: 26px;
         }
         .spotlight-top-bar {
             display: flex;
@@ -840,26 +1094,26 @@
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
-            margin-bottom: 18px;
+            margin-bottom: 16px;
         }
         .btn-outline-sm {
             background: #ffffff;
             color: var(--text-main);
-            border: 1px solid var(--border-card);
+            border: 1px solid var(--border-gold);
             padding: 7px 14px;
             border-radius: 999px;
             font-size: 12.5px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
             text-decoration: none;
             display: inline-flex;
             align-items: center;
             gap: 6px;
         }
-        .btn-outline-sm:hover { background: var(--bg-soft); }
+        .btn-outline-sm:hover { background: var(--bg-cream); }
 
         .spotlight-title {
-            font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+            font-size: clamp(1.7rem, 3.4vw, 2.45rem);
             font-weight: 800;
             letter-spacing: -0.025em;
             color: var(--text-main);
@@ -868,43 +1122,43 @@
         .spotlight-desc {
             font-size: 15px;
             color: var(--text-secondary);
-            max-width: 780px;
+            max-width: 800px;
         }
 
         .split-showcase {
             display: grid;
-            grid-template-columns: 1.02fr 1fr;
+            grid-template-columns: 1.05fr 1fr;
             gap: 26px;
             align-items: start;
-            margin-bottom: 36px;
+            margin-bottom: 34px;
         }
         @media (max-width: 880px) { .split-showcase { grid-template-columns: 1fr; } }
 
         .detail-card {
             background: #ffffff;
-            border: 1px solid var(--border-card);
+            border: 1.5px solid var(--border-gold);
             border-radius: var(--radius-card);
-            padding: 22px;
+            padding: 20px;
             box-shadow: var(--shadow-sm);
         }
         .detail-card h4 {
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 800;
-            color: var(--brand-gold-text);
+            color: var(--brand-gold-dark);
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
             display: flex;
             align-items: center;
             gap: 8px;
         }
 
-        .step-stack { display: flex; flex-direction: column; gap: 12px; }
+        .step-stack { display: flex; flex-direction: column; gap: 11px; }
         .step-row {
             background: var(--bg-soft);
-            border: 1px solid var(--border-light);
-            border-radius: 10px;
-            padding: 13px 14px;
+            border: 1px solid var(--border-gold);
+            border-radius: 9px;
+            padding: 12px 14px;
             display: flex;
             gap: 12px;
             align-items: flex-start;
@@ -913,7 +1167,9 @@
             min-width: 26px;
             height: 26px;
             border-radius: 50%;
-            color: #fff;
+            background: var(--brand-gold);
+            color: #1f2937;
+            border: 1px solid var(--brand-gold-border);
             font-size: 12px;
             font-weight: 800;
             display: flex;
@@ -924,7 +1180,7 @@
         .step-row strong { display: block; font-size: 13.5px; color: var(--text-main); margin-bottom: 3px; }
         .step-row span { display: block; font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; }
 
-        /* Phone & Express Mockups */
+        /* Phone Portal Mockups (Authentic Worker Apps) */
         .phone-frame {
             max-width: 390px;
             margin: 0 auto;
@@ -955,44 +1211,21 @@
         .loom-track { width: 100%; height: 7px; background: #dbeafe; border-radius: 99px; overflow: hidden; margin: 5px 0 3px; }
         .loom-fill { height: 100%; background: linear-gradient(90deg, #2563eb, #16a34a); border-radius: 99px; }
 
-        .shortcut-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-        .kbd-pill {
-            background: #ffffff; border: 1px solid #cbd5e1; border-radius: 7px;
-            padding: 4px 8px; font-size: 11px; font-weight: 800; color: #0f172a;
-        }
-        .kbd-pill.active { background: #0284c7; color: #ffffff; border-color: #0284c7; }
-        .express-input-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-            gap: 8px; background: #ffffff; border: 1.5px solid #cbd5e1;
-            border-radius: 10px; padding: 10px; margin-bottom: 10px;
-        }
-        .exp-box { border: 1px solid #cbd5e1; border-radius: 7px; padding: 6px 8px; background: #f8fafc; }
-        .exp-box.focus { border: 2px solid #2563eb; background: #eff6ff; }
-        .exp-box small { display: block; font-size: 9.5px; font-weight: 700; color: #64748b; }
-        .exp-box strong { display: block; font-size: 13px; font-weight: 900; color: #0f172a; margin-top: 1px; }
-
-        .mini-tbl {
-            width: 100%; border-collapse: collapse; background: #ffffff;
-            border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; font-size: 11px;
-        }
-        .mini-tbl th { background: #1e293b; color: #ffffff; padding: 6px 8px; text-align: left; }
-        .mini-tbl td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 600; }
-
         .mini-colors-tbl { width: 100%; border-collapse: collapse; background: #ffffff; font-size: 10.5px; margin-top: 6px; }
-        .mini-colors-tbl th { background: #d97706; color: #ffffff; padding: 4px; text-align: center; }
-        .mini-colors-tbl td { border: 1px solid #fde68a; padding: 4px; text-align: center; font-weight: 700; color: #0f172a; }
+        .mini-colors-tbl th { background: #701a75; color: #ffffff; padding: 4px; text-align: center; }
+        .mini-colors-tbl td { border: 1px solid #e9d5ff; padding: 4px; text-align: center; font-weight: 700; color: #0f172a; }
 
-        .feature-cards-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .feature-cards-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
         @media (max-width: 860px) { .feature-cards-3 { grid-template-columns: 1fr; } }
 
         /* ====================================================================
-           5. BOTTOM CTA + PATREON-STYLE BLACK FOOTER
+           5. BOTTOM CTA + BLACK FOOTER
         ==================================================================== */
         .bottom-cta {
             text-align: center;
-            padding: 70px 20px;
+            padding: 66px 20px;
             background: #ffffff;
-            border-top: 1px solid var(--border-light);
+            border-top: 1px solid var(--border-gold);
         }
         .bottom-cta h2 {
             font-size: clamp(1.7rem, 3.2vw, 2.3rem);
@@ -1070,7 +1303,7 @@
 <body>
 
     <!-- ========================================================================
-         1. PATREON-STYLE CLEAN TOP NAVBAR (GOLDEN THEME)
+         1. TOP NAVBAR ("Features" INSTEAD OF "Product")
     ======================================================================== -->
     <header class="top-nav">
         <div class="nav-inner">
@@ -1081,36 +1314,36 @@
                 </a>
 
                 <nav class="nav-menu" aria-label="Main Navigation">
-                    <div class="nav-item" id="menu-product">
-                        <button type="button" class="nav-trigger" onclick="toggleDropdown('menu-product')">
-                            Product <span class="nav-chevron">⌄</span>
+                    <div class="nav-item" id="menu-features">
+                        <button type="button" class="nav-trigger" onclick="toggleDropdown('menu-features')">
+                            Features <span class="nav-chevron">⌄</span>
                         </button>
                         <div class="nav-dropdown">
                             <button type="button" class="drop-link active" data-view="overview" onclick="switchView('overview')">
                                 <span class="drop-icon">🏠</span>
                                 <span class="drop-text">
-                                    <strong>Overview</strong>
-                                    <span>Poora Digital Karkhana ek nazar mein</span>
+                                    <strong>Overview &amp; Dashboard</strong>
+                                    <span>TallyPrime Gateway, Sheet &amp; Voucher</span>
                                 </span>
                             </button>
                             <button type="button" class="drop-link" data-view="express" onclick="switchView('express')">
                                 <span class="drop-icon">⚡</span>
                                 <span class="drop-text">
-                                    <strong>Express Counters (3 Modes)</strong>
-                                    <span>Kariger, Stock &amp; JobWork zero-mouse</span>
+                                    <strong>Express Counters (4 Modes)</strong>
+                                    <span>Kariger, Stock, JobWork &amp; Tani Express</span>
                                 </span>
                             </button>
                             <button type="button" class="drop-link" data-view="godam_stock" onclick="switchView('godam_stock')">
                                 <span class="drop-icon">🏭</span>
                                 <span class="drop-text">
-                                    <strong>Godam &amp; Stock</strong>
-                                    <span>Multi-Godam, Bana, Zari, 5-Stage Saree</span>
+                                    <strong>Stock Summary &amp; Godam</strong>
+                                    <span>Bana, Zari, Sancha, 5-Stage Saree Passbook</span>
                                 </span>
                             </button>
                             <button type="button" class="drop-link" data-view="jobwork_dukan" onclick="switchView('jobwork_dukan')">
                                 <span class="drop-icon">✂️</span>
                                 <span class="drop-text">
-                                    <strong>JobWork &amp; Dukan</strong>
+                                    <strong>JobWork &amp; Dukan Batch</strong>
                                     <span>Cutting, Embroidery, Calender &amp; Bills</span>
                                 </span>
                             </button>
@@ -1133,14 +1366,14 @@
                                 <span class="drop-icon">📜</span>
                                 <span class="drop-text">
                                     <strong>Tani &amp; Rangai Order</strong>
-                                    <span>Urdu Parchi &amp; Auto Sancha Dispatch</span>
+                                    <span>5-Stage Register &amp; Auto Sancha Dispatch</span>
                                 </span>
                             </button>
                             <button type="button" class="drop-link" data-view="kariger_portal" onclick="switchView('kariger_portal')">
                                 <span class="drop-icon">🧵</span>
                                 <span class="drop-text">
-                                    <strong>Kariger Mobile Portal</strong>
-                                    <span>4-Digit PIN Passbook + Web Push</span>
+                                    <strong>Kariger Khata &amp; Mobile Portal</strong>
+                                    <span>Tani Sheet + 4-Digit PIN Mobile App</span>
                                 </span>
                             </button>
                             <button type="button" class="drop-link" data-view="sancha_portal" onclick="switchView('sancha_portal')">
@@ -1205,13 +1438,12 @@
             </div>
         </div>
 
-        <!-- Mobile Menu Drawer -->
         <div class="mobile-drawer" id="mobileDrawer">
-            <div class="mobile-group-title">Product &amp; Modules</div>
+            <div class="mobile-group-title">Features &amp; Modules</div>
             <div class="mobile-links-grid">
                 <button type="button" class="mobile-link-btn active" data-view="overview" onclick="switchView('overview')">🏠 Overview</button>
-                <button type="button" class="mobile-link-btn" data-view="express" onclick="switchView('express')">⚡ Express Modes</button>
-                <button type="button" class="mobile-link-btn" data-view="godam_stock" onclick="switchView('godam_stock')">🏭 Godam &amp; Stock</button>
+                <button type="button" class="mobile-link-btn" data-view="express" onclick="switchView('express')">⚡ 4 Express Modes</button>
+                <button type="button" class="mobile-link-btn" data-view="godam_stock" onclick="switchView('godam_stock')">🏭 Stock &amp; Godam</button>
                 <button type="button" class="mobile-link-btn" data-view="jobwork_dukan" onclick="switchView('jobwork_dukan')">✂️ JobWork &amp; Dukan</button>
                 <button type="button" class="mobile-link-btn" data-view="closing_backup" onclick="switchView('closing_backup')">🔄 Closing &amp; Backup</button>
             </div>
@@ -1231,9 +1463,9 @@
     <main id="view-overview" class="view-page active">
         <section class="hero-section">
             <div class="container">
-                <span class="hero-eyebrow">🇮🇳 Saree Manufacturers Ka Apna Digital Karkhana</span>
+                <span class="hero-eyebrow">🇮🇳 TallyPrime White &amp; Gold • Saree Manufacturers Ka Digital Karkhana</span>
                 <h1 class="hero-title">Purani Diary Chhodo,<br>Apna Karkhana Digital Karo!</h1>
-                <p class="hero-subtitle">Tani Order se lekar Sancha, Rangai, Kariger Mobile Portal, 3 Zero-Mouse Express Counters, Multi-Godam, aur 1-Click Year Closing — sab kuch ek hi clean portal par.</p>
+                <p class="hero-subtitle">TallyPrime White &amp; Gold Gateway, Sketch-Aligned Kariger Tani Sheet, 4 Zero-Mouse Express Counters, Tani &amp; Rangai Order, Kariger Mobile Portal aur 1-Click Year Closing — sab kuch ek clean workspace me.</p>
 
                 <div class="hero-actions">
                     <a href="https://wa.me/917985402962?text=Hello%20Rehan%20bhai,%20mujhe%20Simplicity%20ERP%20ke%20bare%20me%20janna%20hai." target="_blank" class="btn-green-pill">
@@ -1251,23 +1483,23 @@
                             <h3 class="card-title">📜 Tani &amp; Rangai Order</h3>
                             <p class="card-desc">Parchi banate hi automatic Sancha aur phir Rangai wale ke mobile par chali jaati hai.</p>
                             <div class="card-highlight-stat">
-                                <strong>Auto Dispatch</strong>
+                                <strong>5-Stage Flow</strong>
                                 <span>Ready hone par hi Kariger sheet khulti hai</span>
                             </div>
                             <ul class="card-checklist">
-                                <li>Urdu / Hinglish Parchi Form</li>
-                                <li>4-Stage Live Status Tracker</li>
-                                <li>Smart Colors Auto-Learn</li>
+                                <li>Tani Express 2-Step Voucher</li>
+                                <li>Sancha ➔ Baithak ➔ Rangai ➔ Ready ➔ Loom</li>
+                                <li>Pichli Tani Ghost Auto-Fill</li>
                             </ul>
                             <button type="button" class="btn-soft-pill card-btn">Workflow Dekhein →</button>
                         </div>
                     </div>
 
                     <div class="patreon-card featured" onclick="switchView('kariger_portal')">
-                        <div class="card-rec-banner">Sabse Popular • Live Mobile Passbook</div>
+                        <div class="card-rec-banner">Sabse Popular • Sheet + Mobile Portal</div>
                         <div class="card-body">
-                            <h3 class="card-title">🧵 Kariger Portal</h3>
-                            <p class="card-desc">Kariger apne phone par 4-digit PIN se apna Loom Progress aur Baki Mazdoori 24×7 dekhta hai.</p>
+                            <h3 class="card-title">🧵 Kariger Sheet &amp; Portal</h3>
+                            <p class="card-desc">Owner ke liye fast Tani Khata Sheet aur Kariger ke mobile par 4-digit PIN live passbook.</p>
                             <div class="card-highlight-stat">
                                 <strong>PIN + Push</strong>
                                 <span>Har entry par turant phone alert</span>
@@ -1278,7 +1510,7 @@
                                 <li>1-Click WhatsApp Login Link</li>
                                 <li>100% Read-Only &amp; Secure</li>
                             </ul>
-                            <button type="button" class="btn-gold-pill card-btn">Mobile Visual Dekhein →</button>
+                            <button type="button" class="btn-gold-pill card-btn">Sheet &amp; Mobile Dekhein →</button>
                         </div>
                     </div>
 
@@ -1329,106 +1561,326 @@
                         <span>➔</span>
                         <span class="pipeline-pill">🎛️ 4. Calender (Finish)</span>
                         <span>➔</span>
-                        <span class="pipeline-pill" style="background:#f0fdf4; border-color:#86efac; color:#15803d;">🏪 5. Apni Dukan Challan</span>
+                        <span class="pipeline-pill" style="background:#fdf6e2; border-color:#d9a425; color:#92400e;">🏪 5. Apni Dukan Challan</span>
                         <span>|</span>
-                        <span class="pipeline-pill" style="background:#fffbeb; border-color:#fde68a; color:#b45309;">⚠️ Lott Register</span>
+                        <span class="pipeline-pill">⚠️ Lott Register</span>
                     </div>
                 </div>
 
                 <!-- Stats -->
                 <div class="stats-bar">
                     <div class="stat-box"><strong>3,000+</strong><span>Karigers Capacity</span></div>
-                    <div class="stat-box"><strong>3 Counters</strong><span>Zero-Mouse Express</span></div>
+                    <div class="stat-box"><strong>4 Counters</strong><span>Zero-Mouse Express</span></div>
                     <div class="stat-box"><strong>Multi-Godam</strong><span>Alag Stock &amp; Transfer</span></div>
                     <div class="stat-box"><strong>1-Click</strong><span>Year Closing &amp; Backup</span></div>
                 </div>
             </div>
         </section>
 
-        <!-- 12 LIVE ERP TILES -->
+        <!-- NEW TALLYPRIME WHITE & GOLD INTERACTIVE ERP SHOWCASE -->
         <section class="page-section">
             <div class="container">
                 <div class="section-head">
-                    <h2>Sabhi 12 Live Modules Ek Click Par</h2>
-                    <p>Kisi bhi tile par click karein — turant uska asli screen visual aur kaam karne ka tareeka khul jayega.</p>
+                    <h2>Naya TallyPrime White &amp; Gold ERP Workspace</h2>
+                    <p>Neeche tabs par click karke asli naye Dashboard, Gateway of Simplicity, Kariger Tani Sheet aur Batch Voucher ka live look dekhein.</p>
                 </div>
 
-                <div class="laptop-frame">
-                    <div class="laptop-bar">
-                        <div class="mac-dots">
-                            <span class="mac-dot" style="background:#ef4444;"></span>
-                            <span class="mac-dot" style="background:#f59e0b;"></span>
-                            <span class="mac-dot" style="background:#10b981;"></span>
-                            <strong style="margin-left:8px; font-size:12.5px;">⚡ Simplicity ERP • Main Factory Portal</strong>
+                <div class="preview-tabs-bar">
+                    <button type="button" class="preview-tab-btn active" onclick="switchErpPreview('dashboard', this)">1. Dashboard &amp; Gateway</button>
+                    <button type="button" class="preview-tab-btn" onclick="switchErpPreview('sheet', this)">2. Kariger Tani Khata Sheet</button>
+                    <button type="button" class="preview-tab-btn" onclick="switchErpPreview('voucher', this)">3. JobWork &amp; Dukan Batch Voucher</button>
+                </div>
+
+                <!-- PREVIEW TAB 1: DASHBOARD & GATEWAY OF SIMPLICITY -->
+                <div id="erp-prev-dashboard" class="preview-pane active">
+                    <div class="tp-app-frame">
+                        <!-- Slim White & Gold Navbar -->
+                        <div class="tp-slim-navbar">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="brand-mark" style="width:24px; height:24px; font-size:13px;">S</span>
+                                <div>
+                                    <strong style="font-size:13px; display:block; line-height:1.1;">Simplicity</strong>
+                                    <span style="font-size:10px; color:#6b7280;">by Farhan Jawed</span>
+                                </div>
+                            </div>
+                            <div class="tp-nav-chips">
+                                <span class="tp-nav-chip">K: Main Godown ▾</span>
+                                <span class="tp-nav-btn">+ Karkhana</span>
+                                <span class="tp-nav-chip">Y: 2026-2027 ▾</span>
+                                <span class="tp-nav-btn">+ Naya Saal</span>
+                                <span class="tp-nav-btn">Profile</span>
+                                <span class="tp-nav-btn gold">Logout</span>
+                            </div>
                         </div>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap; font-size:11px;">
-                            <span style="background:#27272a; padding:4px 10px; border-radius:99px;">🏭 Godam: Main Godown ▾</span>
-                            <span style="background:#27272a; padding:4px 10px; border-radius:99px;">📅 Session: 2026-2027 ▾</span>
-                            <span style="background:#064e3b; color:#6ee7b7; padding:4px 10px; border-radius:99px;">🟢 Cloud Synced</span>
+
+                        <div class="tp-body">
+                            <div class="tp-dash-grid">
+                                <!-- LEFT: WELCOME + CONTROLS + 2x2 GOLD CARDS -->
+                                <div>
+                                    <div class="tp-welcome-strip">
+                                        <div>
+                                            <span style="font-size:10px; color:#92400e; font-weight:700; display:block;">Multi-Unit Karkhana Management</span>
+                                            <strong style="font-size:14px;">Swagat hai, Farhan Jawed!</strong>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <strong style="font-size:11.5px; color:#b47d00; display:block;">2026-2027 Active</strong>
+                                            <span style="font-size:10.5px; color:#6b7280;">19-Nov-2026</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="tp-controls-bar">
+                                        <div class="tp-tab-strip">
+                                            <span class="tp-tab-pill active">Sabhi Karkhane</span>
+                                            <span class="tp-tab-pill">Main Godown</span>
+                                            <span class="tp-tab-pill">Bahadurganj</span>
+                                        </div>
+                                        <div class="tp-tab-strip">
+                                            <span class="tp-tab-pill" style="background:#fdf6e2; color:#92400e;">Cloud Synced</span>
+                                            <span class="tp-tab-pill">Backup</span>
+                                            <span class="tp-tab-pill">Dekhein</span>
+                                            <span class="tp-tab-pill">Restore</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="tp-2x2-cards">
+                                        <div class="tp-gold-card">
+                                            <div class="tp-gold-card-head"><strong>Live Stock</strong><span>Kg / Pcs</span></div>
+                                            <div class="tp-bars-row">
+                                                <div class="tp-bar-col"><small>1,547</small><div class="tp-bar-fill" style="height:54px;"></div><span>Bana</span></div>
+                                                <div class="tp-bar-col"><small>412</small><div class="tp-bar-fill" style="height:36px;"></div><span>Zari</span></div>
+                                                <div class="tp-bar-col"><small>680</small><div class="tp-bar-fill" style="height:44px;"></div><span>Tani</span></div>
+                                                <div class="tp-bar-col"><small>290</small><div class="tp-bar-fill" style="height:28px;"></div><span>Chukka</span></div>
+                                                <div class="tp-bar-col"><small>840 Pc</small><div class="tp-bar-fill" style="height:48px;"></div><span>Saree</span></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="tp-gold-card" onclick="switchView('tani_order')" style="cursor:pointer;">
+                                            <div class="tp-gold-card-head"><strong>Tani Order</strong><span>18 Parchi</span></div>
+                                            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:6px;">
+                                                <div style="width:68px; height:68px; border-radius:50%; border:8px solid #fdf6e2; border-top-color:#f2b71d; border-right-color:#f2b71d; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                                                    <strong style="font-size:13px;">61%</strong>
+                                                    <span style="font-size:9px; color:#6b7280;">Ready</span>
+                                                </div>
+                                                <div style="flex:1; font-size:11px; line-height:1.8;">
+                                                    <div style="display:flex; justify-content:space-between;"><span>Ready</span><strong style="color:#b47d00;">11</strong></div>
+                                                    <div style="display:flex; justify-content:space-between;"><span>Rangai</span><strong>4</strong></div>
+                                                    <div style="display:flex; justify-content:space-between;"><span>Sancha</span><strong>3</strong></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="tp-gold-card" onclick="switchView('kariger_portal')" style="cursor:pointer;">
+                                            <div class="tp-gold-card-head"><strong>Kariger Master</strong><span>Active Staff</span></div>
+                                            <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                                                <div style="width:36px; height:36px; border-radius:8px; background:#fdf6e2; border:1px solid #e5d5a7; display:flex; align-items:center; justify-content:center; font-size:17px;">🧵</div>
+                                                <div><strong style="font-size:20px; color:#b47d00; display:block; line-height:1;">142</strong><span style="font-size:10.5px; color:#6b7280;">Kul Kariger</span></div>
+                                            </div>
+                                            <div style="font-size:11px; display:flex; justify-content:space-between; color:#92400e; font-weight:700;">
+                                                <span>Loom Directory</span><span>Kholein →</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="tp-gold-card" onclick="switchView('kariger_portal')" style="cursor:pointer;">
+                                            <div class="tp-gold-card-head"><strong>Payments</strong><span>74% Paid</span></div>
+                                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+                                                <span style="color:#6b7280;">Baki Dena</span><strong style="color:#b47d00; font-size:13px;">₹ 48,200</strong>
+                                            </div>
+                                            <div style="height:7px; background:#fdf6e2; border:1px solid #e5d5a7; border-radius:99px; overflow:hidden; margin-bottom:8px;">
+                                                <div style="width:74%; height:100%; background:#f2b71d;"></div>
+                                            </div>
+                                            <div style="font-size:10.5px; display:flex; justify-content:space-between; color:#4b5563;">
+                                                <span>Kul: ₹1,85,000</span><span>Diya: ₹1,36,800</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- RIGHT: GATEWAY OF SIMPLICITY -->
+                                <aside class="tp-gateway-box">
+                                    <div class="tp-gw-header">
+                                        <span>Gateway of Simplicity</span>
+                                        <span style="font-size:10.5px; color:#92400e;">↑↓ + Enter</span>
+                                    </div>
+                                    <div class="tp-gw-sec">Masters</div>
+                                    <button type="button" class="tp-gw-item active" onclick="switchView('kariger_portal')"><span><span class="tp-gw-key">C</span>reate (New Profile)</span><span class="tp-gw-val">Kariger / JobWork</span></button>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('kariger_portal')"><span><span class="tp-gw-key">A</span>lter (Edit Profile)</span><span class="tp-gw-val">Search &amp; Edit</span></button>
+                                    <div class="tp-gw-div"></div>
+
+                                    <div class="tp-gw-sec">Express Counters</div>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('express')"><span><span class="tp-gw-key">K</span>ariger Express</span><span class="tp-gw-val">Baithak Mode</span></button>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('express')"><span><span class="tp-gw-key">S</span>tock Express</span><span class="tp-gw-val">Inward Mode</span></button>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('express')"><span><span class="tp-gw-key">J</span>obWork Express</span><span class="tp-gw-val">Batch Mode</span></button>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('express')"><span><span class="tp-gw-key">T</span>ani Express</span><span class="tp-gw-val">Order Mode</span></button>
+                                    <div class="tp-gw-div"></div>
+
+                                    <div class="tp-gw-sec">Masters &amp; Stock</div>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('kariger_portal')"><span>Kariger <span class="tp-gw-key">M</span>aster</span><span class="tp-gw-val">Total: 142</span></button>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('kariger_portal')"><span><span class="tp-gw-key">I</span>nfo Ledger</span><span class="tp-gw-val">Total: 142</span></button>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('godam_stock')"><span>Stock S<span class="tp-gw-key">u</span>mmary</span><span class="tp-gw-val">4 Groups</span></button>
+                                    <div class="tp-gw-div"></div>
+
+                                    <div class="tp-gw-sec">Accounts &amp; Orders</div>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('kariger_portal')"><span><span class="tp-gw-key">P</span>ayments</span><span class="tp-gw-val">Baki: ₹ 48,200</span></button>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('jobwork_dukan')"><span>Job <span class="tp-gw-key">W</span>ork Hub</span><span class="tp-gw-val">Workers: 26</span></button>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('closing_backup')"><span>Rozana <span class="tp-gw-key">D</span>ay-Book</span><span class="tp-gw-val">Daily Register</span></button>
+                                    <button type="button" class="tp-gw-item" onclick="switchView('tani_order')"><span>Tani <span class="tp-gw-key">O</span>rder &amp; Rangai</span><span class="tp-gw-val">18 Parchi</span></button>
+                                </aside>
+                            </div>
                         </div>
                     </div>
+                </div>
 
-                    <div class="laptop-body">
-                        <div class="erp-tiles-grid">
-                            <div class="erp-tile" style="border-top-color:#14b8a6;" onclick="switchView('kariger_portal')">
-                                <span class="icon-box">🧵</span>
-                                <span class="tile-title">1. Kariger Master &amp; Tani</span>
-                                <span class="tile-badge">Sheets + Portal PIN</span>
+                <!-- PREVIEW TAB 2: KARIGER TANI KHATA SHEET (SKETCH LAYOUT) -->
+                <div id="erp-prev-sheet" class="preview-pane">
+                    <div class="tp-app-frame">
+                        <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="tp-nav-btn">&larr; Kariger List</span>
+                                <strong style="font-size:13.5px;">JAWED — Tani 1 (Katan Buti)</strong>
                             </div>
-                            <div class="erp-tile" style="border-top-color:#f59e0b;" onclick="switchView('tani_order')">
-                                <span class="icon-box">📜</span>
-                                <span class="tile-title">2. Tani &amp; Rangai Order</span>
-                                <span class="tile-badge" style="background:#fef3c7; color:#b45309; border-color:#fde68a;">Auto Sancha ➔ Rangai</span>
+                            <div class="tp-nav-chips">
+                                <span class="tp-nav-btn">[F9] Setup</span>
+                                <span class="tp-nav-btn">WhatsApp</span>
+                                <span class="tp-nav-btn">Print [Ctrl+P]</span>
+                                <span class="tp-nav-btn gold">+ Nayi Tani</span>
                             </div>
-                            <div class="erp-tile" style="border-top-color:#10b981;" onclick="switchView('godam_stock')">
-                                <span class="icon-box">🧶</span>
-                                <span class="tile-title">3. Bana Stock</span>
-                                <span class="tile-badge">Less TP Auto Cut</span>
+                        </div>
+                        <div class="tp-body">
+                            <div style="background:#fdfcf7; border:1px solid #e5d5a7; border-radius:5px; padding:6px 12px; margin-bottom:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:11.5px;">
+                                <span><strong>Sheet:</strong> Tani 1 (72 Pcs Target)</span>
+                                <span><strong>Pichla:</strong> Bana: 1.20 Kg | Zari: 0.15 Kg | Bani: ₹ 850</span>
+                                <span style="color:#b47d00; font-weight:800;">Bana: Karishma 2/120 | Zari: Silver 200g</span>
                             </div>
-                            <div class="erp-tile" style="border-top-color:#f97316;" onclick="switchView('godam_stock')">
-                                <span class="icon-box">✨</span>
-                                <span class="tile-title">4. Zari Stock</span>
-                                <span class="tile-badge" style="background:#ffedd5; color:#c2410c; border-color:#fed7aa;">Topi Cut • 0.000 Kg</span>
+
+                            <div class="tp-sheet-grid">
+                                <!-- LEFT FULL-HEIGHT ROZANA LINE ENTRY -->
+                                <div class="tp-panel">
+                                    <div class="tp-panel-head"><span>Rozana Line Entry</span><span style="color:#b47d00;">[Enter] Next</span></div>
+                                    <div style="padding:12px;">
+                                        <div class="tp-form-row"><span class="tp-form-lbl">Date :</span><span class="tp-form-inp">19-Nov-2026</span></div>
+                                        <div class="tp-form-row"><span class="tp-form-lbl">Bana (Kg) :</span><span class="tp-form-inp focus">4.25</span></div>
+                                        <div class="tp-form-row"><span class="tp-form-lbl">Less TP :</span><span class="tp-form-inp">0.25</span></div>
+                                        <div class="tp-form-row"><span class="tp-form-lbl">Zari (Kg) :</span><span class="tp-form-inp">0.62</span></div>
+                                        <div class="tp-form-row"><span class="tp-form-lbl">Topi Cut :</span><span class="tp-form-inp">0.12</span></div>
+                                        <div class="tp-form-row"><span class="tp-form-lbl">Saree (Pcs) :</span><span class="tp-form-inp">4</span></div>
+                                        <div class="tp-form-row"><span class="tp-form-lbl">Lott (Pcs) :</span><span class="tp-form-inp">0</span></div>
+                                        <div class="tp-form-row"><span class="tp-form-lbl">Paid (₹) :</span><span class="tp-form-inp">2,000</span></div>
+                                        <div class="tp-accept-bar" style="margin-top:8px;">
+                                            <strong style="font-size:11.5px;">Accept? Save Entry</strong>
+                                            <span class="tp-nav-btn gold">Yes [Enter]</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- RIGHT TOP REGISTER + RIGHT BOTTOM 3 EQUAL CARDS -->
+                                <div>
+                                    <div class="tp-panel">
+                                        <div class="tp-panel-head"><span>Tani Khata Register</span><span style="color:#6b7280;">28 / 72 Pcs Jama</span></div>
+                                        <table class="tp-table">
+                                            <thead>
+                                                <tr><th>Date</th><th>Net Bana</th><th>Net Zari</th><th>Saree</th><th>Lott</th><th>Paid</th></tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr style="background:#fdf6e2;"><td>19-Nov</td><td>4.00</td><td>0.50</td><td><strong>4</strong></td><td>0</td><td>₹ 2,000</td></tr>
+                                                <tr><td>15-Nov</td><td>5.10</td><td>0.65</td><td><strong>6</strong></td><td>0</td><td>₹ 1,500</td></tr>
+                                                <tr><td>11-Nov</td><td>4.80</td><td>0.55</td><td><strong>5</strong></td><td>1</td><td>₹ 1,200</td></tr>
+                                                <tr><td>07-Nov</td><td>6.00</td><td>0.80</td><td><strong>7</strong></td><td>0</td><td>₹ 2,000</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div class="tp-3cards">
+                                        <div class="tp-gold-card">
+                                            <div class="tp-gold-card-head"><strong>Mazdoori</strong><span>₹ 240/Pc</span></div>
+                                            <div style="font-size:11px; line-height:1.65;">
+                                                <div style="display:flex; justify-content:space-between;"><span>Net Saree:</span><strong>27 Pc</strong></div>
+                                                <div style="display:flex; justify-content:space-between;"><span>Gross + Last:</span><strong>₹ 7,330</strong></div>
+                                                <div style="display:flex; justify-content:space-between; color:#b47d00; font-weight:800; border-top:1px solid #e5d5a7; padding-top:3px;"><span>Baki:</span><span>₹ 630</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="tp-gold-card">
+                                            <div class="tp-gold-card-head"><strong>Bana Hisab</strong><span>Kg</span></div>
+                                            <div style="font-size:11px; line-height:1.65;">
+                                                <div style="display:flex; justify-content:space-between;"><span>Diya + Last:</span><strong>21.10</strong></div>
+                                                <div style="display:flex; justify-content:space-between;"><span>Khapat:</span><strong>17.80</strong></div>
+                                                <div style="display:flex; justify-content:space-between; color:#b47d00; font-weight:800; border-top:1px solid #e5d5a7; padding-top:3px;"><span>Bacha:</span><span>3.30 Kg</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="tp-gold-card">
+                                            <div class="tp-gold-card-head"><strong>Zari Hisab</strong><span>Kg</span></div>
+                                            <div style="font-size:11px; line-height:1.65;">
+                                                <div style="display:flex; justify-content:space-between;"><span>Diya + Last:</span><strong>2.65</strong></div>
+                                                <div style="display:flex; justify-content:space-between;"><span>Khapat:</span><strong>2.10</strong></div>
+                                                <div style="display:flex; justify-content:space-between; color:#b47d00; font-weight:800; border-top:1px solid #e5d5a7; padding-top:3px;"><span>Bachi:</span><span>0.55 Kg</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="erp-tile" style="border-top-color:#2563eb;" onclick="switchView('godam_stock')">
-                                <span class="icon-box">🥻</span>
-                                <span class="tile-title">5. Saree 5-Stage</span>
-                                <span class="tile-badge" style="background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe;">Passbook + Lott</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PREVIEW TAB 3: JOBWORK & DUKAN BATCH VOUCHER -->
+                <div id="erp-prev-voucher" class="preview-pane">
+                    <div class="tp-app-frame">
+                        <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="tp-nav-btn">&larr; Workers List</span>
+                                <strong style="font-size:13.5px;">WAHAB (Embroidery • Batch Voucher)</strong>
                             </div>
-                            <div class="erp-tile" style="border-top-color:#8b5cf6;" onclick="switchView('kariger_portal')">
-                                <span class="icon-box">💳</span>
-                                <span class="tile-title">6. Payments &amp; Rokad</span>
-                                <span class="tile-badge" style="background:#fdf2f8; color:#be185d; border-color:#fbcfe8;">Quick Pay + WhatsApp</span>
+                            <div class="tp-nav-chips">
+                                <span class="tp-nav-btn">[F5] Gayi/Aayi</span>
+                                <span class="tp-nav-btn">[F6] Source</span>
+                                <span class="tp-nav-btn gold">Save &amp; A6 Challan [Ctrl+&crarr;]</span>
                             </div>
-                            <div class="erp-tile" style="border-top-color:#0284c7;" onclick="switchView('godam_stock')">
-                                <span class="icon-box">⚙️</span>
-                                <span class="tile-title">7. Sancha (Tani &amp; Chukka)</span>
-                                <span class="tile-badge" style="background:#ecfeff; color:#0e7490; border-color:#a5f3fc;">Godam-Wise Tracking</span>
+                        </div>
+                        <div class="tp-body">
+                            <div class="tp-voucher-split">
+                                <!-- LEFT: 1 FIELD PER ROW -->
+                                <div>
+                                    <div class="tp-form-row"><span class="tp-form-lbl">Len-Den [F5] :</span><span class="tp-form-inp">Saree Gayi (Bheja)</span></div>
+                                    <div class="tp-form-row"><span class="tp-form-lbl">Stock Source [F6] :</span><span class="tp-form-inp">Cutting Stock</span></div>
+                                    <div class="tp-form-row"><span class="tp-form-lbl">Date :</span><span class="tp-form-inp">19-Nov-2026</span></div>
+                                    <div class="tp-form-row"><span class="tp-form-lbl">Maker (Bunne Wala) :</span><span class="tp-form-inp focus">ASLAM</span></div>
+                                    <div class="tp-form-row">
+                                        <span class="tp-form-lbl">Naap &amp; Qty (Pcs) :</span>
+                                        <div style="display:flex; gap:6px;">
+                                            <span class="tp-form-inp" style="width:72px; text-align:right;">3.60</span>
+                                            <span class="tp-form-inp focus" style="flex:1; text-align:right;">10</span>
+                                            <span class="tp-nav-btn gold">+ Jodein</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- RIGHT: LIVE MAKERS STOCK PICKER -->
+                                <div class="tp-panel">
+                                    <div class="tp-panel-head"><span>List of Makers (CUTTING Stock)</span><span style="color:#6b7280;">&uarr;&darr; + Enter</span></div>
+                                    <div class="tp-picker-item active"><span>ASLAM</span><span>SATAN SILK (28 Pcs)</span></div>
+                                    <div class="tp-picker-item"><span>JAWED</span><span>KATAN BUTI (42 Pcs)</span></div>
+                                    <div class="tp-picker-item"><span>FAROOQ</span><span>GEORGETTE (19 Pcs)</span></div>
+                                    <div class="tp-picker-item"><span>SHAHID</span><span>BANARASI JAAL (14 Pcs)</span></div>
+                                </div>
                             </div>
-                            <div class="erp-tile" style="border-top-color:#0d9488;" onclick="switchView('jobwork_dukan')">
-                                <span class="icon-box">✂️</span>
-                                <span class="tile-title">8. JobWork &amp; Dukan</span>
-                                <span class="tile-badge" style="background:#ccfbf1; color:#0f766e;">Cut/Emb/Cal + Bills</span>
+
+                            <div class="tp-panel" style="margin-top:12px;">
+                                <div class="tp-panel-head"><span>Gatthi / Batch List</span><span style="color:#b47d00;">2 Items &bull; Total: 25 Pcs</span></div>
+                                <table class="tp-table">
+                                    <thead><tr><th>#</th><th>Maker (Bunne Wala)</th><th>Saree Design</th><th style="text-align:center;">Naap</th><th style="text-align:right;">Qty (Pcs)</th></tr></thead>
+                                    <tbody>
+                                        <tr><td>1</td><td><strong>ASLAM</strong></td><td>SATAN SILK</td><td style="text-align:center; color:#b47d00;">3.60</td><td style="text-align:right;"><strong>10 Pcs</strong></td></tr>
+                                        <tr><td>2</td><td><strong>JAWED</strong></td><td>KATAN BUTI</td><td style="text-align:center; color:#b47d00;">3.60</td><td style="text-align:right;"><strong>15 Pcs</strong></td></tr>
+                                    </tbody>
+                                </table>
                             </div>
-                            <div class="erp-tile" style="border-top-color:#ef4444; background:#fff5f5;" onclick="switchView('express')">
-                                <span class="icon-box">⚡</span>
-                                <span class="tile-title" style="color:#b91c1c;">9. Kariger Express</span>
-                                <span class="tile-badge" style="background:#fee2e2; color:#b91c1c; border-color:#fca5a5;">⚡ Baithak Counter</span>
-                            </div>
-                            <div class="erp-tile" style="border-top-color:#10b981; background:#f0fdf4;" onclick="switchView('express')">
-                                <span class="icon-box">⚡</span>
-                                <span class="tile-title" style="color:#047857;">10. Stock Express</span>
-                                <span class="tile-badge" style="background:#d1fae5; color:#047857; border-color:#86efac;">[F1/F2/F3] Inward</span>
-                            </div>
-                            <div class="erp-tile" style="border-top-color:#0284c7; background:#f0f9ff;" onclick="switchView('express')">
-                                <span class="icon-box">⚡</span>
-                                <span class="tile-title" style="color:#0369a1;">11. JobWork Express</span>
-                                <span class="tile-badge" style="background:#e0f2fe; color:#0284c7; border-color:#bae6fd;">[F1-F6] Counter</span>
-                            </div>
-                            <div class="erp-tile" style="border-top-color:#1e3a8a; background:#f8fafc;" onclick="switchView('closing_backup')">
-                                <span class="icon-box">🔄</span>
-                                <span class="tile-title" style="color:#1e3a8a;">12. Year Close &amp; Backup</span>
-                                <span class="tile-badge" style="background:#e0e7ff; color:#1e3a8a; border-color:#c7d2fe;">Preview + DayBook</span>
+
+                            <div class="tp-accept-bar">
+                                <strong style="font-size:12.5px;">Accept? (Empty Maker + Enter) Batch Save &amp; A6 Print Karein?</strong>
+                                <div style="display:flex; gap:8px;">
+                                    <span class="tp-nav-btn gold">Save &amp; A6 Challan [P]</span>
+                                    <span class="tp-nav-btn">Only Save [Y]</span>
+                                    <span class="tp-nav-btn">No [Esc]</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1452,7 +1904,7 @@
                             <p style="font-size:11px; margin-top:2px;">KARKHANA JOB WORK CHALLAN</p>
                         </div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span>Tarikh: 16-Nov-2026</span><span>No: #JWB-4921</span>
+                            <span>Tarikh: 19-Nov-2026</span><span>No: #JWB-4921</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                             <span>Worker: WAHAB (Embroidery)</span><span>Godam: Main</span>
@@ -1465,7 +1917,7 @@
                             <tr><td>ASLAM</td><td>SATAN SILK</td><td style="text-align:right;">10 Pcs</td></tr>
                             <tr><td>JAWED</td><td>KATAN BUTI</td><td style="text-align:right;">15 Pcs</td></tr>
                         </table>
-                        <div style="background:#f1f5f9; border:1.5px solid #000; padding:7px; text-align:center; font-size:13.5px; font-weight:900;">
+                        <div style="background:#fdf6e2; border:1.5px solid #000; padding:7px; text-align:center; font-size:13.5px; font-weight:900;">
                             KUL SAREE: 25 Pcs (OUT)
                         </div>
                     </div>
@@ -1481,7 +1933,7 @@
                         <div class="wa-bubble">🧾 *SIMPLICITY ERP • HISAB PARCHI* 🧾
 ━━━━━━━━━━━━━━━━━━━━━
 👤 *Kariger:* JAWED (Tani 1)
-📅 *Tarikh:* 16-Nov-2026
+📅 *Tarikh:* 19-Nov-2026
 ━━━━━━━━━━━━━━━━━━━━━
 🥻 *Saree Jama:* 4 Pcs (Katan Buti)
 🧶 *Bana Diya:* 4.00 Kg (Less TP Cut)
@@ -1532,8 +1984,8 @@
                     </div>
                     <div class="include-item">
                         <div class="inc-icon">⚡</div>
-                        <h4>Zero-Mouse Speed</h4>
-                        <p>Baithak aur mandi ke rush mein sirf Enter aur F1-F6 dabakar fast billing, stock update aur A6 thermal parchi print nikaalein.</p>
+                        <h4>4 Zero-Mouse Express Counters</h4>
+                        <p>Kariger, Stock, JobWork aur Tani Express — sirf Enter aur F1-F6 dabakar fast billing, stock update aur A6 thermal parchi print nikaalein.</p>
                     </div>
                 </div>
             </div>
@@ -1564,13 +2016,13 @@
                         <div class="faq-question" onclick="toggleFaq(this)">
                             <span>3. Saal badalne par purane hisab ka kya hota hai?</span><span class="arrow">+</span>
                         </div>
-                        <div class="faq-answer">1-Click Year Closing se saare Karigers ka pichla Bana/Zari/Bani aur saare Godown ka bacha stock automatic naye saal (`2027-2028`) me chala jaata hai, aur purana saal dropdown me safe rehta hai.</div>
+                        <div class="faq-answer">1-Click Year Closing se saare Karigers ka pichla Bana/Zari/Bani aur saare Godown ka bacha stock automatic naye saal (2027-2028) me chala jaata hai, aur purana saal dropdown me safe rehta hai.</div>
                     </div>
                     <div class="faq-item">
                         <div class="faq-question" onclick="toggleFaq(this)">
                             <span>4. Kya munshi ko Tally seekhna padega?</span><span class="arrow">+</span>
                         </div>
-                        <div class="faq-answer">Nahi! Express Counters mein sirf Enter dabate jao aur agla box focus hota jaata hai — 15 minute me koi bhi munshi fast entry shuru kar deta hai.</div>
+                        <div class="faq-answer">Nahi! Poore software me Right-Side Live Picker aur 1-line-1-field Express Counters hain — sirf Enter dabate jao aur 15 minute me koi bhi munshi fast entry shuru kar deta hai.</div>
                     </div>
                 </div>
             </div>
@@ -1578,7 +2030,7 @@
     </main>
 
     <!-- ========================================================================
-         VIEW 2: TANI & RANGAI ORDER
+         VIEW 2: TANI & RANGAI ORDER (WHITE & GOLD 5-STAGE VISUAL)
     ======================================================================== -->
     <section id="view-tani_order" class="view-page">
         <div class="container">
@@ -1588,50 +2040,46 @@
                     <button type="button" class="btn-outline-sm" onclick="switchView('kariger_portal')">Next: Kariger Portal →</button>
                 </div>
                 <span class="hero-eyebrow">📜 System 1 • Auto Dispatch &amp; Gatekeeper</span>
-                <h2 class="spotlight-title">Tani &amp; Rangai Order System</h2>
-                <p class="spotlight-desc">Ek baar Urdu/Hinglish Tani Parchi banayein — uske baad Sancha, Rangai, Live Tracking, aur Kariger Loom Lock sab automatic chalta hai.</p>
+                <h2 class="spotlight-title">Tani &amp; Rangai Order (5-Stage Register)</h2>
+                <p class="spotlight-desc">Tani Express se 2-step Urdu/Hinglish Tani Parchi banayein — uske baad Sancha, Baithak, Rangai, Ready aur Loom Par tracking sab automatic chalta hai.</p>
             </div>
 
             <div class="split-showcase">
-                <div class="laptop-frame">
-                    <div class="laptop-bar" style="background:#78350f;">
-                        <strong>📜 Nayi Tani Order Parchi (Live Form Visual)</strong>
-                        <span style="background:#fef3c7; color:#92400e; padding:2px 9px; border-radius:99px; font-weight:900;">Parchi #367</span>
+                <div class="tp-app-frame">
+                    <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                        <strong>Tani Order &amp; Rangai Register</strong>
+                        <span class="tp-nav-btn gold">+ Nayi Tani Parchi [Alt+N]</span>
                     </div>
-                    <div class="laptop-body" style="background:#fffbeb;">
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:9px;">
-                            <div class="exp-box"><small>سانچہ (Sancha)</small><strong>AZHAR</strong></div>
-                            <div class="exp-box"><small>کاریگر (Kariger)</small><strong>JAWED (Alaipura)</strong></div>
-                            <div class="exp-box"><small>میٹر / عدد (Target)</small><strong>420 Mtr • 72 Saree</strong></div>
-                            <div class="exp-box"><small>رنگی (Rangai Wala)</small><strong>IRFAN</strong></div>
-                            <div class="exp-box"><small>پائی / بارڈر</small><strong>100 Paai • Zari Buti</strong></div>
-                            <div class="exp-box"><small>بانا کوالٹی</small><strong>Katan Silk 20/22</strong></div>
+                    <div class="tp-body">
+                        <div class="tp-tab-strip" style="margin-bottom:10px;">
+                            <span class="tp-tab-pill">1. Sancha Par (3)</span>
+                            <span class="tp-tab-pill">2. Baithak (2)</span>
+                            <span class="tp-tab-pill">3. Rangai Par (4)</span>
+                            <span class="tp-tab-pill active">4. Ready (5)</span>
+                            <span class="tp-tab-pill">5. Loom Par (12)</span>
                         </div>
 
-                        <table class="mini-colors-tbl">
-                            <thead><tr><th>#</th><th>ساڑی (Saree)</th><th>بارڈر (Border)</th><th>بانا (Bana)</th></tr></thead>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+                            <div class="tp-form-row" style="margin:0;"><span class="tp-form-lbl">Parchi # :</span><span class="tp-form-inp">#367</span></div>
+                            <div class="tp-form-row" style="margin:0;"><span class="tp-form-lbl">Sancha :</span><span class="tp-form-inp">AZHAR</span></div>
+                            <div class="tp-form-row" style="margin:0;"><span class="tp-form-lbl">Kariger :</span><span class="tp-form-inp focus">JAWED</span></div>
+                            <div class="tp-form-row" style="margin:0;"><span class="tp-form-lbl">Rangi Wala :</span><span class="tp-form-inp">IRFAN</span></div>
+                        </div>
+
+                        <div style="font-size:10.5px; font-weight:800; color:#92400e; margin-bottom:4px;">8-COLORS CHART (HALKA YELLOW = PICHLI TANI GHOST AUTO-FILL):</div>
+                        <table class="tp-table">
+                            <thead><tr><th>#</th><th>Saree</th><th>Border</th><th>Bana</th></tr></thead>
                             <tbody>
-                                <tr><td>1</td><td>Rani</td><td>Golden</td><td>Rani</td></tr>
-                                <tr><td>2</td><td>Lal</td><td>Copper</td><td>Lal</td></tr>
-                                <tr><td>3</td><td>Mehendi</td><td>Gold</td><td>Mehendi</td></tr>
-                                <tr><td>4</td><td>Navy Blue</td><td>Silver</td><td>Navy Blue</td></tr>
+                                <tr><td>1</td><td><span class="tp-form-inp ghost" style="display:block; padding:3px 6px;">Rani</span></td><td>Golden</td><td>Rani</td></tr>
+                                <tr><td>2</td><td><span class="tp-form-inp ghost" style="display:block; padding:3px 6px;">Lal</span></td><td>Copper</td><td>Lal</td></tr>
+                                <tr><td>3</td><td><span class="tp-form-inp ghost" style="display:block; padding:3px 6px;">Mehendi</span></td><td>Gold</td><td>Mehendi</td></tr>
+                                <tr><td>4</td><td><span class="tp-form-inp focus" style="display:block; padding:3px 6px;">Navy Blue</span></td><td>Silver</td><td>Navy Blue</td></tr>
                             </tbody>
                         </table>
 
-                        <div style="margin-top:9px; background:#ffffff; border:1px solid #f59e0b; border-radius:8px; padding:8px; font-size:11px; font-weight:800; color:#92400e; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;">
-                            <span>☑ آنچل بلاؤز کنٹراس</span>
-                            <span>☐ صرف بارڈر</span>
-                            <span>🖨️ Urdu A6 Print Ready</span>
-                        </div>
-
-                        <div style="margin-top:10px; background:#0f172a; color:#fff; border-radius:10px; padding:9px;">
-                            <div style="font-size:10px; color:#fbbf24; font-weight:800; margin-bottom:6px;">LIVE ORDER TRACKING BAR (MAIN APP ME):</div>
-                            <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:4px; text-align:center; font-size:10px; font-weight:800;">
-                                <div style="background:#1e293b; padding:5px 3px; border-radius:6px; color:#fde68a;">1. ⏳ Pending</div>
-                                <div style="background:#1d4ed8; padding:5px 3px; border-radius:6px;">2. ⚙️ Sancha</div>
-                                <div style="background:#a21caf; padding:5px 3px; border-radius:6px;">3. 🎨 Rangai</div>
-                                <div style="background:#15803d; padding:5px 3px; border-radius:6px;">4. 🟢 Ready</div>
-                            </div>
+                        <div class="tp-accept-bar">
+                            <span style="font-size:11.5px; font-weight:700;">Urdu A6 Print &amp; WhatsApp Ready</span>
+                            <span class="tp-nav-btn gold">Save &amp; Print Parchi</span>
                         </div>
                     </div>
                 </div>
@@ -1640,31 +2088,31 @@
                     <h4>⚡ Yeh Kaise Kaam Karta Hai?</h4>
                     <div class="step-stack">
                         <div class="step-row">
-                            <span class="step-dot" style="background:#d97706;">1</span>
+                            <span class="step-dot">1</span>
                             <div>
                                 <strong>Parchi Save = Seedha Sancha Phone Par Alert</strong>
-                                <span>Jaise hi aap Tani Order save karte hain, woh turant us Sancha wale ke mobile app me <b>🔔 New Request</b> ban kar pahunch jaati hai + Push Notification bajta hai.</span>
+                                <span>Jaise hi aap Tani Order save karte hain, woh turant us Sancha wale ke mobile app me <b>New Request</b> ban kar pahunch jaati hai + Push Notification bajta hai.</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#a21caf;">2</span>
+                            <span class="step-dot">2</span>
                             <div>
                                 <strong>Sancha Complete = Auto Rangai Handoff</strong>
                                 <span>Sancha wale ke Complete dabate hi bina kisi call ya WhatsApp ke parchi automatic <b>Rangai wale ke mobile app</b> me chali jaati hai.</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#16a34a;">3</span>
+                            <span class="step-dot">3</span>
                             <div>
-                                <strong>Rangai Done = 🟢 Karkhana Ready</strong>
-                                <span>Main app me parchi Ready dikhne lagti hai. Kariger ke sheet me nayi Tani chadhate waqt sirf Ready parchi hi select hoti hai aur select hote hi order list se auto-minus ho jaati hai.</span>
+                                <strong>Ready ➔ 5. Loom Par (Strict Gatekeeper)</strong>
+                                <span>Kariger ke khate me nayi Tani tabhi khulti hai jab order <b>4. Karkhana Ready</b> ho. Sheet bante hi order automatic <b>5. Loom Par</b> tab me shift ho jaata hai!</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#0284c7;">4</span>
+                            <span class="step-dot">4</span>
                             <div>
-                                <strong>Smart Urdu/English Auto-Learn</strong>
-                                <span>Aap jo Colors aur Rangi naam likhte hain, software unhe yaad rakhta hai (`tani_learned`) taaki agli baar sirf 1 click me select ho jaye!</span>
+                                <strong>Pichli Tani Ghost Auto-Fill + Auto-Learn</strong>
+                                <span>Nayi parchi banate waqt pichli parchi ke 8 colors aur Rangi naam halka-yellow ghost me aa jaate hain — sirf Enter dabao ya badal do!</span>
                             </div>
                         </div>
                     </div>
@@ -1684,7 +2132,7 @@
                     <button type="button" class="btn-outline-sm" onclick="switchView('sancha_portal')">Next: Sancha Portal →</button>
                 </div>
                 <span class="hero-eyebrow">🧵 System 2 • Live Mobile Passbook + Web Push</span>
-                <h2 class="spotlight-title">Kariger Mobile Portal</h2>
+                <h2 class="spotlight-title">Kariger Mobile Portal &amp; Khata Sync</h2>
                 <p class="spotlight-desc">Har Kariger apne mobile par 4-digit PIN se apna Loom Progress, Tani/Bana/Zari aur Baaki Mazdoori 24×7 live dekhta hai — bina aapko baar-baar phone kiye!</p>
             </div>
 
@@ -1732,7 +2180,7 @@
 
                             <div style="background:#fff; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; margin-bottom:7px;">
                                 <div style="display:flex; justify-content:space-between; font-weight:800; border-bottom:1px dashed #e2e8f0; padding-bottom:4px; margin-bottom:4px;">
-                                    <span>📅 16-11-2026</span><span style="color:#15803d;">+ ₹ 2,000 Rokad</span>
+                                    <span>📅 19-11-2026</span><span style="color:#15803d;">+ ₹ 2,000 Rokad</span>
                                 </div>
                                 <div style="display:flex; justify-content:space-between; color:#334155; font-size:11px;">
                                     <span>🧶 Bana: 4.00 Kg</span><span>✨ Zari: 0.50 Kg</span><span>🥻 Jama: 4 Pcs</span>
@@ -1745,35 +2193,43 @@
                     </div>
                 </div>
 
-                <div class="detail-card">
-                    <h4>📱 ID Kaise Milti Hai, Notification &amp; Update Kaise Chalta Hai?</h4>
-                    <div class="step-stack">
-                        <div class="step-row">
-                            <span class="step-dot" style="background:#059669;">1</span>
-                            <div>
-                                <strong>ID aur 4-Digit PIN Kaise Milti Hai?</strong>
-                                <span>Malik apne laptop par <b>Kariger Master</b> me jaakar Kariger ka <b>Mobile No. + 4-Digit PIN</b> set karte hain aur <b>📲 Share on WhatsApp</b> dabate hain — Kariger ko sidha login link + PIN mil jaata hai.</span>
-                            </div>
+                <div>
+                    <!-- Owner-side White & Gold PIN Card Visual -->
+                    <div class="tp-app-frame" style="margin-bottom:16px;">
+                        <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                            <strong>Owner Control: Kariger Mobile Portal PIN</strong>
+                            <span class="tp-nav-btn gold">Save PIN &amp; Share</span>
                         </div>
-                        <div class="step-row">
-                            <span class="step-dot" style="background:#0284c7;">2</span>
-                            <div>
-                                <strong>Kariger Mobile me Kaise Chalu Karta Hai?</strong>
-                                <span>Kariger WhatsApp link khol kar apna Mobile + PIN daalta hai aur home screen par Add/Install karke <b>"🔔 Allow Notifications"</b> ON kar leta hai.</span>
-                            </div>
+                        <div class="tp-body" style="padding:12px 16px;">
+                            <div class="tp-form-row"><span class="tp-form-lbl">Kariger :</span><span class="tp-form-inp">JAWED (Alaipura)</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Mobile No :</span><span class="tp-form-inp focus">9876543210</span></div>
+                            <div class="tp-form-row" style="margin-bottom:0;"><span class="tp-form-lbl">4-Digit PIN :</span><span class="tp-form-inp focus">4582</span></div>
                         </div>
-                        <div class="step-row">
-                            <span class="step-dot" style="background:#d97706;">3</span>
-                            <div>
-                                <strong>Notification Kab aur Kaise Jaati Hai?</strong>
-                                <span>Jaise hi aap ya munshi laptop par <b>Kariger Sheet</b> ya <b>Kariger Express</b> se Saree, Bana, Zari ya Rokad ki nayi entry save karte hain — Supabase Trigger turant Kariger ke phone par <b>"🧵 Aapke Khate me Nayi Entry Hui!"</b> push bhej deta hai!</span>
+                    </div>
+
+                    <div class="detail-card">
+                        <h4>📱 ID Kaise Milti Hai, Notification &amp; Update Kaise Chalta Hai?</h4>
+                        <div class="step-stack">
+                            <div class="step-row">
+                                <span class="step-dot">1</span>
+                                <div>
+                                    <strong>ID aur 4-Digit PIN Kaise Milti Hai?</strong>
+                                    <span>Malik White &amp; Gold Portal PIN modal me Kariger ka Mobile No. + 4-Digit PIN set karke <b>WhatsApp par link</b> bhej dete hain.</span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="step-row">
-                            <span class="step-dot" style="background:#7c3aed;">4</span>
-                            <div>
-                                <strong>Live Update &amp; 100% Security</strong>
-                                <span>Kariger portal kholte hi server se bilkul taza <b>Baki Mazdoori, Loom Progress (72 me se kitni baki), Bana/Zari wazan</b> aur pichli saari entries dikhti hain. Koi bhi kariger na kisi doosre ka hisab dekh sakta hai, na entry badal sakta hai.</span>
+                            <div class="step-row">
+                                <span class="step-dot">2</span>
+                                <div>
+                                    <strong>Notification Kab Jaati Hai?</strong>
+                                    <span>Jaise hi aap <b>Kariger Sheet</b> ya <b>Kariger Express</b> se Saree, Bana, Zari ya Rokad save karte hain — Kariger ke phone par turant Push Alert bajta hai!</span>
+                                </div>
+                            </div>
+                            <div class="step-row">
+                                <span class="step-dot">3</span>
+                                <div>
+                                    <strong>Live Update &amp; 100% Security</strong>
+                                    <span>Kariger portal kholte hi taza Baki Mazdoori, Loom Progress (72 me se kitni baki), Bana/Zari wazan dikhta hai — poori tarah Read-Only!</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1849,31 +2305,31 @@
                     <h4>⚙️ Sancha Portal Ka Poora System</h4>
                     <div class="step-stack">
                         <div class="step-row">
-                            <span class="step-dot" style="background:#0284c7;">1</span>
+                            <span class="step-dot">1</span>
                             <div>
                                 <strong>ID / Login Kaise Banta Hai?</strong>
                                 <span>Owner Tani Order module se Sancha worker ka account (Naam + Mobile No.) banate hain aur link bhej dete hain — worker mobile number se login karke notification ON karta hai.</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#d97706;">2</span>
+                            <span class="step-dot">2</span>
                             <div>
                                 <strong>Push Notification &amp; Request Box</strong>
-                                <span>Jaise hi Owner laptop par Parchi banate hain, Sancha wale ke phone par notification bajta hai aur Parchi <b>🔔 Request</b> tab me dikhne lagti hai.</span>
+                                <span>Jaise hi Owner laptop par Parchi banate hain, Sancha wale ke phone par notification bajta hai aur Parchi <b>Request</b> tab me dikhne lagti hai.</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#2563eb;">3</span>
+                            <span class="step-dot">3</span>
                             <div>
                                 <strong>Accept Karte Hi Owner Screen Live Update</strong>
-                                <span>Sancha wala poori parchi padh kar <b>✅ Accept</b> dabata hai ➔ Owner ke main app me status turant <b>⚙️ Sancha Processing</b> ho jaata hai.</span>
+                                <span>Sancha wala poori parchi padh kar <b>Accept</b> dabata hai ➔ Owner ke main app me status turant update ho jaata hai.</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#16a34a;">4</span>
+                            <span class="step-dot">4</span>
                             <div>
                                 <strong>Complete ➔ Seedha Rangai Portal Me Handoff!</strong>
-                                <span>Tani taanne ke baad <b>🏁 Complete</b> dabate hi Supabase Auto-Handoff Trigger us Parchi ko seedha <b>Rangai Portal</b> me bhej deta hai!</span>
+                                <span>Tani taanne ke baad <b>Complete</b> dabate hi Auto-Handoff Trigger us Parchi ko seedha <b>Rangai Portal</b> me bhej deta hai!</span>
                             </div>
                         </div>
                     </div>
@@ -1890,7 +2346,7 @@
             <div class="spotlight-hero">
                 <div class="spotlight-top-bar">
                     <button type="button" class="btn-outline-sm" onclick="switchView('overview')">← Overview</button>
-                    <button type="button" class="btn-outline-sm" onclick="switchView('express')">Next: Express Modes →</button>
+                    <button type="button" class="btn-outline-sm" onclick="switchView('express')">Next: 4 Express Modes →</button>
                 </div>
                 <span class="hero-eyebrow">🎨 System 4 • 8-Colors Chart &amp; Auto Ready</span>
                 <h2 class="spotlight-title">Rangai Worker Mobile Portal</h2>
@@ -1928,7 +2384,7 @@
                                 </div>
                                 <div style="font-size:11px; color:#475569; margin-bottom:5px;">👤 Kariger: <strong>JAWED</strong> • ☑ آنچل بلاؤز کنٹراس</div>
                                 <table class="mini-colors-tbl" style="margin-bottom:8px;">
-                                    <thead><tr style="background:#701a75;"><th>#</th><th>ساڑی</th><th>بارڈر</th><th>بانا</th></tr></thead>
+                                    <thead><tr><th>#</th><th>ساڑی</th><th>بارڈر</th><th>بانا</th></tr></thead>
                                     <tbody>
                                         <tr><td>1</td><td>Rani</td><td>Golden</td><td>Rani</td></tr>
                                         <tr><td>2</td><td>Blue</td><td>Copper</td><td>Blue</td></tr>
@@ -1948,24 +2404,24 @@
                     <h4>🎨 Rangai Portal Ka Poora Workflow</h4>
                     <div class="step-stack">
                         <div class="step-row">
-                            <span class="step-dot" style="background:#a21caf;">1</span>
+                            <span class="step-dot">1</span>
                             <div>
                                 <strong>Sancha Complete = Automatic Rangai Notification</strong>
-                                <span>Jaise hi Sancha worker Complete dabata hai, Rangai worker ke mobile par <b>🎨 Nayi Tani Rangna Hai</b> ki ghanti bajti hai — Malik ko phone karne ki zaroorat nahi.</span>
+                                <span>Jaise hi Sancha worker Complete dabata hai, Rangai worker ke mobile par <b>Nayi Tani Rangna Hai</b> ki ghanti bajti hai — Malik ko phone karne ki zaroorat nahi.</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#7e22ce;">2</span>
+                            <span class="step-dot">2</span>
                             <div>
                                 <strong>Exact 8-Colors + Contrast Matching</strong>
                                 <span>Rangai wala mobile me Saree, Border aur Bana ke exact 8 colors aur Aanchal/Blouse contrast dekh kar kaam shuru karta hai — color galti ka chance zero!</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#16a34a;">3</span>
+                            <span class="step-dot">3</span>
                             <div>
-                                <strong>Complete = 🟢 Karkhana Ready (Baithak Unlock)</strong>
-                                <span>Rangai complete hote hi jab woh <b>🏁 Complete</b> dabata hai, Owner ke laptop par Parchi <b>🟢 4. Karkhana Ready</b> dikhne lagti hai aur Kariger ko Loom par dene ke liye tayyar ho jaati hai!</span>
+                                <strong>Complete = Karkhana Ready (Baithak Unlock)</strong>
+                                <span>Rangai complete hote hi jab woh <b>Complete</b> dabata hai, Owner ke laptop par Parchi <b>4. Karkhana Ready</b> dikhne lagti hai aur Kariger ko Loom par dene ke liye tayyar ho jaati hai!</span>
                             </div>
                         </div>
                     </div>
@@ -1975,116 +2431,144 @@
     </section>
 
     <!-- ========================================================================
-         VIEW 6: EXPRESS MODES
+         VIEW 6: 4 EXPRESS MODES (PURE WHITE & GOLD TALLYPRIME VISUALS)
     ======================================================================== -->
     <section id="view-express" class="view-page">
         <div class="container">
             <div class="spotlight-hero">
                 <div class="spotlight-top-bar">
                     <button type="button" class="btn-outline-sm" onclick="switchView('overview')">← Overview</button>
-                    <button type="button" class="btn-outline-sm" onclick="switchView('godam_stock')">Next: Godam &amp; Stock →</button>
+                    <button type="button" class="btn-outline-sm" onclick="switchView('godam_stock')">Next: Stock &amp; Godam →</button>
                 </div>
-                <span class="hero-eyebrow">⚡ Tally-Style Zero-Mouse Counters</span>
-                <h2 class="spotlight-title">Teeno Superfast Express Counters</h2>
-                <p class="spotlight-desc">Baithak aur mandi ke rush time ke liye banaye gaye 3 alag Zero-Mouse counters — sirf Keyboard se Enter aur F1-F6 dabate jao, entry + stock update + A6 slip print ek second me!</p>
+                <span class="hero-eyebrow">⚡ TallyPrime White &amp; Gold Zero-Mouse Counters</span>
+                <h2 class="spotlight-title">Charon Superfast Express Counters</h2>
+                <p class="spotlight-desc">Baithak aur mandi ke rush time ke liye banaye gaye 4 alag White &amp; Gold Zero-Mouse counters — Right-Side Picker + Enter chaining + Accept? (Yes / No) + A6 slip print!</p>
             </div>
 
-            <div class="laptop-frame" style="margin-bottom:24px;">
-                <div class="laptop-bar" style="background:#991b1b;">
-                    <strong>⚡ 1. KARIGER EXPRESS — Baithak Counter (Saree + Bana + Zari + Rokad 1 Screen Par)</strong>
-                    <span style="background:#fee2e2; color:#991b1b; padding:2px 10px; border-radius:99px; font-weight:900;">Enter = Auto Save &amp; Next Kariger</span>
+            <!-- 1. KARIGER EXPRESS -->
+            <div class="tp-app-frame" style="margin-bottom:22px;">
+                <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                    <strong>1. Kariger Express [K] — Baithak Counter (2-Col White &amp; Gold)</strong>
+                    <div class="tp-nav-chips">
+                        <span class="tp-nav-btn">[Alt+C] Naya Kariger</span>
+                        <span class="tp-nav-btn">[Alt+N] Nayi Tani</span>
+                        <span class="tp-nav-btn gold">Save &amp; A6 Print [Ctrl+&crarr;]</span>
+                    </div>
                 </div>
-                <div class="laptop-body">
-                    <div class="shortcut-strip">
-                        <span class="kbd-pill active">🏭 Godam: Main Godown</span>
-                        <span class="kbd-pill">📅 Date: 16-11-2026</span>
-                        <span class="kbd-pill">📑 Sheet: Tani 1 (Katan Buti)</span>
-                        <span class="kbd-pill" style="background:#fef3c7; border-color:#f59e0b;">🎨 8 Colors: Rani, Lal, Blue, Mehendi...</span>
-                    </div>
-
-                    <div class="express-input-grid">
-                        <div class="exp-box focus"><small>1. KARIGER CHUNEIN</small><strong>JAWED (Loom 1) ▾</strong></div>
-                        <div class="exp-box"><small>2. SAREE JAMA</small><strong>4 Pcs</strong></div>
-                        <div class="exp-box"><small>3. LOTT</small><strong>0 Pc</strong></div>
-                        <div class="exp-box"><small>4. BANA DIYA (NET)</small><strong>4.000 Kg</strong></div>
-                        <div class="exp-box"><small>5. ZARI DIYA (NET)</small><strong>0.500 Kg</strong></div>
-                        <div class="exp-box" style="background:#f0fdf4; border-color:#86efac;"><small>6. ROKAD PAID (₹)</small><strong style="color:#15803d;">₹ 2,000</strong></div>
-                    </div>
-
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background:#0f172a; color:#fff; border-radius:10px; padding:10px 14px;">
-                        <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:11.5px;">
-                            <span>📦 Loom Par Baki: <strong style="color:#38bdf8;">44 / 72 Pcs</strong></span>
-                            <span>🧶 Baki Bana: <strong style="color:#fbbf24;">12.400 Kg</strong></span>
-                            <span>💰 Naya Baki: <strong style="color:#4ade80;">₹ 2,400.00</strong></span>
+                <div class="tp-body">
+                    <div class="tp-voucher-split">
+                        <div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Kariger :</span><span class="tp-form-inp focus">JAWED (Loom 1)</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Active Sheet :</span><span class="tp-form-inp">Tani 1 (Katan Buti)</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Saree Jama :</span><span class="tp-form-inp focus">4 Pcs (Lott: 0)</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Bana / Zari :</span><span class="tp-form-inp">Bana 4.000 Kg | Zari 0.500 Kg</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Rokad Paid :</span><span class="tp-form-inp">₹ 2,000.00</span></div>
                         </div>
-                        <div style="display:flex; gap:6px;">
-                            <span style="background:#16a34a; padding:4px 10px; border-radius:6px; font-weight:800;">[Enter] Save + A6 Print</span>
-                            <span style="background:#25D366; padding:4px 10px; border-radius:6px; font-weight:800;">📲 WhatsApp</span>
+                        <div class="tp-panel">
+                            <div class="tp-panel-head"><span>Live Kariger Balance &amp; Picker</span><span>Loom: 28 / 72 Pcs</span></div>
+                            <div class="tp-picker-item active"><span>JAWED (Alaipura)</span><span>Baki: ₹ 2,400</span></div>
+                            <div class="tp-picker-item"><span>ASLAM (Madanpura)</span><span>Baki: ₹ 1,850</span></div>
+                            <div class="tp-picker-item"><span>FAROOQ (Pili Kothi)</span><span>Baki: ₹ 920</span></div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <div class="laptop-frame" style="margin-bottom:24px;">
-                <div class="laptop-bar" style="background:#065f46;">
-                    <strong>⚡ 2. STOCK EXPRESS — 3-in-1 Kachha Maal Inward Counter (Bana • Zari • Sancha)</strong>
-                    <span style="background:#d1fae5; color:#065f46; padding:2px 10px; border-radius:99px; font-weight:900;">[F1 / F2 / F3] Instant Switch</span>
-                </div>
-                <div class="laptop-body">
-                    <div class="shortcut-strip">
-                        <span class="kbd-pill active" style="background:#059669; border-color:#059669;">[F1] 🧶 Bana Stock</span>
-                        <span class="kbd-pill">[F2] ✨ Zari Stock</span>
-                        <span class="kbd-pill">[F3] ⚙️ Sancha Stock</span>
-                        <span class="kbd-pill">Mode: Purana Stock / +Naya Item</span>
-                    </div>
-
-                    <div class="express-input-grid">
-                        <div class="exp-box focus"><small>QUALITY / ITEM</small><strong>Karishma 2/120</strong></div>
-                        <div class="exp-box"><small>GODAM</small><strong>Main Godown</strong></div>
-                        <div class="exp-box"><small>AAYA WAZAN (+)</small><strong style="color:#059669;">+ 50.000 Kg</strong></div>
-                        <div class="exp-box" style="background:#ecfdf5; border-color:#6ee7b7;"><small>LIVE BACHA METER</small><strong style="color:#047857;">1,547 ➔ 1,597 Kg</strong></div>
-                        <div class="exp-box"><small>SUPPLIER / BILL NOTE</small><strong>Mandi Bill #402</strong></div>
+                    <div class="tp-accept-bar">
+                        <strong style="font-size:12px;">Accept? Line Jodein &amp; A6 Parchi Print Karein?</strong>
+                        <div style="display:flex; gap:8px;"><span class="tp-nav-btn gold">Yes [Enter]</span><span class="tp-nav-btn">No [Esc]</span></div>
                     </div>
                 </div>
             </div>
 
-            <div class="laptop-frame" style="margin-bottom:36px;">
-                <div class="laptop-bar" style="background:#0369a1;">
-                    <strong>⚡ 3. JOBWORK EXPRESS — [F1-F6] Multi-Stage Fast Counter (Cutting • Embroidery • Calender • Dukan)</strong>
-                    <span style="background:#e0f2fe; color:#0369a1; padding:2px 10px; border-radius:99px; font-weight:900;">[Ctrl+Enter] Save &amp; Challan Print</span>
+            <!-- 2. STOCK EXPRESS -->
+            <div class="tp-app-frame" style="margin-bottom:22px;">
+                <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                    <strong>2. Stock Express [S] — Kachha Maal Inward (Bana [F1] • Zari [F2] • Sancha [F3])</strong>
+                    <span class="tp-nav-btn gold">Guided Drill-Down + A6 Print</span>
                 </div>
-                <div class="laptop-body">
-                    <div class="shortcut-strip">
-                        <span class="kbd-pill">[F1] ✂️ Cutting</span>
-                        <span class="kbd-pill active">[F2] 🪡 Embroidery</span>
-                        <span class="kbd-pill">[F3] 🎛️ Calender</span>
-                        <span class="kbd-pill">[F4] 🏪 Dukan</span>
-                        <span class="kbd-pill" style="background:#fef3c7; border-color:#f59e0b;">[F5] 📤 GAYI (OUT)</span>
-                        <span class="kbd-pill" style="background:#e0e7ff; border-color:#6366f1;">[F6] Source: CUTTING STOCK</span>
+                <div class="tp-body">
+                    <div class="tp-voucher-split">
+                        <div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Stock Group :</span><span class="tp-form-inp">1. Bana Stock [F1]</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Item Quality :</span><span class="tp-form-inp focus">KARISHMA 2/120</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Aaya Wazan (+) :</span><span class="tp-form-inp focus">50.000 Kg</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Note / Bill :</span><span class="tp-form-inp">Mandi Bill #402</span></div>
+                        </div>
+                        <div class="tp-panel">
+                            <div class="tp-panel-head"><span>List of Bana Items (Main Godown)</span><span>Live Stock</span></div>
+                            <div class="tp-picker-item active"><span>KARISHMA 2/120</span><span>1,547.00 ➔ 1,597.00 Kg</span></div>
+                            <div class="tp-picker-item"><span>KATAN SILK 20/22</span><span>420.50 Kg</span></div>
+                            <div class="tp-picker-item"><span>DUPION SILK</span><span>198.00 Kg</span></div>
+                        </div>
                     </div>
+                </div>
+            </div>
 
-                    <div class="express-input-grid">
-                        <div class="exp-box"><small>WORKER</small><strong>WAHAB (Embroidery)</strong></div>
-                        <div class="exp-box focus"><small>MAKER (KARIGER)</small><strong>ASLAM ▾</strong></div>
-                        <div class="exp-box"><small>SAREE DESIGN</small><strong>SATAN SILK</strong></div>
-                        <div class="exp-box"><small>NAAP</small><strong>3.60</strong></div>
-                        <div class="exp-box"><small>QTY PCS</small><strong>10 Pcs [+Enter]</strong></div>
+            <!-- 3. JOBWORK EXPRESS -->
+            <div class="tp-app-frame" style="margin-bottom:22px;">
+                <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                    <strong>3. JobWork Express [J] — Top Split + Full-Width Gatthi Batch List</strong>
+                    <div class="tp-nav-chips">
+                        <span class="tp-nav-btn">[F1-F4] Process</span>
+                        <span class="tp-nav-btn">[F5] Gayi/Aayi</span>
+                        <span class="tp-nav-btn">[F6] Source</span>
                     </div>
+                </div>
+                <div class="tp-body">
+                    <div class="tp-voucher-split">
+                        <div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Process / Worker :</span><span class="tp-form-inp">2. Embroidery — WAHAB</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Len-Den &amp; Source :</span><span class="tp-form-inp">Saree Gayi | Cutting Stock</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Maker :</span><span class="tp-form-inp focus">ASLAM</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Naap &amp; Qty :</span><span class="tp-form-inp">3.60 | 10 Pcs [+ Jodein]</span></div>
+                        </div>
+                        <div class="tp-panel">
+                            <div class="tp-panel-head"><span>List of Makers (CUTTING Stock)</span><span>&uarr;&darr; + Enter</span></div>
+                            <div class="tp-picker-item active"><span>ASLAM</span><span>SATAN SILK (28 Pcs)</span></div>
+                            <div class="tp-picker-item"><span>JAWED</span><span>KATAN BUTI (42 Pcs)</span></div>
+                        </div>
+                    </div>
+                    <div class="tp-panel" style="margin-top:10px;">
+                        <div class="tp-panel-head"><span>Gatthi / Batch List</span><span style="color:#b47d00;">Total: 25 Pcs</span></div>
+                        <table class="tp-table">
+                            <thead><tr><th>#</th><th>Maker</th><th>Saree Design</th><th>Naap</th><th style="text-align:right;">Qty</th></tr></thead>
+                            <tbody>
+                                <tr><td>1</td><td><strong>ASLAM</strong></td><td>SATAN SILK</td><td>3.60</td><td style="text-align:right;">10 Pcs</td></tr>
+                                <tr><td>2</td><td><strong>JAWED</strong></td><td>KATAN BUTI</td><td>3.60</td><td style="text-align:right;">15 Pcs</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
-                    <table class="mini-tbl">
-                        <thead><tr><th>#</th><th>Maker</th><th>Saree Design</th><th>Source Stage</th><th>Naap</th><th>Qty</th><th>Action</th></tr></thead>
-                        <tbody>
-                            <tr><td>1</td><td>ASLAM</td><td>SATAN SILK</td><td>✂️ Cutting Stock</td><td>3.60</td><td>10 Pcs</td><td>✅ Queued</td></tr>
-                            <tr><td>2</td><td>JAWED</td><td>KATAN BUTI</td><td>✂️ Cutting Stock</td><td>3.60</td><td>15 Pcs</td><td>✅ Queued</td></tr>
-                        </tbody>
-                    </table>
+            <!-- 4. TANI EXPRESS -->
+            <div class="tp-app-frame" style="margin-bottom:36px;">
+                <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                    <strong>4. Tani Express [T] — 2-Step Order Voucher + Ghost Auto-Fill</strong>
+                    <div class="tp-nav-chips">
+                        <span class="tp-nav-btn">[F4] Copy All Same</span>
+                        <span class="tp-nav-btn gold">Save &amp; Print Parchi</span>
+                    </div>
+                </div>
+                <div class="tp-body">
+                    <div class="tp-voucher-split">
+                        <div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Step 1 — Party :</span><span class="tp-form-inp">JAWED | Sancha: AZHAR | Rangi: IRFAN</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Step 2 — Color 1 :</span><span class="tp-form-inp ghost">Rani / Golden / Rani (Ghost Auto-Fill)</span></div>
+                            <div class="tp-form-row"><span class="tp-form-lbl">Matching Style :</span><span class="tp-form-inp">Aanchal Blouse Contrast</span></div>
+                        </div>
+                        <div class="tp-panel">
+                            <div class="tp-panel-head"><span>Learned Colors &amp; Rangi Picker</span><span>Enter = Same</span></div>
+                            <div class="tp-picker-item active"><span>Rani</span><span>Last Used</span></div>
+                            <div class="tp-picker-item"><span>Mehendi</span><span>Learned Color</span></div>
+                            <div class="tp-picker-item"><span>Firozi</span><span>Learned Color</span></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- ========================================================================
-         VIEW 7: GODAM & STOCK
+         VIEW 7: STOCK SUMMARY & GODAM (PURE WHITE & GOLD)
     ======================================================================== -->
     <section id="view-godam_stock" class="view-page">
         <div class="container">
@@ -2093,52 +2577,42 @@
                     <button type="button" class="btn-outline-sm" onclick="switchView('overview')">← Overview</button>
                     <button type="button" class="btn-outline-sm" onclick="switchView('jobwork_dukan')">Next: JobWork &amp; Dukan →</button>
                 </div>
-                <span class="hero-eyebrow">🏭 Multi-Godam Architecture</span>
-                <h2 class="spotlight-title">Multi-Godam, Bana, Zari, Sancha &amp; 5-Stage Saree</h2>
-                <p class="spotlight-desc">Ek hi login ke andar Main Godown, Bahadurganj ya jitne chahein Godam banayein — har godam ka alag stock aur 1-click Transfer Challan.</p>
+                <span class="hero-eyebrow">🏭 TallyPrime Stock Summary [U] &amp; Multi-Godam</span>
+                <h2 class="spotlight-title">Stock Summary, Inline Passbook &amp; Multi-Godam</h2>
+                <p class="spotlight-desc">Bana, Zari, Sancha (Tani/Chukka) aur 5-Stage Saree ka consolidated Stock Summary — click karte hi running balance passbook aur Godam-to-Godam transfer!</p>
             </div>
 
-            <div class="laptop-frame" style="margin-bottom:24px;">
-                <div class="laptop-bar" style="background:#0f172a;">
-                    <strong>🏭 Multi-Godam Switcher &amp; Transfer Visual</strong>
-                    <span style="background:#1e3a8a; color:#bfdbfe; padding:2px 10px; border-radius:99px;">Main Godown ⇄ Bahadurganj</span>
-                </div>
-                <div class="laptop-body">
-                    <div class="feature-cards-3" style="gap:12px;">
-                        <div style="background:#fff; border:1px solid #cbd5e1; border-top:4px solid #10b981; border-radius:10px; padding:12px;">
-                            <strong style="color:#065f46; font-size:13.5px;">🧶 Bana Stock (Less TP Cut)</strong>
-                            <p style="font-size:11.5px; color:#475569; margin:5px 0;">Cone wazan me se Less TP cut kar ke exact net Bana minus hota hai. Return maal sidha godam me wapas jama!</p>
-                            <span style="font-size:11px; font-weight:800; color:#059669;">• 0.000 Kg Precision • Passbook</span>
-                        </div>
-                        <div style="background:#fff; border:1px solid #cbd5e1; border-top:4px solid #f97316; border-radius:10px; padding:12px;">
-                            <strong style="color:#9a3412; font-size:13.5px;">✨ Zari Stock (Topi Tare Cut)</strong>
-                            <p style="font-size:11.5px; color:#475569; margin:5px 0;">Plastic roll (Topi) ka wazan minus kar ke exact net Zari hisab. Har kariger &amp; godam ka alag ledger.</p>
-                            <span style="font-size:11px; font-weight:800; color:#ea580c;">• Gram-Level Accuracy</span>
-                        </div>
-                        <div style="background:#fff; border:1px solid #cbd5e1; border-top:4px solid #0284c7; border-radius:10px; padding:12px;">
-                            <strong style="color:#075985; font-size:13.5px;">⚙️ Sancha (Tani &amp; Chukka)</strong>
-                            <p style="font-size:11.5px; color:#475569; margin:5px 0;">Tani aur Chukka ke 2 alag tabs. Kis kariger ke paas kaun sa beam hai aur godam me kitna bacha — live track.</p>
-                            <span style="font-size:11px; font-weight:800; color:#0284c7;">• Godam-to-Godam Transfer</span>
-                        </div>
+            <div class="tp-app-frame" style="margin-bottom:24px;">
+                <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                    <strong>Bana Stock &amp; Running Balance Passbook</strong>
+                    <div class="tp-nav-chips">
+                        <span class="tp-nav-btn">[T / F4] Transfer Godam</span>
+                        <span class="tp-nav-btn gold">+ Naya Bana [F7]</span>
                     </div>
                 </div>
-            </div>
+                <div class="tp-body">
+                    <table class="tp-table" style="margin-bottom:12px;">
+                        <thead>
+                            <tr><th>Quality / Item</th><th>Godam</th><th style="text-align:right;">Aaya (Kg)</th><th style="text-align:right;">Gaya (Kg)</th><th style="text-align:right;">Bacha Stock</th><th style="text-align:right;">Passbook</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr style="background:#fdf6e2;"><td><strong>KARISHMA 2/120</strong></td><td>Main Godown</td><td style="text-align:right;">2,450.00</td><td style="text-align:right;">903.00</td><td style="text-align:right; color:#b47d00; font-weight:800;">1,547.00 Kg</td><td style="text-align:right; color:#b47d00;">Open &rarr;</td></tr>
+                            <tr><td><strong>KATAN SILK 20/22</strong></td><td>Main Godown</td><td style="text-align:right;">820.00</td><td style="text-align:right;">399.50</td><td style="text-align:right; color:#b47d00; font-weight:800;">420.50 Kg</td><td style="text-align:right; color:#b47d00;">Open &rarr;</td></tr>
+                        </tbody>
+                    </table>
 
-            <div class="detail-card" style="margin-bottom:36px;">
-                <h4>🥻 5-Stage Saree Pipeline + Lott Register</h4>
-                <div class="step-stack">
-                    <div class="step-row">
-                        <span class="step-dot" style="background:#2563eb;">1</span>
-                        <div>
-                            <strong>Har Stage Ka Alag Stock &amp; Passbook</strong>
-                            <span><b>Fresh Loom ➔ Booti Cutting ➔ Embroidery ➔ Calender Finished ➔ Dukan</b> — har stage me har Saree &amp; Maker ka alag In/Out balance dikhta hai.</span>
+                    <div class="feature-cards-3">
+                        <div class="tp-gold-card">
+                            <div class="tp-gold-card-head"><strong>Bana &amp; Zari Stock</strong><span>0.000 Kg</span></div>
+                            <p style="font-size:11.5px; color:#4b5563;">Less TP aur Topi cut ke saath exact net weight minus aur return maal wapas godam me jama.</p>
                         </div>
-                    </div>
-                    <div class="step-row">
-                        <span class="step-dot" style="background:#ef4444;">2</span>
-                        <div>
-                            <strong>Damage / Lott Saree Ka Pakka Hisab</strong>
-                            <span>Agar koi saree kharab (Lott) nikle toh uski alag Lott entry hoti hai — Kariger ki net mazdoori se sahi hisab cut kar Lott stock me dikhti hai.</span>
+                        <div class="tp-gold-card">
+                            <div class="tp-gold-card-head"><strong>Sancha (Tani &amp; Chukka)</strong><span>2 Tabs</span></div>
+                            <p style="font-size:11.5px; color:#4b5563;">Tani aur Chukka ke 2 alag tabs — kiske paas kitna wazan gaya aur godam me kitna bacha.</p>
+                        </div>
+                        <div class="tp-gold-card">
+                            <div class="tp-gold-card-head"><strong>5-Stage Saree</strong><span>Passbook</span></div>
+                            <p style="font-size:11.5px; color:#4b5563;">Fresh ➔ Cutting ➔ Embroidery ➔ Finished ➔ Lott — har design aur maker ka live stock.</p>
                         </div>
                     </div>
                 </div>
@@ -2147,7 +2621,7 @@
     </section>
 
     <!-- ========================================================================
-         VIEW 8: JOBWORK & DUKAN
+         VIEW 8: JOBWORK & DUKAN (PURE WHITE & GOLD)
     ======================================================================== -->
     <section id="view-jobwork_dukan" class="view-page">
         <div class="container">
@@ -2156,54 +2630,49 @@
                     <button type="button" class="btn-outline-sm" onclick="switchView('overview')">← Overview</button>
                     <button type="button" class="btn-outline-sm" onclick="switchView('closing_backup')">Next: Closing &amp; Backup →</button>
                 </div>
-                <span class="hero-eyebrow">✂️ JobWork Hub + Apni Dukan</span>
-                <h2 class="spotlight-title">Cutting, Embroidery, Calender, Bills &amp; Apni Dukan</h2>
-                <p class="spotlight-desc">Loom ke baad saree jis-jis kariger (Cutting, Embroidery, Calender) ke paas jaati hai aur phir Apni Dukan par bheji jaati hai — sabka monthly khata aur challan.</p>
+                <span class="hero-eyebrow">✂️ JobWork Hub &amp; Apni Dukan</span>
+                <h2 class="spotlight-title">Cutting, Embroidery, Calender, Bills &amp; Dukan Batch</h2>
+                <p class="spotlight-desc">JobWork Gateway (1-6) se kisi bhi process me jayein — Worker par Enter karte hi Batch Voucher + Side Makers Live Stock Picker khul jaata hai!</p>
             </div>
 
             <div class="split-showcase">
-                <div class="laptop-frame">
-                    <div class="laptop-bar" style="background:#0f766e;">
-                        <strong>✂️ JobWork Hub &amp; Dukan Dispatch Visual</strong>
-                        <span style="background:#ccfbf1; color:#0f766e; padding:2px 9px; border-radius:99px; font-weight:900;">3 Process + Bills</span>
+                <div class="tp-app-frame">
+                    <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                        <strong>Job Work Gateway [1-6]</strong>
+                        <span style="font-size:11px; color:#92400e; font-weight:800;">&uarr;&darr; + Enter</span>
                     </div>
-                    <div class="laptop-body">
-                        <table class="mini-tbl" style="margin-bottom:10px;">
-                            <thead><tr><th>Process</th><th>Worker</th><th>Gayi</th><th>Aayi</th><th>Baki</th><th>Pending Bill</th></tr></thead>
-                            <tbody>
-                                <tr><td>✂️ Cutting</td><td>Rashid Master</td><td>120 Pcs</td><td>105 Pcs</td><td>15 Pcs</td><td>₹ 3,675</td></tr>
-                                <tr><td>🪡 Embroidery</td><td>Wahab (3.60)</td><td>85 Pcs</td><td>70 Pcs</td><td>15 Pcs</td><td>₹ 6,300</td></tr>
-                                <tr><td>🎛️ Calender</td><td>Noor Mill</td><td>200 Pcs</td><td>200 Pcs</td><td>0 Pcs</td><td>₹ 6,000</td></tr>
-                            </tbody>
-                        </table>
-                        <div style="background:#ecfdf5; border:1px solid #86efac; border-radius:9px; padding:9px; font-size:11.5px; color:#065f46; font-weight:800;">
-                            🏪 Apni Dukan Challan: Finished Stock se Dukan bheji gayi har saree ka alag Challan History &amp; Total Pcs record!
-                        </div>
+                    <div class="tp-body" style="padding:8px 0;">
+                        <div class="tp-picker-item active"><span>1. Booti Cutting</span><span>8 Kariger</span></div>
+                        <div class="tp-picker-item"><span>2. Embroidery</span><span>11 Kariger</span></div>
+                        <div class="tp-picker-item"><span>3. Calender</span><span>7 Kariger</span></div>
+                        <div class="tp-picker-item"><span>4. Dukan Bheja (Batch Voucher)</span><span>1,240 Pcs</span></div>
+                        <div class="tp-picker-item"><span>5. Bills &amp; Hisab (Inline Ledger)</span><span>Baki: ₹ 15,975</span></div>
+                        <div class="tp-picker-item"><span>6. Tracking Day-Book</span><span>Live Register</span></div>
                     </div>
                 </div>
 
                 <div class="detail-card">
-                    <h4>📋 JobWork &amp; Dukan Ke Khaas Features</h4>
+                    <h4>📋 JobWork &amp; Dukan Ke Naye Features</h4>
                     <div class="step-stack">
                         <div class="step-row">
-                            <span class="step-dot" style="background:#0f766e;">1</span>
+                            <span class="step-dot">1</span>
                             <div>
-                                <strong>Monthly Worker Sheets (`cutting`, `embroidery`, `calender`)</strong>
-                                <span>Har worker ki mahine-war sheet banti hai — pichli pending saree aur pichla baki paisa agle mahine carry-forward hota hai.</span>
+                                <strong>Worker Sheet Me Seedha Batch Voucher + Side Picker</strong>
+                                <span>Worker par Enter dabate hi upar <b>Left Form + Right Makers Stock Picker</b> aur neeche <b>Monthly Khata Register</b> khulta hai.</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#2563eb;">2</span>
+                            <span class="step-dot">2</span>
                             <div>
-                                <strong>JobWork Bills &amp; Payment Vouchers</strong>
-                                <span>Cutting, Embroidery aur Calender walon ke monthly bill bana kar Cash/UPI payment ka pakka voucher record rakh sakte hain.</span>
+                                <strong>Dukan Bheja Me Bhi Multi-Maker Batch System</strong>
+                                <span>Finished Stock se ek hi challan me multiple Karigaron ki saree batch me add karke A6 Dukan Challan print nikaalein.</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#16a34a;">3</span>
+                            <span class="step-dot">3</span>
                             <div>
-                                <strong>Apni Dukan Dispatch Challan</strong>
-                                <span>Taiyar (Finished) stock se jab aap apni showroom / dukan par maal bhejte hain toh uska challan aur stock automatic minus hota hai.</span>
+                                <strong>Inline Bill Passbook &amp; Payment</strong>
+                                <span>Bill row par click/Enter karte hi inline Passbook aur Payment form khulta hai — zero popup jhanjhat, seedha WhatsApp receipt!</span>
                             </div>
                         </div>
                     </div>
@@ -2213,7 +2682,7 @@
     </section>
 
     <!-- ========================================================================
-         VIEW 9: CLOSING, BACKUP & MULTI-DEVICE SYNC
+         VIEW 9: CLOSING, BACKUP & MULTI-DEVICE SYNC (PURE WHITE & GOLD)
     ======================================================================== -->
     <section id="view-closing_backup" class="view-page">
         <div class="container">
@@ -2228,25 +2697,22 @@
             </div>
 
             <div class="split-showcase">
-                <div class="laptop-frame">
-                    <div class="laptop-bar" style="background:#1e293b;">
-                        <strong>🔄 Financial Year Closing &amp; Backup Console</strong>
-                        <span style="background:#dcfce7; color:#15803d; padding:2px 9px; border-radius:99px; font-weight:900;">2026-2027 ➔ 2027-2028</span>
+                <div class="tp-app-frame">
+                    <div class="tp-slim-navbar" style="background:#fdf6e2;">
+                        <strong>Financial Year Closing &amp; Backup Console</strong>
+                        <span class="tp-nav-btn gold">2026-2027 ➔ 2027-2028</span>
                     </div>
-                    <div class="laptop-body">
-                        <div style="background:#fff; border:1px solid #cbd5e1; border-radius:10px; padding:10px; margin-bottom:10px;">
-                            <strong style="color:#0f172a; font-size:12.5px;">📅 1-Click Year Closing (5 Stages Auto Carry-Forward):</strong>
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; font-size:11px;">
-                                <div style="background:#f8fafc; padding:6px; border-radius:6px; border:1px solid #e2e8f0;">✅ <strong>Stage 1:</strong> Kariger Pichla Bana/Zari/Bani</div>
-                                <div style="background:#f8fafc; padding:6px; border-radius:6px; border:1px solid #e2e8f0;">✅ <strong>Stage 2:</strong> 5-Stage Saree Opening Stock</div>
-                                <div style="background:#f8fafc; padding:6px; border-radius:6px; border:1px solid #e2e8f0;">✅ <strong>Stage 3:</strong> Godam-Wise Bana &amp; Zari</div>
-                                <div style="background:#f8fafc; padding:6px; border-radius:6px; border:1px solid #e2e8f0;">✅ <strong>Stage 4:</strong> Sancha &amp; JobWork Workers</div>
-                            </div>
+                    <div class="tp-body">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; font-size:11.5px;">
+                            <div class="tp-gold-card"><strong>Stage 1:</strong><br>Kariger Pichla Bana / Zari / Bani Carry-Forward</div>
+                            <div class="tp-gold-card"><strong>Stage 2:</strong><br>5-Stage Saree Opening Stock Shift</div>
+                            <div class="tp-gold-card"><strong>Stage 3:</strong><br>Godam-Wise Bana &amp; Zari Opening</div>
+                            <div class="tp-gold-card"><strong>Stage 4:</strong><br>Sancha &amp; JobWork Workers Transfer</div>
                         </div>
-                        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px; text-align:center; font-size:11px; font-weight:800;">
-                            <div style="background:#dbeafe; color:#1d4ed8; padding:8px 5px; border-radius:8px;">💾 JSON Backup Download</div>
-                            <div style="background:#fef08a; color:#854d0e; padding:8px 5px; border-radius:8px;">👁️ Preview Mode ("Dekhein")</div>
-                            <div style="background:#dcfce7; color:#15803d; padding:8px 5px; border-radius:8px;">♻️ Safe Cloud Restore</div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <span class="tp-nav-btn gold">JSON Backup Download</span>
+                            <span class="tp-nav-btn">Preview Mode ("Dekhein")</span>
+                            <span class="tp-nav-btn">Safe Cloud Restore</span>
                         </div>
                     </div>
                 </div>
@@ -2255,21 +2721,21 @@
                     <h4>🔒 Data Safety &amp; Speed Engine</h4>
                     <div class="step-stack">
                         <div class="step-row">
-                            <span class="step-dot" style="background:#2563eb;">1</span>
+                            <span class="step-dot">1</span>
                             <div>
-                                <strong>IndexedDB + Delta Sync Speed</strong>
-                                <span>Saara business data laptop ke IndexedDB me save rehta hai — 1,000+ Karigers par bhi app turant khulti hai aur sirf badli hui entries cloud par sync hoti hain.</span>
+                                <strong>IndexedDB + Supabase Row-by-Row Sync</strong>
+                                <span>Saara business data laptop ke IndexedDB me save rehta hai — hazaron entries par bhi app turant khulti hai aur sirf badli hui entries sync hoti hain.</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#059669;">2</span>
+                            <span class="step-dot">2</span>
                             <div>
                                 <strong>Multi-Device Live Sync</strong>
                                 <span>Agar ek laptop par munshi entry kare ya session change kare toh Malik ke laptop par bina manual refresh ke turant update aa jaata hai.</span>
                             </div>
                         </div>
                         <div class="step-row">
-                            <span class="step-dot" style="background:#d97706;">3</span>
+                            <span class="step-dot">3</span>
                             <div>
                                 <strong>Backup Preview Mode ("Dekhein")</strong>
                                 <span>Purani backup JSON file ko live data chhede bina Preview Mode me khol kar check kar sakte hain, aur 1 click me wapas live data par aa sakte hain.</span>
@@ -2282,7 +2748,7 @@
     </section>
 
     <!-- ========================================================================
-         BOTTOM CTA + PATREON-STYLE BLACK FOOTER
+         BOTTOM CTA + FOOTER ("Features" INSTEAD OF "Product")
     ======================================================================== -->
     <section class="bottom-cta">
         <div class="container">
@@ -2311,11 +2777,11 @@
                 </div>
 
                 <div class="footer-col">
-                    <h5>Product</h5>
+                    <h5>Features</h5>
                     <ul>
-                        <li><button type="button" onclick="switchView('overview')">Overview</button></li>
-                        <li><button type="button" onclick="switchView('express')">Express Modes</button></li>
-                        <li><button type="button" onclick="switchView('godam_stock')">Godam &amp; Stock</button></li>
+                        <li><button type="button" onclick="switchView('overview')">Overview &amp; Gateway</button></li>
+                        <li><button type="button" onclick="switchView('express')">4 Express Modes</button></li>
+                        <li><button type="button" onclick="switchView('godam_stock')">Stock &amp; Godam</button></li>
                         <li><button type="button" onclick="switchView('jobwork_dukan')">JobWork &amp; Dukan</button></li>
                         <li><button type="button" onclick="switchView('closing_backup')">Year Close &amp; Backup</button></li>
                     </ul>
@@ -2386,6 +2852,14 @@
         function toggleMobileDrawer() {
             const drawer = document.getElementById('mobileDrawer');
             if (drawer) drawer.classList.toggle('open');
+        }
+
+        function switchErpPreview(tabKey, btnEl) {
+            document.querySelectorAll('.preview-pane').forEach((p) => p.classList.remove('active'));
+            document.querySelectorAll('.preview-tab-btn').forEach((b) => b.classList.remove('active'));
+            const targetPane = document.getElementById(`erp-prev-${tabKey}`);
+            if (targetPane) targetPane.classList.add('active');
+            if (btnEl) btnEl.classList.add('active');
         }
 
         function switchView(viewKey, updateHash = true) {
