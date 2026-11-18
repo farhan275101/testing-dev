@@ -1,35 +1,37 @@
 /* ============================================================================
-   SIMPLICITY ERP - HIGH-PERFORMANCE SANCHA (TANI & CHUKKA) STOCK & PASSBOOK
+   SIMPLICITY ERP - SANCHA (TANI & CHUKKA) STOCK & PASSBOOK (TALLY WHITE & GOLD)
    File: sancha/sancha-ui.js • Developed by Farhan Jawed
-   (Accurate Category Routing • Instant Live Search • A6 Thermal Print)
+   (100% Supabase-Safe | 2-Option Hub (Tani/Chukka) -> Items List -> Inline Passbook)
 ============================================================================ */
 
 (() => {
     'use strict';
 
-    /* ========================================================================
-       1. GLOBAL STATE & PAGINATION CONTEXT
-       ======================================================================== */
-    window.currentSanchaCategory = 'tani'; // 'tani' or 'chukka'
+    window.currentSanchaCategory = 'tani'; // 'tani' | 'chukka'
     window.currentSanchaKarkhanaFilter = 'all';
     window.currentPassbookSanchaItem = '';
 
-    // 📱 PASSBOOK PAGINATION STATE
+    // View State: 'hub' (Tani vs Chukka) | 'list' (Items) | 'passbook' (Inline Ledger)
+    let sanchaViewMode = 'hub';
+    let sanchaHubActiveIdx = 0; // 0 = tani, 1 = chukka
+
+    // Passbook Pagination & Cursor State
     let sanchaPassbookCurrentPage = 1;
     const SANCHA_PAGE_SIZE = 20;
     let filteredSanchaPassbookCache = [];
+    let sanchaPassbookActiveIdx = 0;
 
-    // Main Sancha Stock Table Pagination State
+    // Main Sancha Stock Table Pagination & Cursor State
     let sanchaStockCurrentPage = 1;
     const SANCHA_STOCK_PAGE_SIZE = 15;
     let currentSanchaFilteredRowsCache = [];
+    let sanchaListActiveIdx = 0;
 
-    /* ========================================================================
-       2. SAFE DOM & DATA SANITIZATION UTILITIES
-       ======================================================================== */
     const esc = (s) => {
         if (typeof window.sanitizeHTML === 'function') return window.sanitizeHTML(s);
-        return String(s || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        return String(s || '').replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
     };
 
     const safeNum = (val, fallback = 0) => {
@@ -46,6 +48,20 @@
         }
     };
 
+    const getToday = () => {
+        return (typeof window.getTodayDate === 'function')
+            ? window.getTodayDate()
+            : new Date().toISOString().split('T')[0];
+    };
+
+    const isAnyExpressOverlayOpen = () => {
+        return Boolean(
+            document.getElementById('kariger-express-modal') ||
+            document.getElementById('master-stock-express-modal') ||
+            document.getElementById('master-jobwork-express-modal')
+        );
+    };
+
     const triggerSanchaCacheInvalidation = () => {
         if (typeof window.invalidateSanchaCalcCache === 'function') {
             window.invalidateSanchaCalcCache();
@@ -55,35 +71,510 @@
     };
 
     /* ========================================================================
+       1. SCOPED TALLYPRIME WHITE & GOLD STYLES FOR #sancha-section
+       ======================================================================== */
+    const ensureSanchaTallyStyles = () => {
+        if (document.getElementById('sancha-tally-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'sancha-tally-styles';
+        style.textContent = `
+            #sancha-section {
+                padding: 0 !important;
+                overflow: hidden;
+                font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            }
+            #sancha-section .module-header {
+                background: #fdf6e2 !important;
+                border-bottom: 1.5px solid #e5d5a7 !important;
+                padding: 12px 20px !important;
+                margin-bottom: 0 !important;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+            #sancha-section .module-header h2 {
+                color: #1f2937 !important;
+                font-size: 17px !important;
+                font-weight: 800 !important;
+                margin: 0 !important;
+            }
+            #sancha-section .back-btn {
+                background: #ffffff !important;
+                color: #374151 !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 6px !important;
+                padding: 6px 12px !important;
+                font-size: 12px !important;
+                font-weight: 700 !important;
+                cursor: pointer;
+            }
+            #sancha-section .back-btn:hover {
+                border-color: #d9a425 !important;
+                background: #fef9ea !important;
+            }
+            #sancha-section .add-btn {
+                background: #f2b71d !important;
+                color: #1f2937 !important;
+                border: 1px solid #d9a425 !important;
+                border-radius: 6px !important;
+                padding: 6px 14px !important;
+                font-size: 12.5px !important;
+                font-weight: 800 !important;
+                cursor: pointer;
+            }
+            #sancha-section .add-btn:hover { background: #e5aa12 !important; }
+            #sancha-section .sheet-tabs-bar {
+                padding: 10px 20px 0 20px;
+                margin-bottom: 6px !important;
+                display: flex;
+                gap: 6px;
+                flex-wrap: wrap;
+            }
+            #sancha-section .sheet-tab {
+                background: #ffffff !important;
+                color: #374151 !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 5px !important;
+                padding: 5px 12px !important;
+                font-size: 12px !important;
+                font-weight: 700 !important;
+                cursor: pointer;
+            }
+            #sancha-section .sheet-tab.active {
+                background: #f2b71d !important;
+                color: #1f2937 !important;
+                border-color: #d9a425 !important;
+                font-weight: 800 !important;
+            }
+            #sancha-section #sancha-opening-box {
+                margin: 6px 20px 10px 20px !important;
+                padding: 9px 14px !important;
+                background: #fdfcf7 !important;
+                border: 1px solid #e5d5a7 !important;
+                border-radius: 6px !important;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            #sancha-section #sancha-opening-val {
+                color: #b47d00 !important;
+                font-size: 14px !important;
+                font-weight: 800 !important;
+                margin: 0 !important;
+            }
+            #sancha-section .filter-panel {
+                padding: 0 20px 10px 20px;
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+            #sancha-section .search-box {
+                flex: 1;
+                min-width: 200px;
+                padding: 7px 12px !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 5px !important;
+                font-size: 13px !important;
+                font-weight: 600 !important;
+                background: #ffffff !important;
+                color: #111827 !important;
+                outline: none;
+            }
+            #sancha-section .search-box:focus {
+                border-color: #d9a425 !important;
+                background: #fffdf5 !important;
+                box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.2);
+            }
+            #sancha-section #add-sancha-item-form {
+                margin: 8px 20px 14px 20px !important;
+                padding: 14px 16px !important;
+                background: #fdfcf7 !important;
+                border: 1.5px solid #d9b86c !important;
+                border-radius: 6px !important;
+            }
+            #sancha-section .table-responsive {
+                padding: 0 20px;
+                box-sizing: border-box;
+            }
+            #sancha-section table {
+                width: 100%;
+                border-collapse: collapse;
+                border: 1px solid #e5d5a7;
+                background: #ffffff;
+            }
+            #sancha-section table thead tr {
+                background: #fdf6e2 !important;
+                color: #1f2937 !important;
+            }
+            #sancha-section table th {
+                padding: 9px 12px !important;
+                font-size: 12px !important;
+                font-weight: 800 !important;
+                color: #1f2937 !important;
+                border-bottom: 1.5px solid #e5d5a7 !important;
+                text-align: left;
+            }
+            #sancha-section table td {
+                padding: 9px 12px !important;
+                font-size: 13px !important;
+                color: #1f2937 !important;
+                border-bottom: 1px solid #f3f4f6 !important;
+            }
+            #sancha-section .sancha-hub-row,
+            #sancha-section .sancha-stock-row,
+            #sancha-section .sancha-pass-row {
+                cursor: pointer;
+                transition: background 0.1s ease;
+            }
+            #sancha-section .sancha-hub-row:hover,
+            #sancha-section .sancha-stock-row:hover,
+            #sancha-section .sancha-pass-row:hover {
+                background: #fef9ea !important;
+            }
+            #sancha-section .sancha-hub-row.active,
+            #sancha-section .sancha-stock-row.active,
+            #sancha-section .sancha-pass-row.active {
+                background: #f2b71d !important;
+                color: #1f2937 !important;
+            }
+            #sancha-section .sancha-hub-row.active td,
+            #sancha-section .sancha-stock-row.active td,
+            #sancha-section .sancha-pass-row.active td {
+                font-weight: 700 !important;
+                color: #1f2937 !important;
+            }
+            #sancha-section .sancha-key-badge {
+                display: inline-block;
+                min-width: 24px;
+                text-align: center;
+                padding: 2px 7px;
+                border-radius: 4px;
+                font-size: 11.5px;
+                font-weight: 800;
+                background: #fdf6e2;
+                border: 1px solid #d9b86c;
+                color: #92400e;
+            }
+            #sancha-section .sancha-hub-row.active .sancha-key-badge {
+                background: #ffffff;
+                color: #1f2937;
+                border-color: #b47d00;
+            }
+            #sancha-section .sancha-tally-btn {
+                background: #ffffff;
+                color: #1f2937;
+                border: 1px solid #d1d5db;
+                border-radius: 5px;
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: 700;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #sancha-section .sancha-tally-btn:hover {
+                border-color: #d9a425;
+                background: #fef9ea;
+            }
+            #sancha-section .sancha-tally-btn-gold {
+                background: #f2b71d;
+                color: #1f2937;
+                border: 1px solid #d9a425;
+                border-radius: 5px;
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: 800;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #sancha-section .sancha-tally-btn-gold:hover { background: #e5aa12; }
+            #sancha-section .sancha-status-strip {
+                background: #fdf6e2;
+                border-top: 1px solid #e5d5a7;
+                padding: 9px 20px;
+                margin-top: 12px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 8px;
+                font-size: 11.5px;
+                color: #6b7280;
+                font-weight: 600;
+            }
+            .sancha-modal-overlay {
+                position: fixed; inset: 0;
+                background: rgba(31, 41, 55, 0.38);
+                backdrop-filter: blur(2px);
+                z-index: 999999;
+                display: flex; align-items: center; justify-content: center;
+                padding: 15px; box-sizing: border-box;
+                font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            }
+            .sancha-modal-card {
+                background: #ffffff;
+                width: 100%; max-width: 460px;
+                border: 1.5px solid #d9b86c;
+                border-radius: 8px;
+                box-shadow: 0 18px 42px rgba(0, 0, 0, 0.16);
+                overflow: hidden;
+                color: #1f2937;
+            }
+            .sancha-modal-head {
+                background: #fdf6e2;
+                border-bottom: 1.5px solid #e5d5a7;
+                padding: 11px 16px;
+                display: flex; justify-content: space-between; align-items: center;
+            }
+            .sancha-modal-head h3 {
+                margin: 0; font-size: 15px; font-weight: 800; color: #1f2937;
+            }
+            .sancha-modal-inp {
+                width: 100%; box-sizing: border-box;
+                padding: 7px 10px;
+                border: 1px solid #d1d5db; border-radius: 4px;
+                font-size: 13px; font-weight: 700; color: #111827;
+                background: #ffffff; outline: none;
+            }
+            .sancha-modal-inp:focus {
+                border-color: #d9a425 !important;
+                background: #fffdf5 !important;
+                box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.22);
+            }
+        `;
+        document.head.appendChild(style);
+    };
+
+    /* ========================================================================
+       2. 3-LEVEL VIEW CONTROLLER: 'hub' (Tani/Chukka) -> 'list' -> 'passbook'
+       ======================================================================== */
+    const computeSanchaCategorySummary = (cat) => {
+        const rawStock = (window.safeArray ? window.safeArray(window.getStore('sancha_items')) : [])
+            .filter((s) => String(s?.category || 'tani').toLowerCase() === cat);
+        const uniqueNames = [...new Set(rawStock.map((s) => (s?.name ? s.name.trim() : '')).filter(Boolean))];
+
+        let totalAaya = 0;
+        let totalGaya = 0;
+        let totalBacha = 0;
+        let itemCount = 0;
+
+        uniqueNames.forEach((name) => {
+            if (typeof window.getSanchaItemStats === 'function') {
+                const stats = window.getSanchaItemStats(null, name, cat, window.currentSanchaKarkhanaFilter);
+                if (stats.aaya > 0 || stats.gaya > 0 || stats.bacha > 0) {
+                    totalAaya += safeNum(stats.aaya);
+                    totalGaya += safeNum(stats.gaya);
+                    totalBacha += safeNum(stats.bacha);
+                    itemCount++;
+                }
+            }
+        });
+
+        return { totalAaya, totalGaya, totalBacha, itemCount };
+    };
+
+    const ensureSanchaHubView = () => {
+        const sec = document.getElementById('sancha-section');
+        if (!sec) return null;
+
+        let hub = document.getElementById('sancha-category-hub-view');
+        if (hub) return hub;
+
+        hub = document.createElement('div');
+        hub.id = 'sancha-category-hub-view';
+        hub.style.display = 'none';
+        hub.innerHTML = `
+            <div style="padding:16px 20px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:55px;">#</th>
+                            <th>Sancha Category (Particulars)</th>
+                            <th style="width:90px; text-align:center;">Key</th>
+                            <th style="text-align:right;">Items</th>
+                            <th style="text-align:right;">Available Stock (Bacha)</th>
+                            <th style="width:110px; text-align:right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="sancha-hub-row active" data-hidx="0" onclick="window.__sanchaOpenCategoryFromHub('tani')">
+                            <td>1</td>
+                            <td>
+                                <strong>Tani Stock</strong>
+                                <small style="display:block; font-size:11.5px; color:#6b7280; margin-top:2px;">Taana Warp Stock &amp; Kariger Issue Register</small>
+                            </td>
+                            <td style="text-align:center;"><span class="sancha-key-badge">T</span></td>
+                            <td style="text-align:right;" id="sancha-hub-tani-count">0 Items</td>
+                            <td style="text-align:right; font-weight:800; color:#b47d00;" id="sancha-hub-tani-bacha">0.00 Kg</td>
+                            <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
+                        </tr>
+                        <tr class="sancha-hub-row" data-hidx="1" onclick="window.__sanchaOpenCategoryFromHub('chukka')">
+                            <td>2</td>
+                            <td>
+                                <strong>Chukka Stock</strong>
+                                <small style="display:block; font-size:11.5px; color:#6b7280; margin-top:2px;">Chukka Warp Stock &amp; Kariger Issue Register</small>
+                            </td>
+                            <td style="text-align:center;"><span class="sancha-key-badge">C</span></td>
+                            <td style="text-align:right;" id="sancha-hub-chukka-count">0 Items</td>
+                            <td style="text-align:right; font-weight:800; color:#b47d00;" id="sancha-hub-chukka-bacha">0.00 Kg</td>
+                            <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="sancha-status-strip">
+                <span style="color:#92400e; font-weight:700;">[↑ ↓] Tani / Chukka Chunein · [Enter] ya [T / C] se Andar Jayein · [F7] + Naya Sancha · [Esc] Back</span>
+                <span>2 Categories</span>
+            </div>
+        `;
+
+        const headerEl = sec.querySelector('.module-header');
+        if (headerEl) {
+            headerEl.insertAdjacentElement('afterend', hub);
+        } else {
+            sec.prepend(hub);
+        }
+        return hub;
+    };
+
+    const renderSanchaHubTotals = () => {
+        ensureSanchaHubView();
+        const tSum = computeSanchaCategorySummary('tani');
+        const cSum = computeSanchaCategorySummary('chukka');
+
+        const tc = document.getElementById('sancha-hub-tani-count');
+        const tb = document.getElementById('sancha-hub-tani-bacha');
+        const cc = document.getElementById('sancha-hub-chukka-count');
+        const cb = document.getElementById('sancha-hub-chukka-bacha');
+
+        if (tc) tc.textContent = `${tSum.itemCount} Items`;
+        if (tb) tb.textContent = `${tSum.totalBacha.toFixed(2)} Kg`;
+        if (cc) cc.textContent = `${cSum.itemCount} Items`;
+        if (cb) cb.textContent = `${cSum.totalBacha.toFixed(2)} Kg`;
+
+        highlightSanchaHubRow(sanchaHubActiveIdx);
+    };
+
+    const highlightSanchaHubRow = (idx) => {
+        const rows = Array.from(document.querySelectorAll('#sancha-category-hub-view .sancha-hub-row'));
+        if (!rows.length) return;
+        sanchaHubActiveIdx = ((idx % rows.length) + rows.length) % rows.length;
+        rows.forEach((r, i) => r.classList.toggle('active', i === sanchaHubActiveIdx));
+    };
+
+    window.__sanchaOpenCategoryFromHub = (cat) => {
+        sanchaHubActiveIdx = (cat === 'chukka') ? 1 : 0;
+        switchSanchaCategory(cat);
+    };
+
+    const setSanchaViewMode = (mode) => {
+        sanchaViewMode = mode; // 'hub' | 'list' | 'passbook'
+        const sec = document.getElementById('sancha-section');
+        if (!sec) return;
+
+        ensureSanchaHubView();
+
+        const hubView = document.getElementById('sancha-category-hub-view');
+        const catTabsBar = document.getElementById('tab-sancha-tani')?.closest('.sheet-tabs-bar');
+        const kTabsBar = document.getElementById('sancha-karkhana-tabs-bar');
+        const openBox = document.getElementById('sancha-opening-box');
+        const filterPanel = sec.querySelector(':scope > .filter-panel');
+        const addForm = document.getElementById('add-sancha-item-form');
+        const mainTbl = document.getElementById('sancha-table-body')?.closest('.table-responsive');
+        const mainPager = document.getElementById('sancha-stock-pagination-controls');
+        const mainStrip = document.getElementById('sancha-main-status-strip');
+        const passView = document.getElementById('sancha-inline-passbook-view');
+        const headerTitle = sec.querySelector('.module-header h2');
+        const headerBackBtn = sec.querySelector('.module-header .back-btn');
+
+        const isHub = (mode === 'hub');
+        const isList = (mode === 'list');
+        const isPass = (mode === 'passbook');
+
+        if (hubView) hubView.style.display = isHub ? 'block' : 'none';
+        if (catTabsBar) catTabsBar.style.display = isList ? 'flex' : 'none';
+        if (kTabsBar) kTabsBar.style.display = isList ? 'flex' : 'none';
+        if (openBox) openBox.style.display = isList ? 'flex' : 'none';
+        if (filterPanel) filterPanel.style.display = isList ? 'flex' : 'none';
+        if (addForm && !isList) addForm.style.display = 'none';
+        if (mainTbl) mainTbl.style.display = isList ? 'block' : 'none';
+        if (mainPager) mainPager.style.display = isList ? 'flex' : 'none';
+        if (mainStrip) mainStrip.style.display = isList ? 'flex' : 'none';
+        if (passView) passView.style.display = isPass ? 'block' : 'none';
+
+        const catTitle = (window.currentSanchaCategory === 'chukka') ? 'Chukka' : 'Tani';
+        if (headerTitle) {
+            if (isHub) headerTitle.textContent = 'Sancha Stock (Tani & Chukka)';
+            else if (isList) headerTitle.textContent = `Sancha Stock: ${catTitle}`;
+            else headerTitle.textContent = `Sancha Passbook: ${window.currentPassbookSanchaItem || ''} (${catTitle})`;
+        }
+        if (headerBackBtn) {
+            if (isHub) headerBackBtn.textContent = window.__slReturnToStockSummary ? '← [Esc] Stock Summary' : '← Dashboard';
+            else if (isList) headerBackBtn.textContent = '← [Esc] Tani / Chukka';
+            else headerBackBtn.textContent = `← [Esc] ${catTitle} List`;
+        }
+    };
+
+    const handleSanchaBackStep = () => {
+        if (sanchaViewMode === 'passbook') {
+            setSanchaViewMode('list');
+            renderSanchaTable();
+            return;
+        }
+        if (sanchaViewMode === 'list') {
+            setSanchaViewMode('hub');
+            renderSanchaHubTotals();
+            return;
+        }
+        if (window.__slReturnToStockSummary && typeof window.openStockSummaryModule === 'function') {
+            window.openStockSummaryModule();
+            return;
+        }
+        if (typeof window.backToDashboard === 'function') {
+            window.backToDashboard();
+        }
+    };
+
+    /* ========================================================================
        3. NAVIGATION & CATEGORY / BRANCH CONTROLLERS
        ======================================================================== */
     const openSanchaModule = () => {
+        ensureSanchaTallyStyles();
         setDisplay('dashboard-view', 'none');
         setDisplay('sancha-section', 'block');
 
-        renderSanchaKarkhanaTabs();
-        populateSanchaExistingDropdown();
-        renderSanchaTable();
+        setSanchaViewMode('hub');
+        renderSanchaHubTotals();
         bindSanchaSearchInput();
+        bindSanchaKeyboardEngine();
     };
 
     const switchSanchaCategory = (cat) => {
+        ensureSanchaTallyStyles();
         window.currentSanchaCategory = String(cat || 'tani').toLowerCase() === 'chukka' ? 'chukka' : 'tani';
+        sanchaHubActiveIdx = (window.currentSanchaCategory === 'chukka') ? 1 : 0;
         sanchaStockCurrentPage = 1;
+        sanchaListActiveIdx = 0;
 
         const tabT = document.getElementById('tab-sancha-tani');
         const tabC = document.getElementById('tab-sancha-chukka');
         if (tabT) tabT.className = (window.currentSanchaCategory === 'tani') ? 'sheet-tab active' : 'sheet-tab';
         if (tabC) tabC.className = (window.currentSanchaCategory === 'chukka') ? 'sheet-tab active' : 'sheet-tab';
 
-        // Safe Radio Button Selector
         const rTani = document.querySelector('input[name="sancha-cat"][value="tani"]');
         const rChuk = document.querySelector('input[name="sancha-cat"][value="chukka"]');
         if (rTani && window.currentSanchaCategory === 'tani') rTani.checked = true;
         if (rChuk && window.currentSanchaCategory === 'chukka') rChuk.checked = true;
 
+        setSanchaViewMode('list');
+        renderSanchaKarkhanaTabs();
         populateSanchaExistingDropdown();
         renderSanchaTable();
+        bindSanchaKeyboardEngine();
     };
 
     const renderSanchaKarkhanaTabs = () => {
@@ -101,13 +592,11 @@
         }
 
         const isAllActive = window.currentSanchaKarkhanaFilter === 'all';
-        let html = `<button type="button" class="sheet-tab ${isAllActive ? 'active' : ''}" onclick="switchSanchaKarkhanaTab('all')">👥 Sabhi Karkhane</button>`;
+        let html = `<button type="button" class="sheet-tab ${isAllActive ? 'active' : ''}" onclick="switchSanchaKarkhanaTab('all')">Sabhi Karkhane</button>`;
 
         karkhanas.forEach((k) => {
-            const isMain = (k.id === 'k_main' || k.isDefault);
-            const icon = isMain ? '🏢 ' : '🏭 ';
             const isActive = String(window.currentSanchaKarkhanaFilter) === String(k.id) ? 'active' : '';
-            html += `<button type="button" class="sheet-tab ${isActive}" onclick="switchSanchaKarkhanaTab('${esc(k.id)}')">${icon}${esc(k.name)}</button>`;
+            html += `<button type="button" class="sheet-tab ${isActive}" onclick="switchSanchaKarkhanaTab('${esc(k.id)}')">${esc(k.name)}</button>`;
         });
 
         bar.innerHTML = html;
@@ -116,9 +605,25 @@
     const switchSanchaKarkhanaTab = (kId) => {
         window.currentSanchaKarkhanaFilter = kId || 'all';
         sanchaStockCurrentPage = 1;
+        sanchaListActiveIdx = 0;
         renderSanchaKarkhanaTabs();
         populateSanchaExistingDropdown();
         renderSanchaTable();
+    };
+
+    const cycleSanchaKarkhanaTab = () => {
+        let karkhanas = [];
+        if (typeof window.getKarkhanasSafe === 'function') {
+            karkhanas = window.getKarkhanasSafe();
+        } else {
+            karkhanas = window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : [];
+        }
+        if (!karkhanas.length) karkhanas = [{ id: 'k_main', name: 'Main Godown' }];
+
+        const ids = ['all', ...karkhanas.map(k => String(k.id))];
+        const curIdx = ids.indexOf(String(window.currentSanchaKarkhanaFilter));
+        const nextId = ids[(curIdx + 1) % ids.length];
+        switchSanchaKarkhanaTab(nextId);
     };
 
     const bindSanchaSearchInput = () => {
@@ -127,20 +632,49 @@
             searchInp.dataset.bound = 'true';
             searchInp.addEventListener('input', () => {
                 sanchaStockCurrentPage = 1;
+                sanchaListActiveIdx = 0;
                 renderSanchaTable();
+            });
+            searchInp.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown' || e.key === 'Enter') {
+                    e.preventDefault();
+                    searchInp.blur();
+                    if (e.key === 'Enter' && currentSanchaFilteredRowsCache.length > 0) {
+                        const pageRows = getSanchaCurrentPageRows();
+                        const chosen = pageRows[sanchaListActiveIdx] || pageRows[0];
+                        if (chosen) openSanchaPassbook(encodeURIComponent(chosen.name));
+                    }
+                }
             });
         }
     };
 
     const filterSancha = () => {
         sanchaStockCurrentPage = 1;
+        sanchaListActiveIdx = 0;
         renderSanchaTable();
     };
 
+    const getSanchaCurrentPageRows = () => {
+        const startIndex = (sanchaStockCurrentPage - 1) * SANCHA_STOCK_PAGE_SIZE;
+        return currentSanchaFilteredRowsCache.slice(startIndex, startIndex + SANCHA_STOCK_PAGE_SIZE);
+    };
+
+    const highlightSanchaListRow = (idx) => {
+        const rows = Array.from(document.querySelectorAll('#sancha-table-body .sancha-stock-row'));
+        if (!rows.length) return;
+        sanchaListActiveIdx = ((idx % rows.length) + rows.length) % rows.length;
+        rows.forEach((r, i) => r.classList.toggle('active', i === sanchaListActiveIdx));
+        rows[sanchaListActiveIdx]?.scrollIntoView({ block: 'nearest' });
+    };
+
     /* ========================================================================
-       4. INWARD INVENTORY PURCHASE ENGINE (Khareed)
+       4. INWARD INVENTORY PURCHASE ENGINE (100% SUPABASE SAFE)
        ======================================================================== */
     const toggleAddSanchaForm = () => {
+        if (sanchaViewMode !== 'list') {
+            switchSanchaCategory(window.currentSanchaCategory || 'tani');
+        }
         const f = document.getElementById('add-sancha-item-form');
         if (!f) return;
 
@@ -149,31 +683,30 @@
 
         if (isOpening) {
             const dInp = document.getElementById('sancha-date');
-            if (dInp) {
-                dInp.value = (typeof window.getTodayDate === 'function') 
-                    ? window.getTodayDate() 
-                    : new Date().toISOString().split('T')[0];
-            }
+            if (dInp) dInp.value = getToday();
 
-            // Sync radio button to current active tab
             const rTani = document.querySelector('input[name="sancha-cat"][value="tani"]');
             const rChuk = document.querySelector('input[name="sancha-cat"][value="chukka"]');
             if (window.currentSanchaCategory === 'chukka' && rChuk) rChuk.checked = true;
             else if (rTani) rTani.checked = true;
 
             toggleSanchaFormOptions();
+
+            setTimeout(() => {
+                const isNew = document.getElementById('sancha-type-new')?.checked;
+                document.getElementById(isNew ? 'sancha-new-name' : 'sancha-select-existing')?.focus();
+            }, 40);
         }
     };
 
     const toggleSanchaFormOptions = () => {
-        const isNew = document.getElementById('sancha-type-new') 
-            ? document.getElementById('sancha-type-new').checked 
+        const isNew = document.getElementById('sancha-type-new')
+            ? document.getElementById('sancha-type-new').checked
             : true;
 
         setDisplay('sancha-existing-group', isNew ? 'none' : 'block');
         setDisplay('sancha-new-group', isNew ? 'block' : 'none');
 
-        // Robust category check (Value based)
         const selectedRadio = document.querySelector('input[name="sancha-cat"]:checked');
         if (selectedRadio) {
             window.currentSanchaCategory = String(selectedRadio.value).toLowerCase() === 'chukka' ? 'chukka' : 'tani';
@@ -208,21 +741,18 @@
     };
 
     const saveNewSanchaStock = () => {
-        const isNew = document.getElementById('sancha-type-new') 
-            ? document.getElementById('sancha-type-new').checked 
+        const isNew = document.getElementById('sancha-type-new')
+            ? document.getElementById('sancha-type-new').checked
             : true;
 
         const nameInp = isNew ? document.getElementById('sancha-new-name') : document.getElementById('sancha-select-existing');
         const name = String(nameInp?.value || '').trim();
 
-        const date = document.getElementById('sancha-date')?.value || 
-                    ((typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0]);
-
+        const date = document.getElementById('sancha-date')?.value || getToday();
         const qtyInp = document.getElementById('sancha-qty');
         const qty = safeNum(qtyInp?.value);
         const person = String(document.getElementById('sancha-person')?.value || '').trim();
 
-        // 🎯 100% FOOLPROOF CHUKKA VS TANI CHECK
         let category = window.currentSanchaCategory || 'tani';
         const checkedCatRadio = document.querySelector('input[name="sancha-cat"]:checked');
         if (checkedCatRadio && checkedCatRadio.value) {
@@ -292,14 +822,16 @@
 
         triggerSanchaCacheInvalidation();
         toggleAddSanchaForm();
-        switchSanchaCategory(category); // Automatically switch view to the added category
+        switchSanchaCategory(category);
+        if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
         alert(`✅ Sancha (${category === 'tani' ? 'Tani' : 'Chukka'}) Stock me jama ho gaya!`);
     };
 
     /* ========================================================================
-       5. MAIN TABLE RENDERER
+       5. MAIN SANCHA ITEMS TABLE RENDERER (CLEAN WHITE & GOLD + KEYBOARD)
        ======================================================================== */
     const renderSanchaTable = () => {
+        ensureSanchaTallyStyles();
         bindSanchaSearchInput();
 
         const tbody = document.getElementById('sancha-table-body');
@@ -330,44 +862,68 @@
         const searchInp = document.getElementById('search-sancha-input');
         const txt = searchInp ? searchInp.value.toLowerCase().trim() : '';
 
-        const filteredRows = txt 
-            ? rows.filter((s) => `${s.name || ''} ${s.person || ''} ${s.date || ''} ${s.category || ''} ${s.bacha || ''}`.toLowerCase().includes(txt)) 
+        const filteredRows = txt
+            ? rows.filter((s) => `${s.name || ''} ${s.person || ''} ${s.date || ''} ${s.category || ''} ${s.bacha || ''}`.toLowerCase().includes(txt))
             : rows;
 
         currentSanchaFilteredRowsCache = filteredRows;
 
-        if (searchInp && searchInp.parentElement && !document.getElementById('sancha-stock-print-btn')) {
-            const printBtn = document.createElement('button');
-            printBtn.id = 'sancha-stock-print-btn';
-            printBtn.type = 'button';
-            printBtn.className = 'sheet-btn';
-            printBtn.style.cssText = 'background:#0284c7; color:#ffffff; padding:6px 12px; font-weight:bold; border-radius:6px; border:none; cursor:pointer; margin-left:8px; display:inline-flex; align-items:center; gap:4px;';
-            printBtn.innerHTML = '🖨️ A6 Print';
-            printBtn.onclick = () => printSanchaStockReport();
-            if (searchInp.nextSibling) {
-                searchInp.parentElement.insertBefore(printBtn, searchInp.nextSibling);
-            } else {
+        if (searchInp && searchInp.parentElement) {
+            if (!document.getElementById('sancha-stock-transfer-btn')) {
+                const trBtn = document.createElement('button');
+                trBtn.id = 'sancha-stock-transfer-btn';
+                trBtn.type = 'button';
+                trBtn.className = 'sancha-tally-btn';
+                trBtn.innerHTML = 'Bhejo / Transfer [T]';
+                trBtn.onclick = () => triggerSelectedSanchaTransfer();
+                searchInp.parentElement.appendChild(trBtn);
+            }
+            if (!document.getElementById('sancha-stock-print-btn')) {
+                const printBtn = document.createElement('button');
+                printBtn.id = 'sancha-stock-print-btn';
+                printBtn.type = 'button';
+                printBtn.className = 'sancha-tally-btn';
+                printBtn.innerHTML = 'A6 Print [Alt+P]';
+                printBtn.onclick = () => printSanchaStockReport();
                 searchInp.parentElement.appendChild(printBtn);
             }
         }
 
+        let totalAaya = 0;
+        let totalGaya = 0;
         let totalBacha = 0;
-        rows.forEach(r => { totalBacha += safeNum(r.bacha); });
+        rows.forEach((r) => {
+            totalAaya += safeNum(r.aaya);
+            totalGaya += safeNum(r.gaya);
+            totalBacha += safeNum(r.bacha);
+        });
 
         const totalEntries = filteredRows.length;
+        const sec = document.getElementById('sancha-section');
         let pager = document.getElementById('sancha-stock-pagination-controls');
         if (!pager) {
-            const tbl = tbody.closest('table') || tbody.parentElement;
+            const tbl = tbody.closest('.table-responsive') || tbody.closest('table')?.parentElement;
             if (tbl && tbl.parentElement) {
                 pager = document.createElement('div');
                 pager.id = 'sancha-stock-pagination-controls';
-                pager.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding:8px 4px; border-top:1px solid #e2e8f0; flex-wrap:wrap; gap:8px;';
-                tbl.parentElement.appendChild(pager);
+                pager.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin:10px 20px 0 20px; padding:8px 0; border-top:1px solid #eadab0; flex-wrap:wrap; gap:8px;';
+                tbl.insertAdjacentElement('afterend', pager);
             }
         }
 
+        if (sec && !document.getElementById('sancha-main-status-strip')) {
+            const strip = document.createElement('div');
+            strip.id = 'sancha-main-status-strip';
+            strip.className = 'sancha-status-strip';
+            strip.innerHTML = `
+                <span style="color:#92400e; font-weight:700;">[↑ ↓] Item Chunein · [Enter / Click] Passbook · [T / F4] Transfer · [F7] + Naya Sancha · [F2] Godam · [/] Search · [Esc] Back</span>
+                <span id="sancha-main-count-lbl">0 Items</span>
+            `;
+            sec.appendChild(strip);
+        }
+
         if (!totalEntries) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:#888;">Koi ${currentCat === 'tani' ? 'Tani' : 'Chukka'} Stock nahi mila.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:22px; color:#6b7280;">Koi ${currentCat === 'tani' ? 'Tani' : 'Chukka'} Stock nahi mila.</td></tr>`;
             if (pager) pager.innerHTML = '';
         } else {
             const totalPages = Math.ceil(totalEntries / SANCHA_STOCK_PAGE_SIZE) || 1;
@@ -376,30 +932,24 @@
 
             const startIndex = (sanchaStockCurrentPage - 1) * SANCHA_STOCK_PAGE_SIZE;
             const pageRows = filteredRows.slice(startIndex, startIndex + SANCHA_STOCK_PAGE_SIZE);
+            if (sanchaListActiveIdx >= pageRows.length) sanchaListActiveIdx = 0;
+            if (sanchaListActiveIdx < 0) sanchaListActiveIdx = 0;
 
             let html = '';
-            pageRows.forEach((s) => {
+            pageRows.forEach((s, idx) => {
                 const bacha = safeNum(s.bacha);
                 const safeName = encodeURIComponent(s.name);
-                const safeCat = encodeURIComponent(s.category);
+                const activeCls = (idx === sanchaListActiveIdx) ? ' active' : '';
 
-                let transferBtn = '';
-                if (bacha > 0) {
-                    transferBtn = `<button type="button" class="sheet-btn" style="background:#f59e0b; color:#ffffff; padding:4px 9px; font-weight:bold; margin-left:6px; border-radius:4px; border:none; cursor:pointer;" onclick="openSanchaTransferModal('${safeName}', '${safeCat}', ${bacha})">🚚 Bhejo</button>`;
-                }
-
-                html += `<tr>
+                html += `<tr class="sancha-stock-row${activeCls}" data-sidx="${idx}" onclick="window.__sanchaSelectAndOpen(${idx}, '${safeName}')">
                     <td>${esc(s.date || '-')}</td>
-                    <td><span class="badge-blue">${s.category === 'chukka' ? '⚙️ Chukka' : '🧵 Tani'}</span></td>
+                    <td><span style="font-size:11.5px; font-weight:700; color:#92400e;">${s.category === 'chukka' ? 'Chukka' : 'Tani'}</span></td>
                     <td><strong>${esc(s.name)}</strong></td>
-                    <td style="color:#059669; font-weight:700;">+${safeNum(s.aaya).toFixed(2)}</td>
-                    <td style="color:#ea580c; font-weight:700;">-${safeNum(s.gaya).toFixed(2)}</td>
-                    <td style="font-weight:800; color:#0284c7; background:#eff6ff; font-size:14px;">${bacha.toFixed(2)} Kg</td>
+                    <td style="font-weight:700;">+${safeNum(s.aaya).toFixed(2)} Kg</td>
+                    <td style="font-weight:700; color:#6b7280;">-${safeNum(s.gaya).toFixed(2)} Kg</td>
+                    <td style="font-weight:800; color:#b47d00;">${bacha.toFixed(2)} Kg</td>
                     <td>${esc(s.person || '-')}</td>
-                    <td style="text-align:center; white-space:nowrap;">
-                        <button type="button" class="sheet-btn" style="background:#0284c7; padding:4px 10px; font-weight:bold; border-radius:4px; border:none; color:white; cursor:pointer;" onclick="openSanchaPassbook('${safeName}')">📖 Passbook</button>
-                        ${transferBtn}
-                    </td>
+                    <td style="text-align:right; font-weight:700; font-size:12px;">Passbook →</td>
                 </tr>`;
             });
 
@@ -407,30 +957,68 @@
 
             if (pager) {
                 pager.innerHTML = `
-                    <div style="font-size:12px; color:#475569; font-weight:600;">
+                    <div style="font-size:12px; color:#6b7280; font-weight:600;">
                         Showing <strong>${startIndex + 1}</strong> - <strong>${Math.min(startIndex + SANCHA_STOCK_PAGE_SIZE, totalEntries)}</strong> of <strong>${totalEntries}</strong> Items
                     </div>
-                    <div style="display:flex; gap:6px;">
-                        <button type="button" class="sheet-btn" style="background:${sanchaStockCurrentPage <= 1 ? '#cbd5e1' : '#0284c7'}; color:white; padding:4px 10px; border-radius:4px; border:none; cursor:${sanchaStockCurrentPage <= 1 ? 'not-allowed' : 'pointer'};" ${sanchaStockCurrentPage <= 1 ? 'disabled' : ''} onclick="changeSanchaStockPage(-1)">◀ Prev</button>
-                        <span style="font-size:12px; font-weight:bold; padding:4px 8px; background:#f1f5f9; border-radius:4px;">${sanchaStockCurrentPage} / ${totalPages}</span>
-                        <button type="button" class="sheet-btn" style="background:${sanchaStockCurrentPage >= totalPages ? '#cbd5e1' : '#0284c7'}; color:white; padding:4px 10px; border-radius:4px; border:none; cursor:${sanchaStockCurrentPage >= totalPages ? 'not-allowed' : 'pointer'};" ${sanchaStockCurrentPage >= totalPages ? 'disabled' : ''} onclick="changeSanchaStockPage(1)">Next ▶</button>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button type="button" class="sancha-tally-btn" ${sanchaStockCurrentPage <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''} onclick="changeSanchaStockPage(-1)">◀ Prev</button>
+                        <span style="font-size:12px; font-weight:700; padding:4px 8px; background:#fdf6e2; border:1px solid #e5d5a7; border-radius:4px;">${sanchaStockCurrentPage} / ${totalPages}</span>
+                        <button type="button" class="sancha-tally-btn" ${sanchaStockCurrentPage >= totalPages ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''} onclick="changeSanchaStockPage(1)">Next ▶</button>
                     </div>`;
             }
         }
 
+        const opBox = document.getElementById('sancha-opening-box');
         const opVal = document.getElementById('sancha-opening-val');
         if (opVal) {
-            opVal.textContent = `${totalBacha.toFixed(2)} Kg Kul ${currentCat === 'tani' ? 'Tani' : 'Chukka'} Bacha`;
+            opVal.textContent = `Kul ${currentCat === 'tani' ? 'Tani' : 'Chukka'} Bacha: ${totalBacha.toFixed(2)} Kg`;
         }
+        if (opBox) {
+            let extra = document.getElementById('sancha-summary-meta');
+            if (!extra) {
+                extra = document.createElement('div');
+                extra.id = 'sancha-summary-meta';
+                extra.style.cssText = 'font-size:12px; color:#6b7280; font-weight:700;';
+                opBox.appendChild(extra);
+            }
+            extra.textContent = `Total Aaya: +${totalAaya.toFixed(2)} Kg · Total Gaya: -${totalGaya.toFixed(2)} Kg`;
+        }
+
+        const cntLbl = document.getElementById('sancha-main-count-lbl');
+        if (cntLbl) cntLbl.textContent = `${totalEntries} Items`;
+    };
+
+    window.__sanchaSelectAndOpen = (idx, safeName) => {
+        highlightSanchaListRow(idx);
+        openSanchaPassbook(safeName);
+    };
+
+    const triggerSelectedSanchaTransfer = () => {
+        const cat = window.currentSanchaCategory || 'tani';
+        if (sanchaViewMode === 'passbook' && window.currentPassbookSanchaItem) {
+            const stats = (typeof window.getSanchaItemStats === 'function')
+                ? window.getSanchaItemStats(null, window.currentPassbookSanchaItem, cat, window.currentSanchaKarkhanaFilter)
+                : { bacha: 0 };
+            if (safeNum(stats.bacha) <= 0) return alert('Is item me transfer ke liye koi stock nahi bacha hai.');
+            openSanchaTransferModal(encodeURIComponent(window.currentPassbookSanchaItem), encodeURIComponent(cat), safeNum(stats.bacha));
+            return;
+        }
+
+        const pageRows = getSanchaCurrentPageRows();
+        const chosen = pageRows[sanchaListActiveIdx];
+        if (!chosen) return alert('Pehle koi Sancha item chunein!');
+        if (safeNum(chosen.bacha) <= 0) return alert(`[${chosen.name}] me transfer ke liye koi stock nahi bacha hai.`);
+        openSanchaTransferModal(encodeURIComponent(chosen.name), encodeURIComponent(chosen.category || cat), safeNum(chosen.bacha));
     };
 
     const changeSanchaStockPage = (delta) => {
         sanchaStockCurrentPage += delta;
+        sanchaListActiveIdx = 0;
         renderSanchaTable();
     };
 
     /* ========================================================================
-       6. INTER-GODOWN TRANSFER MODAL
+       6. INTER-GODOWN TRANSFER MODAL (TALLY WHITE & GOLD + ENTER CHAINING)
        ======================================================================== */
     const openSanchaTransferModal = (safeName, safeCat, availableBacha) => {
         const itemName = decodeURIComponent(safeName);
@@ -447,65 +1035,82 @@
         }
 
         const currentKid = (window.currentSanchaKarkhanaFilter !== 'all') ? window.currentSanchaKarkhanaFilter : 'k_main';
-        const currentGodamName = (typeof window.getKarkhanaNameById === 'function') 
-            ? window.getKarkhanaNameById(currentKid) 
+        const currentGodamName = (typeof window.getKarkhanaNameById === 'function')
+            ? window.getKarkhanaNameById(currentKid)
             : currentKid;
 
         let godownOptions = '';
         karkhanas.forEach((k) => {
             if (String(k.id) !== String(currentKid)) {
-                const isMain = (k.id === 'k_main' || k.isDefault);
-                godownOptions += `<option value="${esc(k.id)}">${isMain ? '🏢 ' : '🏭 '}${esc(k.name)}</option>`;
+                godownOptions += `<option value="${esc(k.id)}">${esc(k.name)}</option>`;
             }
         });
 
-        const today = (typeof window.getTodayDate === 'function') 
-            ? window.getTodayDate() 
-            : new Date().toISOString().split('T')[0];
-
+        const today = getToday();
         const catLabel = category === 'chukka' ? 'Chukka' : 'Tani';
 
         const modalHtml = `
-            <div id="sancha-transfer-popup-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:99999; display:flex; align-items:center; justify-content:center; padding:15px; box-sizing:border-box;">
-                <div style="background:#ffffff; width:100%; max-width:460px; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); overflow:hidden;">
-                    <div style="background:#0284c7; color:#ffffff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
-                        <h3 style="margin:0; font-size:16px;">🚚 Sancha (${catLabel}) Stock Transfer</h3>
-                        <button type="button" onclick="closeSanchaTransferModal()" style="background:transparent; border:none; color:#ffffff; font-size:22px; cursor:pointer;">&times;</button>
+            <div id="sancha-transfer-popup-modal" class="sancha-modal-overlay">
+                <div class="sancha-modal-card">
+                    <div class="sancha-modal-head">
+                        <h3>Sancha (${catLabel}) Transfer</h3>
+                        <button type="button" class="sancha-tally-btn" onclick="closeSanchaTransferModal()">&larr; [Esc] Close</button>
                     </div>
                     <div style="padding:16px;">
-                        <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:10px; margin-bottom:12px; font-size:13px;">
+                        <div style="background:#fdf6e2; border:1px solid #e5d5a7; border-radius:6px; padding:10px 12px; margin-bottom:12px; font-size:12.5px;">
                             <div><strong>Item:</strong> ${esc(itemName)} (${catLabel})</div>
                             <div><strong>Bhejne Wala Godam:</strong> ${esc(currentGodamName)}</div>
-                            <div style="color:#0284c7; font-weight:bold; font-size:14px; margin-top:4px;">Maujooda Bacha Wazan: ${availableBacha.toFixed(2)} Kg</div>
+                            <div style="color:#b47d00; font-weight:800; font-size:13.5px; margin-top:4px;">Available Stock: ${availableBacha.toFixed(2)} Kg</div>
                         </div>
-                        <div style="margin-bottom:12px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151;">Kahan Bhejna Hai (Destination Godam):</label><br>
-                            <select id="sancha-dest-godam" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; margin-top:4px;">
-                                ${godownOptions}
-                            </select>
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Destination Godam :</label>
+                            <select id="sancha-dest-godam" class="sancha-modal-inp">${godownOptions}</select>
                         </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
                             <div>
-                                <label style="font-size:12px; font-weight:700; color:#374151;">Kitna Wazan (Kg):</label><br>
-                                <input type="number" step="0.01" id="sancha-transfer-qty" max="${availableBacha}" min="0.01" value="${availableBacha}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; font-weight:bold; box-sizing:border-box;">
+                                <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Wazan (Kg) :</label>
+                                <input type="number" step="0.01" id="sancha-transfer-qty" max="${availableBacha}" min="0.01" value="${availableBacha}" class="sancha-modal-inp">
                             </div>
                             <div>
-                                <label style="font-size:12px; font-weight:700; color:#374151;">Tarikh:</label><br>
-                                <input type="date" id="sancha-transfer-date" value="${today}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; box-sizing:border-box;">
+                                <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Tarikh :</label>
+                                <input type="date" id="sancha-transfer-date" value="${today}" class="sancha-modal-inp">
                             </div>
                         </div>
                         <div style="margin-bottom:14px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151;">Note / Parchi No. (Optional):</label><br>
-                            <input type="text" id="sancha-transfer-note" placeholder="e.g. Khairabad loom ke liye Tani bheji" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; box-sizing:border-box;">
+                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Note / Parchi No. (Optional) :</label>
+                            <input type="text" id="sancha-transfer-note" placeholder="e.g. Khairabad loom ke liye bheji" class="sancha-modal-inp">
                         </div>
-                        <button type="button" onclick="submitSanchaTransferForm('${safeName}', '${safeCat}', '${currentKid}', ${availableBacha})" style="background:#0284c7; color:#ffffff; border:none; width:100%; padding:10px; border-radius:6px; font-weight:bold; font-size:14px; cursor:pointer;">
-                            🚀 Sancha Transfer Confirm Karein
-                        </button>
+                        <div style="display:flex; justify-content:flex-end; gap:8px;">
+                            <button type="button" class="sancha-tally-btn" onclick="closeSanchaTransferModal()">Cancel [Esc]</button>
+                            <button type="button" class="sancha-tally-btn-gold" onclick="submitSanchaTransferForm('${safeName}', '${safeCat}', '${currentKid}', ${availableBacha})">Transfer Confirm [Enter]</button>
+                        </div>
                     </div>
                 </div>
             </div>`;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const order = ['sancha-dest-godam', 'sancha-transfer-qty', 'sancha-transfer-date', 'sancha-transfer-note'];
+        order.forEach((fid, i) => {
+            const el = document.getElementById(fid);
+            if (!el) return;
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (i < order.length - 1) {
+                        const nxt = document.getElementById(order[i + 1]);
+                        if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
+                    } else {
+                        submitSanchaTransferForm(safeName, safeCat, currentKid, availableBacha);
+                    }
+                }
+            });
+        });
+
+        setTimeout(() => {
+            const qtyEl = document.getElementById('sancha-transfer-qty');
+            if (qtyEl) { qtyEl.focus(); qtyEl.select(); }
+        }, 50);
     };
 
     const closeSanchaTransferModal = () => {
@@ -518,8 +1123,7 @@
         const category = decodeURIComponent(safeCat);
         const toKid = document.getElementById('sancha-dest-godam')?.value;
         const qty = safeNum(document.getElementById('sancha-transfer-qty')?.value);
-        const d = document.getElementById('sancha-transfer-date')?.value || 
-                 ((typeof window.getTodayDate === 'function') ? window.getTodayDate() : '');
+        const d = document.getElementById('sancha-transfer-date')?.value || getToday();
         const note = String(document.getElementById('sancha-transfer-note')?.value || '').trim();
 
         if (!toKid) return alert('Kripya Paane wala Godam chunein!');
@@ -534,56 +1138,159 @@
         if (success) {
             triggerSanchaCacheInvalidation();
             closeSanchaTransferModal();
-            renderSanchaTable();
+            if (sanchaViewMode === 'passbook') {
+                applySanchaPassbookFilters();
+            } else {
+                renderSanchaTable();
+            }
+            if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
             alert(`✅ ${qty.toFixed(2)} Kg Sancha (${category === 'chukka' ? 'Chukka' : 'Tani'}) safalta-poorvak transfer ho gayi!`);
         }
     };
 
     /* ========================================================================
-       7. 📱 20-ITEM PAGINATED SANCHA PASSBOOK ENGINE (WITH A6 PRINT)
+       7. INLINE TALLY SANCHA PASSBOOK ENGINE (WITH RUNNING CLOSING BALANCE)
        ======================================================================== */
-    const openSanchaPassbook = (itemName) => {
-        window.currentPassbookSanchaItem = decodeURIComponent(itemName);
-        sanchaPassbookCurrentPage = 1;
+    const ensureInlineSanchaPassbookContainer = () => {
+        const sec = document.getElementById('sancha-section');
+        if (!sec) return null;
 
-        const modal = document.getElementById('item-modal');
-        if (!modal) return;
+        let container = document.getElementById('sancha-inline-passbook-view');
+        if (container) return container;
 
-        const title = document.getElementById('modal-item-title');
-        const catLabel = window.currentSanchaCategory === 'tani' ? 'Tani' : 'Chukka';
-        if (title) title.textContent = `📖 Sancha Passbook: ${window.currentPassbookSanchaItem} (${catLabel})`;
-
-        const modalBody = modal.querySelector('.modal-body');
-        if (modalBody) {
-            modalBody.innerHTML = `
-                <div style="background:#f8fafc; border:1px solid #cbd5e1; padding:12px; border-radius:10px; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;">
-                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                        <div><label style="font-size:12px; font-weight:700;">From Date:</label><br><input type="date" id="sancha-pass-from-date" onchange="applySanchaPassbookFilters()"></div>
-                        <div><label style="font-size:12px; font-weight:700;">To Date:</label><br><input type="date" id="sancha-pass-to-date" onchange="applySanchaPassbookFilters()"></div>
-                        <div style="align-self:flex-end; display:flex; gap:6px;">
-                            <button type="button" class="quick-btn btn-out" onclick="resetSanchaPassbookFilters()">Reset</button>
-                            <button type="button" class="sheet-btn" style="background:#0284c7; color:#ffffff; padding:6px 12px; font-weight:bold; border-radius:6px; border:none; cursor:pointer;" onclick="printSanchaPassbookFiltered()">🖨️ A6 Print</button>
-                        </div>
-                    </div>
-                    <div style="flex:1; min-width:180px;">
-                        <label style="font-size:12px; font-weight:700;">🔍 Search:</label><br>
-                        <input type="text" id="sancha-pass-search-input" class="search-box" placeholder="Search Date, Kariger, Qty..." oninput="applySanchaPassbookFilters()">
-                    </div>
+        container = document.createElement('div');
+        container.id = 'sancha-inline-passbook-view';
+        container.style.display = 'none';
+        container.innerHTML = `
+            <div style="margin:12px 20px 10px 20px; padding:10px 14px; background:#fdfcf7; border:1px solid #e5d5a7; border-radius:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <button type="button" class="sancha-tally-btn" onclick="window.__closeSanchaPassbookView()">&larr; [Esc] Items List</button>
+                    <strong id="sancha-pass-summary-title" style="font-size:14px; color:#1f2937;">Item: -</strong>
+                    <span id="sancha-pass-summary-totals" style="font-size:12px; color:#b47d00; font-weight:800;"></span>
                 </div>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr style="background:#0284c7; color:white; font-size:12px;">
-                                <th>TARIKH</th><th>DETAIL (TYPE)</th><th>KARIGER / PERSON</th><th>AAYA (Kg)</th><th>GAYA (Kg)</th><th style="text-align:center;">ACTIONS</th>
-                            </tr>
-                        </thead>
-                        <tbody id="sancha-passbook-table-body"></tbody>
-                    </table>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button type="button" class="sancha-tally-btn" onclick="window.__sanchaPassAction('edit')">Edit [Enter]</button>
+                    <button type="button" class="sancha-tally-btn" onclick="window.__sanchaPassAction('delete')">Delete [Del]</button>
+                    <button type="button" class="sancha-tally-btn" onclick="window.__sanchaPassAction('print_single')">Slip [P]</button>
+                    <button type="button" class="sancha-tally-btn" onclick="window.__sanchaTransferFromPass()">Bhejo [T]</button>
+                    <button type="button" class="sancha-tally-btn-gold" onclick="printSanchaPassbookFiltered()">A6 Print [Alt+P]</button>
                 </div>
-                <div id="sancha-passbook-pagination-controls" style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding:8px 4px; border-top:1px solid #e2e8f0; flex-wrap:wrap; gap:8px;"></div>`;
+            </div>
+
+            <div style="padding:0 20px 10px 20px; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end;">
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#6b7280; display:block; margin-bottom:2px;">From Date [F]:</label>
+                    <input type="date" id="sancha-pass-from-date" onchange="applySanchaPassbookFilters()" style="padding:6px 8px; border:1px solid #d1d5db; border-radius:4px; font-size:12.5px; font-weight:600;">
+                </div>
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#6b7280; display:block; margin-bottom:2px;">To Date:</label>
+                    <input type="date" id="sancha-pass-to-date" onchange="applySanchaPassbookFilters()" style="padding:6px 8px; border:1px solid #d1d5db; border-radius:4px; font-size:12.5px; font-weight:600;">
+                </div>
+                <div style="flex:1; min-width:180px;">
+                    <label style="font-size:11px; font-weight:700; color:#6b7280; display:block; margin-bottom:2px;">Search [/]:</label>
+                    <input type="text" id="sancha-pass-search-input" class="search-box" placeholder="Search Date, Kariger, Qty..." oninput="applySanchaPassbookFilters()">
+                </div>
+                <button type="button" class="sancha-tally-btn" onclick="resetSanchaPassbookFilters()">Reset [R]</button>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tarikh</th>
+                            <th>Particulars (Kariger / Person)</th>
+                            <th>Detail (Vch Type)</th>
+                            <th style="text-align:right;">Aaya (In)</th>
+                            <th style="text-align:right;">Gaya (Out)</th>
+                            <th style="text-align:right;">Closing Bal</th>
+                            <th style="text-align:center;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sancha-passbook-table-body"></tbody>
+                </table>
+            </div>
+
+            <div id="sancha-passbook-pagination-controls" style="display:flex; justify-content:space-between; align-items:center; margin:10px 20px 0 20px; padding:8px 0; border-top:1px solid #eadab0; flex-wrap:wrap; gap:8px;"></div>
+
+            <div class="sancha-status-strip">
+                <span style="color:#92400e; font-weight:700;">[↑ ↓] Entry Chunein · [Enter/E] Edit · [Del] Delete · [P] Single Slip · [Alt+P] Statement · [Esc] Items List</span>
+                <span id="sancha-passbook-entry-status">-</span>
+            </div>
+        `;
+
+        const mainStrip = document.getElementById('sancha-main-status-strip');
+        if (mainStrip) {
+            sec.insertBefore(container, mainStrip);
+        } else {
+            sec.appendChild(container);
         }
 
-        modal.style.display = 'flex';
+        const fInp = document.getElementById('sancha-pass-from-date');
+        const tInp = document.getElementById('sancha-pass-to-date');
+        const sInp = document.getElementById('sancha-pass-search-input');
+        if (fInp) {
+            fInp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); tInp?.focus(); }
+            });
+        }
+        if (tInp) {
+            tInp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); sInp?.focus(); }
+            });
+        }
+        if (sInp) {
+            sInp.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown' || e.key === 'Enter') {
+                    e.preventDefault();
+                    sInp.blur();
+                }
+            });
+        }
+
+        return container;
+    };
+
+    window.__closeSanchaPassbookView = () => {
+        setSanchaViewMode('list');
+        renderSanchaTable();
+    };
+
+    window.__sanchaTransferFromPass = triggerSelectedSanchaTransfer;
+
+    window.__sanchaPassAction = (action) => {
+        const startIndex = (sanchaPassbookCurrentPage - 1) * SANCHA_PAGE_SIZE;
+        const pageRows = filteredSanchaPassbookCache.slice(startIndex, startIndex + SANCHA_PAGE_SIZE);
+        const entry = pageRows[sanchaPassbookActiveIdx];
+        if (!entry) return alert('Pehle koi entry chunein!');
+
+        if (action === 'print_single') {
+            printSingleSanchaPassbookEntry(entry.id);
+            return;
+        }
+
+        const isOpening = (entry.isOpening === true) || String(entry.type || '').includes('Opening') || String(entry.kariger || '').includes('Opening');
+        const isKariger = String(entry.type || '').includes('Kariger Issue') || String(entry.kariger || '').includes('Kariger');
+
+        if (isOpening || isKariger) {
+            return alert('Ye entry locked hai (Kariger Sheet / Opening Balance). Isko wahan se edit karein.');
+        }
+
+        if (action === 'edit') openSanchaEditModal(entry.id);
+        else if (action === 'delete') deleteSanchaHistoryEntry(entry.id);
+    };
+
+    const openSanchaPassbook = (itemName) => {
+        ensureSanchaTallyStyles();
+        setDisplay('dashboard-view', 'none');
+        setDisplay('sancha-section', 'block');
+
+        window.currentPassbookSanchaItem = decodeURIComponent(itemName);
+        sanchaPassbookCurrentPage = 1;
+        sanchaPassbookActiveIdx = 0;
+
+        ensureInlineSanchaPassbookContainer();
+        setSanchaViewMode('passbook');
+        bindSanchaKeyboardEngine();
         applySanchaPassbookFilters();
     };
 
@@ -595,6 +1302,7 @@
         if (tDate) tDate.value = '';
         if (sInp) sInp.value = '';
         sanchaPassbookCurrentPage = 1;
+        sanchaPassbookActiveIdx = 0;
         applySanchaPassbookFilters();
     };
 
@@ -603,7 +1311,7 @@
         const targetCatLower = (window.currentSanchaCategory || 'tani').toLowerCase();
         const allHist = window.safeArray ? window.safeArray(window.getStore('sancha_history')) : [];
 
-        let hist = allHist.filter((x) => {
+        let itemHist = allHist.filter((x) => {
             if (!x?.name) return false;
             const nameMatch = x.name.toLowerCase() === targetItemLower;
             const catMatch = (x.category || 'tani').toLowerCase() === targetCatLower;
@@ -616,24 +1324,75 @@
             return true;
         });
 
+        // Compute Running Closing Balance chronologically
+        const chrono = itemHist.slice().sort((a, b) => {
+            const ta = a.timestamp || 0;
+            const tb = b.timestamp || 0;
+            if (ta !== tb) return ta - tb;
+            return String(a.date || '').localeCompare(String(b.date || ''));
+        });
+
+        let runningBal = 0;
+        const withRunning = chrono.map((r) => {
+            const aayaQty = safeNum(r.aaya);
+            const gayaQty = safeNum(r.gaya !== undefined ? r.gaya : r.qty);
+            runningBal = safeNum((runningBal + aayaQty - gayaQty).toFixed(2));
+            return { ...r, _runningBal: runningBal };
+        });
+
         const fDate = document.getElementById('sancha-pass-from-date')?.value || '';
         const tDate = document.getElementById('sancha-pass-to-date')?.value || '';
         const sTxt = (document.getElementById('sancha-pass-search-input')?.value || '').toLowerCase().trim();
 
-        if (fDate) hist = hist.filter((x) => x.date >= fDate);
-        if (tDate) hist = hist.filter((x) => x.date <= tDate);
+        let filtered = withRunning;
+        if (fDate) filtered = filtered.filter((x) => (x.date || '') >= fDate);
+        if (tDate) filtered = filtered.filter((x) => (x.date || '') <= tDate);
 
         if (sTxt) {
-            hist = hist.filter((x) => {
+            filtered = filtered.filter((x) => {
                 const rowString = `${x.date || ''} ${x.type || ''} ${x.kariger || ''} ${x.aaya || x.qty || ''} ${x.gaya || ''}`.toLowerCase();
                 return rowString.includes(sTxt);
             });
         }
 
-        hist.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-        filteredSanchaPassbookCache = hist;
+        filteredSanchaPassbookCache = filtered;
+
+        const stats = (typeof window.getSanchaItemStats === 'function')
+            ? window.getSanchaItemStats(null, window.currentPassbookSanchaItem, targetCatLower, window.currentSanchaKarkhanaFilter)
+            : { aaya: 0, gaya: 0, bacha: runningBal };
+        const godamName = (typeof window.getKarkhanaNameById === 'function')
+            ? window.getKarkhanaNameById(window.currentSanchaKarkhanaFilter)
+            : 'Sabhi Karkhane';
+        const catLabel = targetCatLower === 'chukka' ? 'Chukka' : 'Tani';
+
+        const titleEl = document.getElementById('sancha-pass-summary-title');
+        const totEl = document.getElementById('sancha-pass-summary-totals');
+        if (titleEl) titleEl.textContent = `${window.currentPassbookSanchaItem} [${catLabel}] (${godamName})`;
+        if (totEl) {
+            totEl.textContent = `Aaya: +${safeNum(stats.aaya).toFixed(2)} Kg · Gaya: -${safeNum(stats.gaya).toFixed(2)} Kg · Closing: ${safeNum(stats.bacha).toFixed(2)} Kg`;
+        }
+
         renderPaginatedSanchaPassbook();
+    };
+
+    const highlightSanchaPassbookRow = (idx) => {
+        const rows = Array.from(document.querySelectorAll('#sancha-passbook-table-body .sancha-pass-row'));
+        if (!rows.length) return;
+        sanchaPassbookActiveIdx = ((idx % rows.length) + rows.length) % rows.length;
+        rows.forEach((r, i) => r.classList.toggle('active', i === sanchaPassbookActiveIdx));
+        rows[sanchaPassbookActiveIdx]?.scrollIntoView({ block: 'nearest' });
+
+        const startIndex = (sanchaPassbookCurrentPage - 1) * SANCHA_PAGE_SIZE;
+        const pageRows = filteredSanchaPassbookCache.slice(startIndex, startIndex + SANCHA_PAGE_SIZE);
+        const entry = pageRows[sanchaPassbookActiveIdx];
+        const statusEl = document.getElementById('sancha-passbook-entry-status');
+        if (statusEl && entry) {
+            const isOpening = (entry.isOpening === true) || String(entry.type || '').includes('Opening') || String(entry.kariger || '').includes('Opening');
+            const isKariger = String(entry.type || '').includes('Kariger Issue') || String(entry.kariger || '').includes('Kariger');
+            statusEl.textContent = (isOpening || isKariger) ? 'Locked Entry (Kariger Sheet / Opening)' : 'Editable Entry [Enter / Del]';
+        }
     };
 
     const renderPaginatedSanchaPassbook = () => {
@@ -644,8 +1403,10 @@
 
         const totalEntries = filteredSanchaPassbookCache.length;
         if (!totalEntries) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:15px; color:#888;">Koi entry nahi mili.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:18px; color:#6b7280;">Koi passbook entry nahi mili.</td></tr>';
             if (pager) pager.innerHTML = '';
+            const statusEl = document.getElementById('sancha-passbook-entry-status');
+            if (statusEl) statusEl.textContent = '0 Entries';
             return;
         }
 
@@ -655,78 +1416,283 @@
 
         const startIndex = (sanchaPassbookCurrentPage - 1) * SANCHA_PAGE_SIZE;
         const pageRows = filteredSanchaPassbookCache.slice(startIndex, startIndex + SANCHA_PAGE_SIZE);
+        if (sanchaPassbookActiveIdx >= pageRows.length) sanchaPassbookActiveIdx = 0;
+        if (sanchaPassbookActiveIdx < 0) sanchaPassbookActiveIdx = 0;
 
         let html = '';
-        pageRows.forEach((r) => {
+        pageRows.forEach((r, idx) => {
             const aayaQty = safeNum(r.aaya);
             const gayaQty = safeNum(r.gaya !== undefined ? r.gaya : r.qty);
+            const runBal = safeNum(r._runningBal);
 
             const isOpening = (r.isOpening === true) || String(r.type || '').includes('Opening') || String(r.kariger || '').includes('Opening');
             const isKariger = String(r.type || '').includes('Kariger Issue') || String(r.kariger || '').includes('Kariger');
 
-            const singlePrintBtn = `<button type="button" title="A6 Slip Print" class="sheet-btn" style="background:#0284c7; color:#ffffff; padding:4px 7px; font-size:11px; font-weight:bold; border-radius:4px; border:none; cursor:pointer;" onclick="printSingleSanchaPassbookEntry('${esc(r.id)}')">🖨️</button>`;
+            const karigerDisplay = isOpening
+                ? 'Pichla Bacha Stock (Opening)'
+                : ((r.kariger && r.kariger !== '-' && r.kariger !== 'undefined') ? esc(r.kariger) : 'Factory Inward');
 
-            let typeDisplay = '';
-            let karigerDisplay = '';
-            let actionBtns = '';
+            const typeDisplay = isOpening
+                ? 'Opening Stock'
+                : esc(r.type || 'Inward / Issue');
 
-            if (isOpening) {
-                typeDisplay = `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px;">📦 Opening Stock (Pichle Saal Se)</span>`;
-                karigerDisplay = `<span style="color:#b45309; font-weight:bold;">📦 Pichla Bacha Stock</span>`;
-                actionBtns = `<div style="display:flex; gap:6px; justify-content:center; align-items:center;">
-                    <span style='color:#64748b; font-size:11px; font-weight:700;'>🔒 Opening Lock</span>
-                    ${singlePrintBtn}
-                </div>`;
-            } else if (isKariger) {
-                typeDisplay = `<strong style="color:#1e3a8a;">${esc(r.type || 'Kariger Issue')}</strong>`;
-                karigerDisplay = `👤 ${esc(r.kariger || '-')}`;
-                actionBtns = `<div style="display:flex; gap:6px; justify-content:center; align-items:center;">
-                    <span style='color:#64748b; font-size:11px; font-weight:700;'>🔒 Kariger Sheet</span>
-                    ${singlePrintBtn}
-                </div>`;
-            } else {
-                typeDisplay = `<span style="background:#ecfdf5; color:#059669; border:1px solid #a7f3d0; font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px;">🏭 Nayi Khareed / Inward</span>`;
-                karigerDisplay = (r.kariger && r.kariger !== '-' && r.kariger !== 'undefined') ? `👤 ${esc(r.kariger)}` : '📦 Factory Inward';
-                actionBtns = `
-                    <div style="display:flex; gap:6px; justify-content:center; align-items:center;">
-                        <button type="button" class="sheet-btn" style="background:#3b82f6; color:#ffffff; padding:4px 8px; font-size:11px; font-weight:bold; border-radius:4px; border:none; cursor:pointer;" onclick="openSanchaEditModal('${esc(r.id)}')">✏️ Edit</button>
-                        <button type="button" class="sheet-btn" style="background:#ef4444; color:#ffffff; padding:4px 8px; font-size:11px; font-weight:bold; border-radius:4px; border:none; cursor:pointer;" onclick="deleteSanchaHistoryEntry('${esc(r.id)}')">🗑️ Del</button>
-                        ${singlePrintBtn}
-                    </div>`;
-            }
+            const statusBadge = isOpening
+                ? '<span style="font-size:11px; color:#6b7280; font-weight:700;">Opening Lock</span>'
+                : (isKariger
+                    ? '<span style="font-size:11px; color:#6b7280; font-weight:700;">Kariger Sheet</span>'
+                    : '<span style="font-size:11px; color:#b47d00; font-weight:700;">Editable</span>');
 
-            html += `<tr>
+            const activeCls = (idx === sanchaPassbookActiveIdx) ? ' active' : '';
+
+            html += `<tr class="sancha-pass-row${activeCls}" data-spidx="${idx}" onclick="window.__sanchaSelectPassRow(${idx})">
                 <td>${esc(r.date || '-')}</td>
+                <td><strong>${karigerDisplay}</strong></td>
                 <td>${typeDisplay}</td>
-                <td>${karigerDisplay}</td>
-                <td style="color:#059669; font-weight:700;">${aayaQty ? `+${aayaQty.toFixed(2)} Kg` : '-'}</td>
-                <td style="color:#ea580c; font-weight:700;">${gayaQty ? `-${gayaQty.toFixed(2)} Kg` : '-'}</td>
-                <td style="text-align:center; white-space:nowrap;">${actionBtns}</td>
+                <td style="text-align:right; font-weight:700;">${aayaQty ? `+${aayaQty.toFixed(2)} Kg` : '-'}</td>
+                <td style="text-align:right; font-weight:700; color:#6b7280;">${gayaQty ? `-${gayaQty.toFixed(2)} Kg` : '-'}</td>
+                <td style="text-align:right; font-weight:800; color:#b47d00;">${runBal.toFixed(2)} Kg</td>
+                <td style="text-align:center;">${statusBadge}</td>
             </tr>`;
         });
 
         tbody.innerHTML = html;
+        highlightSanchaPassbookRow(sanchaPassbookActiveIdx);
 
         if (pager) {
             pager.innerHTML = `
-                <div style="font-size:12px; color:#475569; font-weight:600;">
+                <div style="font-size:12px; color:#6b7280; font-weight:600;">
                     Showing <strong>${startIndex + 1}</strong> - <strong>${Math.min(startIndex + SANCHA_PAGE_SIZE, totalEntries)}</strong> of <strong>${totalEntries}</strong> entries
                 </div>
-                <div style="display:flex; gap:6px;">
-                    <button type="button" class="sheet-btn" style="background:${sanchaPassbookCurrentPage <= 1 ? '#cbd5e1' : '#0284c7'}; color:white; padding:4px 10px; border-radius:4px; border:none; cursor:${sanchaPassbookCurrentPage <= 1 ? 'not-allowed' : 'pointer'};" ${sanchaPassbookCurrentPage <= 1 ? 'disabled' : ''} onclick="changeSanchaPassbookPage(-1)">◀ Prev</button>
-                    <span style="font-size:12px; font-weight:bold; padding:4px 8px; background:#f1f5f9; border-radius:4px;">${sanchaPassbookCurrentPage} / ${totalPages}</span>
-                    <button type="button" class="sheet-btn" style="background:${sanchaPassbookCurrentPage >= totalPages ? '#cbd5e1' : '#0284c7'}; color:white; padding:4px 10px; border-radius:4px; border:none; cursor:${sanchaPassbookCurrentPage >= totalPages ? 'not-allowed' : 'pointer'};" ${sanchaPassbookCurrentPage >= totalPages ? 'disabled' : ''} onclick="changeSanchaPassbookPage(1)">Next ▶</button>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <button type="button" class="sancha-tally-btn" ${sanchaPassbookCurrentPage <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''} onclick="changeSanchaPassbookPage(-1)">◀ Prev</button>
+                    <span style="font-size:12px; font-weight:700; padding:4px 8px; background:#fdf6e2; border:1px solid #e5d5a7; border-radius:4px;">${sanchaPassbookCurrentPage} / ${totalPages}</span>
+                    <button type="button" class="sancha-tally-btn" ${sanchaPassbookCurrentPage >= totalPages ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''} onclick="changeSanchaPassbookPage(1)">Next ▶</button>
                 </div>`;
         }
     };
 
+    window.__sanchaSelectPassRow = (idx) => {
+        highlightSanchaPassbookRow(idx);
+    };
+
     const changeSanchaPassbookPage = (delta) => {
         sanchaPassbookCurrentPage += delta;
+        sanchaPassbookActiveIdx = 0;
         renderPaginatedSanchaPassbook();
     };
 
     /* ========================================================================
-       8. A6 PRINT ENGINES
+       8. KEYBOARD NAVIGATION ENGINE FOR #sancha-section (ZERO CONFLICTS)
+       ======================================================================== */
+    const handleSanchaKeydown = (e) => {
+        const sec = document.getElementById('sancha-section');
+        if (!sec || sec.style.display === 'none') return;
+        if (isAnyExpressOverlayOpen()) return;
+
+        // 1. Edit Modal open
+        const editModal = document.getElementById('sancha-edit-popup-modal');
+        if (editModal) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeSanchaEditModal();
+            }
+            return;
+        }
+
+        // 2. Transfer Modal open
+        const trModal = document.getElementById('sancha-transfer-popup-modal');
+        if (trModal) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeSanchaTransferModal();
+            }
+            return;
+        }
+
+        // 3. Add Sancha Form open
+        const addForm = document.getElementById('add-sancha-item-form');
+        if (addForm && addForm.style.display === 'block') {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                toggleAddSanchaForm();
+                return;
+            }
+            if (e.key === 'F4') {
+                e.preventDefault();
+                const rNew = document.getElementById('sancha-type-new');
+                const rExt = document.getElementById('sancha-type-existing');
+                if (rNew && rExt) {
+                    if (rNew.checked) rExt.checked = true;
+                    else rNew.checked = true;
+                    toggleSanchaFormOptions();
+                    document.getElementById(rNew.checked ? 'sancha-new-name' : 'sancha-select-existing')?.focus();
+                }
+                return;
+            }
+            if (e.key === 'Enter') {
+                const activeId = document.activeElement?.id || '';
+                const isNew = document.getElementById('sancha-type-new')?.checked;
+                const itemFieldId = isNew ? 'sancha-new-name' : 'sancha-select-existing';
+                if (activeId === 'sancha-date') {
+                    e.preventDefault();
+                    document.getElementById(itemFieldId)?.focus();
+                } else if (activeId === itemFieldId) {
+                    e.preventDefault();
+                    document.getElementById('sancha-qty')?.focus();
+                } else if (activeId === 'sancha-qty') {
+                    e.preventDefault();
+                    document.getElementById('sancha-person')?.focus();
+                } else if (activeId === 'sancha-person') {
+                    e.preventDefault();
+                    saveNewSanchaStock();
+                }
+            }
+            return;
+        }
+
+        const tag = (document.activeElement && document.activeElement.tagName) || '';
+        const isTyping = (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA');
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            handleSanchaBackStep();
+            return;
+        }
+
+        if (e.altKey && (e.key === 'p' || e.key === 'P')) {
+            e.preventDefault();
+            if (sanchaViewMode === 'passbook') printSanchaPassbookFiltered();
+            else if (sanchaViewMode === 'list') printSanchaStockReport();
+            return;
+        }
+
+        if (e.key === 'F4' && sanchaViewMode !== 'hub') {
+            e.preventDefault();
+            triggerSelectedSanchaTransfer();
+            return;
+        }
+
+        if (e.key === 'F7') {
+            e.preventDefault();
+            toggleAddSanchaForm();
+            return;
+        }
+
+        if (e.key === 'F2' && sanchaViewMode === 'list') {
+            e.preventDefault();
+            cycleSanchaKarkhanaTab();
+            return;
+        }
+
+        if (e.key === 'F3' && sanchaViewMode !== 'hub') {
+            e.preventDefault();
+            const sEl = document.getElementById(sanchaViewMode === 'passbook' ? 'sancha-pass-search-input' : 'search-sancha-input');
+            if (sEl) { sEl.focus(); sEl.select(); }
+            return;
+        }
+
+        if (isTyping) return;
+
+        // 4. Level 1: Hub View (Tani vs Chukka)
+        if (sanchaViewMode === 'hub') {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                highlightSanchaHubRow(sanchaHubActiveIdx + (e.key === 'ArrowDown' ? 1 : -1));
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                switchSanchaCategory(sanchaHubActiveIdx === 1 ? 'chukka' : 'tani');
+            } else if (e.key === 't' || e.key === 'T' || e.key === '1') {
+                e.preventDefault();
+                switchSanchaCategory('tani');
+            } else if (e.key === 'c' || e.key === 'C' || e.key === '2') {
+                e.preventDefault();
+                switchSanchaCategory('chukka');
+            } else if (e.key === '+') {
+                e.preventDefault();
+                toggleAddSanchaForm();
+            }
+            return;
+        }
+
+        // 5. Level 3: Inline Passbook View
+        if (sanchaViewMode === 'passbook') {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                highlightSanchaPassbookRow(sanchaPassbookActiveIdx + 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                highlightSanchaPassbookRow(sanchaPassbookActiveIdx - 1);
+            } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+                e.preventDefault();
+                changeSanchaPassbookPage(1);
+            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                e.preventDefault();
+                changeSanchaPassbookPage(-1);
+            } else if (e.key === 'Enter' || e.key === 'e' || e.key === 'E') {
+                e.preventDefault();
+                window.__sanchaPassAction('edit');
+            } else if (e.key === 'Delete' || e.key === 'd' || e.key === 'D') {
+                e.preventDefault();
+                window.__sanchaPassAction('delete');
+            } else if (e.key === 'p' || e.key === 'P') {
+                e.preventDefault();
+                window.__sanchaPassAction('print_single');
+            } else if (e.key === 't' || e.key === 'T') {
+                e.preventDefault();
+                triggerSelectedSanchaTransfer();
+            } else if (e.key === 'f' || e.key === 'F') {
+                e.preventDefault();
+                document.getElementById('sancha-pass-from-date')?.focus();
+            } else if (e.key === 'r' || e.key === 'R') {
+                e.preventDefault();
+                resetSanchaPassbookFilters();
+            } else if (e.key === '/') {
+                e.preventDefault();
+                const sEl = document.getElementById('sancha-pass-search-input');
+                if (sEl) { sEl.focus(); sEl.select(); }
+            }
+            return;
+        }
+
+        // 6. Level 2: Main Sancha Stock Items List
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            highlightSanchaListRow(sanchaListActiveIdx + 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            highlightSanchaListRow(sanchaListActiveIdx - 1);
+        } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+            e.preventDefault();
+            changeSanchaStockPage(1);
+        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+            e.preventDefault();
+            changeSanchaStockPage(-1);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const pageRows = getSanchaCurrentPageRows();
+            const chosen = pageRows[sanchaListActiveIdx];
+            if (chosen) openSanchaPassbook(encodeURIComponent(chosen.name));
+        } else if (e.key === 't' || e.key === 'T') {
+            e.preventDefault();
+            triggerSelectedSanchaTransfer();
+        } else if (e.key === '+') {
+            e.preventDefault();
+            toggleAddSanchaForm();
+        } else if (e.key === '/') {
+            e.preventDefault();
+            const sEl = document.getElementById('search-sancha-input');
+            if (sEl) { sEl.focus(); sEl.select(); }
+        }
+    };
+
+    const bindSanchaKeyboardEngine = () => {
+        if (window.__sanchaKeysBound) return;
+        window.__sanchaKeysBound = true;
+        document.addEventListener('keydown', handleSanchaKeydown);
+    };
+
+    /* ========================================================================
+       9. A6 PRINT ENGINES (UNCHANGED)
        ======================================================================== */
     const getSanchaKarkhanaPrintName = (kId) => {
         if (!kId || kId === 'all') return 'Sabhi Karkhane (All Units)';
@@ -947,7 +1913,7 @@
 
     const printSingleSanchaPassbookEntry = (id) => {
         const hist = window.safeArray ? window.safeArray(window.getStore('sancha_history')) : [];
-        const entry = hist.find((x) => x && x.id === id);
+        const entry = hist.find((x) => x && String(x.id) === String(id));
         if (!entry) return alert('Entry nahi mili!');
 
         const itemName = entry.name || window.currentPassbookSanchaItem || 'Sancha Item';
@@ -1011,13 +1977,13 @@
     };
 
     /* ========================================================================
-       9. DELETE & EDIT ENGINES
+       10. DELETE & EDIT ENGINES (100% SUPABASE-SAFE & TALLY WHITE & GOLD)
        ======================================================================== */
     const deleteSanchaHistoryEntry = (id) => {
         if (!confirm('Kya aap sach me ye Passbook entry DELETE karna chahte hain?\nIsse stock balance wapas sahi settle ho jayega.')) return;
 
         let hist = window.safeArray ? window.safeArray(window.getStore('sancha_history')) : [];
-        const entry = hist.find((x) => x && x.id === id);
+        const entry = hist.find((x) => x && String(x.id) === String(id));
         if (!entry) return alert('Entry nahi mili!');
 
         const isPurchase = (String(entry.type || '').includes('Khareed') || String(entry.type || '').includes('Inward'));
@@ -1026,7 +1992,7 @@
         if (isTransfer && entry.refId) {
             hist = hist.filter((x) => x.refId !== entry.refId);
         } else {
-            hist = hist.filter((x) => x.id !== id);
+            hist = hist.filter((x) => String(x.id) !== String(id));
         }
 
         if (typeof window.setStore === 'function') {
@@ -1054,12 +2020,13 @@
         triggerSanchaCacheInvalidation();
         applySanchaPassbookFilters();
         renderSanchaTable();
+        if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
         alert('✅ Entry safalta-poorvak delete ho gayi!');
     };
 
     const openSanchaEditModal = (id) => {
         const hist = window.safeArray ? window.safeArray(window.getStore('sancha_history')) : [];
-        const entry = hist.find((x) => x && x.id === id);
+        const entry = hist.find((x) => x && String(x.id) === String(id));
         if (!entry) return alert('Entry nahi mili!');
 
         const existingModal = document.getElementById('sancha-edit-popup-modal');
@@ -1070,37 +2037,60 @@
         const typeLabel = isAaya ? 'Aaya (Inward)' : 'Gaya (Outward)';
 
         const modalHtml = `
-            <div id="sancha-edit-popup-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999999; display:flex; align-items:center; justify-content:center; padding:15px; box-sizing:border-box;">
-                <div style="background:#ffffff; width:100%; max-width:420px; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.3); overflow:hidden;">
-                    <div style="background:#1e3a8a; color:#ffffff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
-                        <h3 style="margin:0; font-size:16px;">✏️ Edit Sancha Entry</h3>
-                        <button type="button" onclick="closeSanchaEditModal()" style="background:transparent; border:none; color:#ffffff; font-size:22px; cursor:pointer;">&times;</button>
+            <div id="sancha-edit-popup-modal" class="sancha-modal-overlay">
+                <div class="sancha-modal-card" style="max-width:420px;">
+                    <div class="sancha-modal-head">
+                        <h3>Edit Sancha Entry</h3>
+                        <button type="button" class="sancha-tally-btn" onclick="closeSanchaEditModal()">&larr; [Esc] Close</button>
                     </div>
                     <div style="padding:16px;">
-                        <div style="background:#f1f5f9; padding:8px 12px; border-radius:6px; margin-bottom:12px; font-size:13px;">
+                        <div style="background:#fdf6e2; border:1px solid #e5d5a7; padding:8px 12px; border-radius:6px; margin-bottom:12px; font-size:12.5px;">
                             <div><strong>Item:</strong> ${esc(entry.name)} (${entry.category === 'chukka' ? 'Chukka' : 'Tani'})</div>
                             <div><strong>Type:</strong> ${esc(entry.type || '-')}</div>
                         </div>
-                        <div style="margin-bottom:12px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151;">Tarikh (Date):</label><br>
-                            <input type="date" id="sancha-edit-date" value="${entry.date || ''}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box;">
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Tarikh (Date) :</label>
+                            <input type="date" id="sancha-edit-date" value="${entry.date || ''}" class="sancha-modal-inp">
                         </div>
-                        <div style="margin-bottom:12px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151;">Kariger / Person Name:</label><br>
-                            <input type="text" id="sancha-edit-person" value="${esc(entry.kariger || '')}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box;">
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Kariger / Person Name :</label>
+                            <input type="text" id="sancha-edit-person" value="${esc(entry.kariger || '')}" class="sancha-modal-inp">
                         </div>
-                        <div style="margin-bottom:16px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151;">Wazan (${typeLabel} Kg me):</label><br>
-                            <input type="number" step="0.01" id="sancha-edit-qty" value="${currentQty.toFixed(2)}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; font-weight:bold; margin-top:4px; box-sizing:border-box;">
+                        <div style="margin-bottom:14px;">
+                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Wazan (${typeLabel} Kg) :</label>
+                            <input type="number" step="0.01" id="sancha-edit-qty" value="${currentQty.toFixed(2)}" class="sancha-modal-inp">
                         </div>
-                        <button type="button" onclick="saveSanchaHistoryEdit('${esc(id)}')" style="background:#2563eb; color:#ffffff; border:none; width:100%; padding:10px; border-radius:6px; font-weight:bold; font-size:14px; cursor:pointer;">
-                            💾 Badlaav Safe Karein
-                        </button>
+                        <div style="display:flex; justify-content:flex-end; gap:8px;">
+                            <button type="button" class="sancha-tally-btn" onclick="closeSanchaEditModal()">Cancel [Esc]</button>
+                            <button type="button" class="sancha-tally-btn-gold" onclick="saveSanchaHistoryEdit('${esc(id)}')">Update [Enter]</button>
+                        </div>
                     </div>
                 </div>
             </div>`;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const order = ['sancha-edit-date', 'sancha-edit-person', 'sancha-edit-qty'];
+        order.forEach((fid, i) => {
+            const el = document.getElementById(fid);
+            if (!el) return;
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (i < order.length - 1) {
+                        const nxt = document.getElementById(order[i + 1]);
+                        if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
+                    } else {
+                        saveSanchaHistoryEdit(id);
+                    }
+                }
+            });
+        });
+
+        setTimeout(() => {
+            const pEl = document.getElementById('sancha-edit-person');
+            if (pEl) { pEl.focus(); pEl.select(); }
+        }, 50);
     };
 
     const closeSanchaEditModal = () => {
@@ -1110,7 +2100,7 @@
 
     const saveSanchaHistoryEdit = (id) => {
         const hist = window.safeArray ? window.safeArray(window.getStore('sancha_history')) : [];
-        const entry = hist.find((x) => x && x.id === id);
+        const entry = hist.find((x) => x && String(x.id) === String(id));
         if (!entry) return alert('Entry nahi mili!');
 
         const newDate = document.getElementById('sancha-edit-date')?.value;
@@ -1152,7 +2142,7 @@
         }
 
         if (isTransfer && entry.refId) {
-            const pair = hist.find((x) => x && x.refId === entry.refId && x.id !== id);
+            const pair = hist.find((x) => x && x.refId === entry.refId && String(x.id) !== String(id));
             if (pair) {
                 pair.date = newDate;
                 if (pair.aaya > 0) pair.aaya = newQty;
@@ -1168,6 +2158,7 @@
         closeSanchaEditModal();
         applySanchaPassbookFilters();
         renderSanchaTable();
+        if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
 
         alert('✅ Sancha entry safalta-poorvak update ho gayi!');
     };
