@@ -1,8 +1,8 @@
-/* ========================================================
-   SIMPLICITY ERP - ZARI STOCK & PAGINATED PASSBOOK ENGINE (WITH LIVE SEARCH & A6 PRINT)
+/* ============================================================================
+   SIMPLICITY ERP - ZARI STOCK & PASSBOOK ENGINE (TALLYPRIME WHITE & GOLD)
    File: zari/zari-ui.js • Developed by Farhan Jawed
-   (Multi-Godam Stock, Edit/Delete, Kariger Lock, Fast Mobile Pagination, Live Search & A6 Print)
-======================================================== */
+   (100% Supabase-Safe | Zero Row Clutter | Inline Drill-Down Passbook + Keys)
+============================================================================ */
 
 (() => {
     'use strict';
@@ -10,19 +10,24 @@
     window.currentZariKarkhanaFilter = 'all';
     window.currentPassbookZariItem = '';
 
-    // 📱 PAGINATION STATE
+    // Pagination & Keyboard Cursor State - Passbook
     let zariPassbookCurrentPage = 1;
     const ZARI_PAGE_SIZE = 20;
     let filteredZariPassbookCache = [];
+    let zariPassbookActiveIdx = 0;
+    let isZariPassbookViewOpen = false;
 
-    // Main Zari Stock Table Pagination State
+    // Pagination & Keyboard Cursor State - Main Zari List
     let zariStockCurrentPage = 1;
     const ZARI_STOCK_PAGE_SIZE = 15;
     let currentZariFilteredRowsCache = [];
+    let zariListActiveIdx = 0;
 
     const esc = (s) => {
         if (typeof window.sanitizeHTML === 'function') return window.sanitizeHTML(s);
-        return String(s || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        return String(s || '').replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
     };
 
     const safeNum = (val, fallback = 0) => {
@@ -35,18 +40,348 @@
         if (el) el.style.display = val;
     };
 
+    const getToday = () => {
+        return (typeof window.getTodayDate === 'function')
+            ? window.getTodayDate()
+            : new Date().toISOString().split('T')[0];
+    };
+
+    const isAnyExpressOverlayOpen = () => {
+        return Boolean(
+            document.getElementById('kariger-express-modal') ||
+            document.getElementById('master-stock-express-modal') ||
+            document.getElementById('master-jobwork-express-modal')
+        );
+    };
+
     /* ========================================================================
-       1. NAVIGATION & TABS
-       ------------------------------------------------------------------------
-    ======================================================================== */
+       1. SCOPED TALLYPRIME WHITE & GOLD STYLES FOR #zari-section
+       ======================================================================== */
+    const ensureZariTallyStyles = () => {
+        if (document.getElementById('zari-tally-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'zari-tally-styles';
+        style.textContent = `
+            #zari-section {
+                padding: 0 !important;
+                overflow: hidden;
+                font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            }
+            #zari-section .module-header {
+                background: #fdf6e2 !important;
+                border-bottom: 1.5px solid #e5d5a7 !important;
+                padding: 12px 20px !important;
+                margin-bottom: 0 !important;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+            #zari-section .module-header h2 {
+                color: #1f2937 !important;
+                font-size: 17px !important;
+                font-weight: 800 !important;
+                margin: 0 !important;
+            }
+            #zari-section .back-btn {
+                background: #ffffff !important;
+                color: #374151 !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 6px !important;
+                padding: 6px 12px !important;
+                font-size: 12px !important;
+                font-weight: 700 !important;
+                cursor: pointer;
+            }
+            #zari-section .back-btn:hover {
+                border-color: #d9a425 !important;
+                background: #fef9ea !important;
+            }
+            #zari-section .add-btn {
+                background: #f2b71d !important;
+                color: #1f2937 !important;
+                border: 1px solid #d9a425 !important;
+                border-radius: 6px !important;
+                padding: 6px 14px !important;
+                font-size: 12.5px !important;
+                font-weight: 800 !important;
+                cursor: pointer;
+            }
+            #zari-section .add-btn:hover { background: #e5aa12 !important; }
+            #zari-section #zari-karkhana-tabs-bar {
+                padding: 12px 20px 0 20px;
+                margin-bottom: 10px !important;
+                display: flex;
+                gap: 6px;
+                flex-wrap: wrap;
+            }
+            #zari-section .sheet-tab {
+                background: #ffffff !important;
+                color: #374151 !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 5px !important;
+                padding: 5px 12px !important;
+                font-size: 12px !important;
+                font-weight: 700 !important;
+                cursor: pointer;
+            }
+            #zari-section .sheet-tab.active {
+                background: #f2b71d !important;
+                color: #1f2937 !important;
+                border-color: #d9a425 !important;
+                font-weight: 800 !important;
+            }
+            #zari-section #zari-opening-box {
+                margin: 0 20px 10px 20px !important;
+                padding: 9px 14px !important;
+                background: #fdfcf7 !important;
+                border: 1px solid #e5d5a7 !important;
+                border-radius: 6px !important;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            #zari-section #zari-opening-val {
+                color: #b47d00 !important;
+                font-size: 14px !important;
+                font-weight: 800 !important;
+                margin: 0 !important;
+            }
+            #zari-section .filter-panel {
+                padding: 0 20px 10px 20px;
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+            #zari-section .search-box {
+                flex: 1;
+                min-width: 200px;
+                padding: 7px 12px !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 5px !important;
+                font-size: 13px !important;
+                font-weight: 600 !important;
+                background: #ffffff !important;
+                color: #111827 !important;
+                outline: none;
+            }
+            #zari-section .search-box:focus {
+                border-color: #d9a425 !important;
+                background: #fffdf5 !important;
+                box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.2);
+            }
+            #zari-section #add-zari-form {
+                margin: 0 20px 14px 20px !important;
+                padding: 14px 16px !important;
+                background: #fdfcf7 !important;
+                border: 1.5px solid #d9b86c !important;
+                border-radius: 6px !important;
+            }
+            #zari-section .table-responsive {
+                padding: 0 20px;
+                box-sizing: border-box;
+            }
+            #zari-section table {
+                width: 100%;
+                border-collapse: collapse;
+                border: 1px solid #e5d5a7;
+                background: #ffffff;
+            }
+            #zari-section table thead tr {
+                background: #fdf6e2 !important;
+                color: #1f2937 !important;
+            }
+            #zari-section table th {
+                padding: 9px 12px !important;
+                font-size: 12px !important;
+                font-weight: 800 !important;
+                color: #1f2937 !important;
+                border-bottom: 1.5px solid #e5d5a7 !important;
+                text-align: left;
+            }
+            #zari-section table td {
+                padding: 9px 12px !important;
+                font-size: 13px !important;
+                color: #1f2937 !important;
+                border-bottom: 1px solid #f3f4f6 !important;
+            }
+            #zari-section .zari-stock-row,
+            #zari-section .zari-pass-row {
+                cursor: pointer;
+                transition: background 0.1s ease;
+            }
+            #zari-section .zari-stock-row:hover,
+            #zari-section .zari-pass-row:hover {
+                background: #fef9ea !important;
+            }
+            #zari-section .zari-stock-row.active,
+            #zari-section .zari-pass-row.active {
+                background: #f2b71d !important;
+                color: #1f2937 !important;
+            }
+            #zari-section .zari-stock-row.active td,
+            #zari-section .zari-pass-row.active td {
+                font-weight: 700 !important;
+                color: #1f2937 !important;
+            }
+            #zari-section .zari-tally-btn {
+                background: #ffffff;
+                color: #1f2937;
+                border: 1px solid #d1d5db;
+                border-radius: 5px;
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: 700;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #zari-section .zari-tally-btn:hover {
+                border-color: #d9a425;
+                background: #fef9ea;
+            }
+            #zari-section .zari-tally-btn-gold {
+                background: #f2b71d;
+                color: #1f2937;
+                border: 1px solid #d9a425;
+                border-radius: 5px;
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: 800;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #zari-section .zari-tally-btn-gold:hover { background: #e5aa12; }
+            #zari-section .zari-status-strip {
+                background: #fdf6e2;
+                border-top: 1px solid #e5d5a7;
+                padding: 9px 20px;
+                margin-top: 12px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 8px;
+                font-size: 11.5px;
+                color: #6b7280;
+                font-weight: 600;
+            }
+            .zari-modal-overlay {
+                position: fixed; inset: 0;
+                background: rgba(31, 41, 55, 0.38);
+                backdrop-filter: blur(2px);
+                z-index: 999999;
+                display: flex; align-items: center; justify-content: center;
+                padding: 15px; box-sizing: border-box;
+                font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            }
+            .zari-modal-card {
+                background: #ffffff;
+                width: 100%; max-width: 460px;
+                border: 1.5px solid #d9b86c;
+                border-radius: 8px;
+                box-shadow: 0 18px 42px rgba(0, 0, 0, 0.16);
+                overflow: hidden;
+                color: #1f2937;
+            }
+            .zari-modal-head {
+                background: #fdf6e2;
+                border-bottom: 1.5px solid #e5d5a7;
+                padding: 11px 16px;
+                display: flex; justify-content: space-between; align-items: center;
+            }
+            .zari-modal-head h3 {
+                margin: 0; font-size: 15px; font-weight: 800; color: #1f2937;
+            }
+            .zari-modal-inp {
+                width: 100%; box-sizing: border-box;
+                padding: 7px 10px;
+                border: 1px solid #d1d5db; border-radius: 4px;
+                font-size: 13px; font-weight: 700; color: #111827;
+                background: #ffffff; outline: none;
+            }
+            .zari-modal-inp:focus {
+                border-color: #d9a425 !important;
+                background: #fffdf5 !important;
+                box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.22);
+            }
+        `;
+        document.head.appendChild(style);
+    };
+
+    /* ========================================================================
+       2. VIEW TOGGLE: MAIN ZARI LIST vs INLINE PASSBOOK DRILL-DOWN
+       ======================================================================== */
+    const setZariSubViewMode = (showPassbook) => {
+        isZariPassbookViewOpen = Boolean(showPassbook);
+        const sec = document.getElementById('zari-section');
+        if (!sec) return;
+
+        const tabsBar = document.getElementById('zari-karkhana-tabs-bar');
+        const openBox = document.getElementById('zari-opening-box');
+        const filterPanel = sec.querySelector(':scope > .filter-panel');
+        const addForm = document.getElementById('add-zari-form');
+        const mainTbl = document.getElementById('zari-table-body')?.closest('.table-responsive');
+        const mainPager = document.getElementById('zari-stock-pagination-controls');
+        const mainStatus = document.getElementById('zari-main-status-strip');
+        const passView = document.getElementById('zari-inline-passbook-view');
+        const headerTitle = sec.querySelector('.module-header h2');
+
+        const listDisp = showPassbook ? 'none' : '';
+        if (tabsBar) tabsBar.style.display = showPassbook ? 'none' : 'flex';
+        if (openBox) openBox.style.display = showPassbook ? 'none' : 'flex';
+        if (filterPanel) filterPanel.style.display = showPassbook ? 'none' : 'flex';
+        if (addForm && showPassbook) addForm.style.display = 'none';
+        if (mainTbl) mainTbl.style.display = listDisp;
+        if (mainPager) mainPager.style.display = showPassbook ? 'none' : 'flex';
+        if (mainStatus) mainStatus.style.display = showPassbook ? 'none' : 'flex';
+        if (passView) passView.style.display = showPassbook ? 'block' : 'none';
+
+        if (headerTitle) {
+            headerTitle.textContent = showPassbook
+                ? `Zari Passbook: ${window.currentPassbookZariItem || ''}`
+                : 'Zari Stock';
+        }
+    };
+
+    const closeZariPassbookToList = () => {
+        setZariSubViewMode(false);
+        renderZariTable();
+    };
+
+    const handleZariExitAction = () => {
+        if (isZariPassbookViewOpen) {
+            closeZariPassbookToList();
+            return;
+        }
+        if (window.__slReturnToStockSummary && typeof window.openStockSummaryModule === 'function') {
+            window.openStockSummaryModule();
+            return;
+        }
+        if (typeof window.backToDashboard === 'function') {
+            window.backToDashboard();
+        }
+    };
+
+    /* ========================================================================
+       3. NAVIGATION & TABS
+       ======================================================================== */
     const openZariModule = () => {
+        ensureZariTallyStyles();
         setDisplay('dashboard-view', 'none');
         setDisplay('zari-section', 'block');
+
+        setZariSubViewMode(false);
+        zariListActiveIdx = 0;
 
         renderZariKarkhanaTabs();
         populateZariExistingDropdown();
         renderZariTable();
         bindZariSearchInput();
+        bindZariKeyboardEngine();
     };
 
     const renderZariKarkhanaTabs = () => {
@@ -64,13 +399,11 @@
         }
 
         const isAllActive = (window.currentZariKarkhanaFilter === 'all') ? ' active' : '';
-        let html = `<button type="button" class="sheet-tab${isAllActive}" onclick="switchZariKarkhanaTab('all')">👥 Sabhi Karkhane</button>`;
+        let html = `<button type="button" class="sheet-tab${isAllActive}" onclick="switchZariKarkhanaTab('all')">Sabhi Karkhane</button>`;
 
         karkhanas.forEach((k) => {
-            const isMain = (k.id === 'k_main' || k.isDefault);
-            const icon = isMain ? '🏢 ' : '🏭 ';
             const isActive = (String(window.currentZariKarkhanaFilter) === String(k.id)) ? ' active' : '';
-            html += `<button type="button" class="sheet-tab${isActive}" onclick="switchZariKarkhanaTab('${esc(k.id)}')">${icon}${esc(k.name)}</button>`;
+            html += `<button type="button" class="sheet-tab${isActive}" onclick="switchZariKarkhanaTab('${esc(k.id)}')">${esc(k.name)}</button>`;
         });
 
         bar.innerHTML = html;
@@ -79,16 +412,32 @@
     const switchZariKarkhanaTab = (kId) => {
         window.currentZariKarkhanaFilter = kId || 'all';
         zariStockCurrentPage = 1;
+        zariListActiveIdx = 0;
         renderZariKarkhanaTabs();
         populateZariExistingDropdown();
         renderZariTable();
     };
 
+    const cycleZariKarkhanaTab = () => {
+        let karkhanas = [];
+        if (typeof window.getKarkhanasSafe === 'function') {
+            karkhanas = window.getKarkhanasSafe();
+        } else {
+            karkhanas = window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : [];
+        }
+        if (!karkhanas.length) karkhanas = [{ id: 'k_main', name: 'Main Godown' }];
+
+        const ids = ['all', ...karkhanas.map(k => String(k.id))];
+        const curIdx = ids.indexOf(String(window.currentZariKarkhanaFilter));
+        const nextId = ids[(curIdx + 1) % ids.length];
+        switchZariKarkhanaTab(nextId);
+    };
+
     /* ========================================================================
-       2. INWARD PURCHASE ENGINE
-       ------------------------------------------------------------------------
-    ======================================================================== */
+       4. INWARD PURCHASE ENGINE (100% SUPABASE SAFE)
+       ======================================================================== */
     const toggleZariForm = () => {
+        if (isZariPassbookViewOpen) setZariSubViewMode(false);
         const f = document.getElementById('add-zari-form');
         if (!f) return;
         const isOpening = (f.style.display !== 'block');
@@ -96,17 +445,20 @@
 
         if (isOpening) {
             const dInp = document.getElementById('zari-date');
-            if (dInp) {
-                dInp.value = (typeof window.getTodayDate === 'function') 
-                    ? window.getTodayDate() 
-                    : new Date().toISOString().split('T')[0];
-            }
+            if (dInp) dInp.value = getToday();
+            populateZariExistingDropdown();
+            toggleZariItemType();
+            setTimeout(() => {
+                const isNew = document.getElementById('zari-type-new')?.checked;
+                const target = document.getElementById(isNew ? 'zari-new-name' : 'zari-select-existing');
+                if (target) target.focus();
+            }, 40);
         }
     };
 
     const toggleZariItemType = () => {
-        const isNew = document.getElementById('zari-type-new') 
-            ? document.getElementById('zari-type-new').checked 
+        const isNew = document.getElementById('zari-type-new')
+            ? document.getElementById('zari-type-new').checked
             : true;
         setDisplay('zari-existing-group', isNew ? 'none' : 'block');
         setDisplay('zari-new-group', isNew ? 'block' : 'none');
@@ -132,16 +484,14 @@
     };
 
     const saveNewZari = () => {
-        const isNew = document.getElementById('zari-type-new') 
-            ? document.getElementById('zari-type-new').checked 
+        const isNew = document.getElementById('zari-type-new')
+            ? document.getElementById('zari-type-new').checked
             : true;
 
         const nameInp = isNew ? document.getElementById('zari-new-name') : document.getElementById('zari-select-existing');
         const name = String(nameInp?.value || '').trim();
 
-        const date = document.getElementById('zari-date')?.value || 
-                    ((typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0]);
-
+        const date = document.getElementById('zari-date')?.value || getToday();
         const qtyInp = document.getElementById('zari-aaya');
         const qty = safeNum(qtyInp?.value);
 
@@ -200,28 +550,53 @@
         alert(`✅ ${qty.toFixed(2)} Kg Zari Stock me jama ho gayi!`);
     };
 
-    // 🔍 LIVE SEARCH BINDER (Instant search on typing)
     const bindZariSearchInput = () => {
         const searchInp = document.getElementById('search-zari-input');
         if (searchInp && !searchInp.dataset.bound) {
             searchInp.dataset.bound = 'true';
             searchInp.addEventListener('input', () => {
                 zariStockCurrentPage = 1;
+                zariListActiveIdx = 0;
                 renderZariTable();
+            });
+            searchInp.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown' || e.key === 'Enter') {
+                    e.preventDefault();
+                    searchInp.blur();
+                    if (e.key === 'Enter' && currentZariFilteredRowsCache.length > 0) {
+                        const pageRows = getZariCurrentPageRows();
+                        const chosen = pageRows[zariListActiveIdx] || pageRows[0];
+                        if (chosen) openZariPassbook(encodeURIComponent(chosen.name));
+                    }
+                }
             });
         }
     };
 
     const filterZari = () => {
         zariStockCurrentPage = 1;
+        zariListActiveIdx = 0;
         renderZariTable();
     };
 
+    const getZariCurrentPageRows = () => {
+        const startIndex = (zariStockCurrentPage - 1) * ZARI_STOCK_PAGE_SIZE;
+        return currentZariFilteredRowsCache.slice(startIndex, startIndex + ZARI_STOCK_PAGE_SIZE);
+    };
+
+    const highlightZariListRow = (idx) => {
+        const rows = Array.from(document.querySelectorAll('#zari-table-body .zari-stock-row'));
+        if (!rows.length) return;
+        zariListActiveIdx = ((idx % rows.length) + rows.length) % rows.length;
+        rows.forEach((r, i) => r.classList.toggle('active', i === zariListActiveIdx));
+        rows[zariListActiveIdx]?.scrollIntoView({ block: 'nearest' });
+    };
+
     /* ========================================================================
-       3. MAIN ZARI TABLE RENDERER (WITH LIVE SEARCH, PAGINATION & PRINT)
-       ------------------------------------------------------------------------
-    ======================================================================== */
+       5. MAIN ZARI TABLE RENDERER (CLEAN WHITE & GOLD + KEYBOARD CURSOR)
+       ======================================================================== */
     const renderZariTable = () => {
+        ensureZariTallyStyles();
         bindZariSearchInput();
 
         const tbody = document.getElementById('zari-table-body');
@@ -252,46 +627,69 @@
         const searchInp = document.getElementById('search-zari-input');
         const txt = searchInp ? searchInp.value.toLowerCase().trim() : '';
 
-        // Universal Search: Name, Date, Aaya, Gaya, Bacha
-        const filteredRows = txt 
-            ? rows.filter(r => `${r.name || ''} ${r.date || ''} ${r.aaya || ''} ${r.gaya || ''} ${r.bacha || ''}`.toLowerCase().includes(txt)) 
+        const filteredRows = txt
+            ? rows.filter(r => `${r.name || ''} ${r.date || ''} ${r.aaya || ''} ${r.gaya || ''} ${r.bacha || ''}`.toLowerCase().includes(txt))
             : rows;
 
         currentZariFilteredRowsCache = filteredRows;
 
-        // Auto-inject A6 Print Button next to search box if not present
-        if (searchInp && searchInp.parentElement && !document.getElementById('zari-stock-print-btn')) {
-            const printBtn = document.createElement('button');
-            printBtn.id = 'zari-stock-print-btn';
-            printBtn.type = 'button';
-            printBtn.className = 'sheet-btn';
-            printBtn.style.cssText = 'background:#ea580c; color:#ffffff; padding:6px 12px; font-weight:bold; border-radius:6px; border:none; cursor:pointer; margin-left:8px; display:inline-flex; align-items:center; gap:4px;';
-            printBtn.innerHTML = '🖨️ A6 Print';
-            printBtn.onclick = () => printZariStockReport();
-            if (searchInp.nextSibling) {
-                searchInp.parentElement.insertBefore(printBtn, searchInp.nextSibling);
-            } else {
+        // Clean White & Gold Toolbar Buttons (Transfer + A6 Print) next to Search
+        if (searchInp && searchInp.parentElement) {
+            if (!document.getElementById('zari-stock-transfer-btn')) {
+                const trBtn = document.createElement('button');
+                trBtn.id = 'zari-stock-transfer-btn';
+                trBtn.type = 'button';
+                trBtn.className = 'zari-tally-btn';
+                trBtn.innerHTML = 'Bhejo / Transfer [T]';
+                trBtn.onclick = () => triggerSelectedZariTransfer();
+                searchInp.parentElement.appendChild(trBtn);
+            }
+            if (!document.getElementById('zari-stock-print-btn')) {
+                const printBtn = document.createElement('button');
+                printBtn.id = 'zari-stock-print-btn';
+                printBtn.type = 'button';
+                printBtn.className = 'zari-tally-btn';
+                printBtn.innerHTML = 'A6 Print [Alt+P]';
+                printBtn.onclick = () => printZariStockReport();
                 searchInp.parentElement.appendChild(printBtn);
             }
         }
 
+        let totalAaya = 0;
+        let totalGaya = 0;
         let totalBacha = 0;
-        rows.forEach(r => { totalBacha += safeNum(r.bacha); });
+        rows.forEach((r) => {
+            totalAaya += safeNum(r.aaya);
+            totalGaya += safeNum(r.gaya);
+            totalBacha += safeNum(r.bacha);
+        });
 
         const totalEntries = filteredRows.length;
+        const sec = document.getElementById('zari-section');
         let pager = document.getElementById('zari-stock-pagination-controls');
         if (!pager) {
-            const tbl = tbody.closest('table') || tbody.parentElement;
+            const tbl = tbody.closest('.table-responsive') || tbody.closest('table')?.parentElement;
             if (tbl && tbl.parentElement) {
                 pager = document.createElement('div');
                 pager.id = 'zari-stock-pagination-controls';
-                pager.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding:8px 4px; border-top:1px solid #e2e8f0; flex-wrap:wrap; gap:8px;';
-                tbl.parentElement.appendChild(pager);
+                pager.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin:10px 20px 0 20px; padding:8px 0; border-top:1px solid #eadab0; flex-wrap:wrap; gap:8px;';
+                tbl.insertAdjacentElement('afterend', pager);
             }
         }
 
+        if (sec && !document.getElementById('zari-main-status-strip')) {
+            const strip = document.createElement('div');
+            strip.id = 'zari-main-status-strip';
+            strip.className = 'zari-status-strip';
+            strip.innerHTML = `
+                <span style="color:#92400e; font-weight:700;">[↑ ↓] Item Chunein · [Enter / Click] Passbook · [T / F4] Transfer · [F7] + Nayi Zari · [F2] Godam · [/] Search · [Esc] Back</span>
+                <span id="zari-main-count-lbl">0 Items</span>
+            `;
+            sec.appendChild(strip);
+        }
+
         if (!totalEntries) {
-            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:20px; color:#888;'>Koi Zari Stock nahi mila.</td></tr>";
+            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:22px; color:#6b7280;'>Koi Zari Stock nahi mila.</td></tr>";
             if (pager) pager.innerHTML = '';
         } else {
             const totalPages = Math.ceil(totalEntries / ZARI_STOCK_PAGE_SIZE) || 1;
@@ -300,123 +698,173 @@
 
             const startIndex = (zariStockCurrentPage - 1) * ZARI_STOCK_PAGE_SIZE;
             const pageRows = filteredRows.slice(startIndex, startIndex + ZARI_STOCK_PAGE_SIZE);
+            if (zariListActiveIdx >= pageRows.length) zariListActiveIdx = 0;
+            if (zariListActiveIdx < 0) zariListActiveIdx = 0;
 
             let html = '';
-            pageRows.forEach((z) => {
+            pageRows.forEach((z, idx) => {
                 const bacha = safeNum(z.bacha);
                 const safeName = encodeURIComponent(z.name);
+                const activeCls = (idx === zariListActiveIdx) ? ' active' : '';
 
-                let transferBtn = '';
-                if (bacha > 0) {
-                    transferBtn = `<button type="button" class="sheet-btn" style="background:#f59e0b; color:#ffffff; padding:4px 9px; font-weight:bold; margin-left:6px; border-radius:4px; border:none; cursor:pointer;" onclick="openZariTransferModal('${safeName}', ${bacha})">🚚 Bhejo</button>`;
-                }
-
-                html += `<tr>
+                html += `<tr class="zari-stock-row${activeCls}" data-zidx="${idx}" onclick="window.__zariSelectAndOpen(${idx}, '${safeName}')">
                     <td>${esc(z.date || '-')}</td>
-                    <td><strong style="color:#1e3a8a;">${esc(z.name)}</strong></td>
-                    <td style="color:#059669; font-weight:700;">+${safeNum(z.aaya).toFixed(2)}</td>
-                    <td style="color:#ea580c; font-weight:700;">-${safeNum(z.gaya).toFixed(2)}</td>
-                    <td style="font-weight:800; color:#1e3a8a; background:#eff6ff; font-size:14px;">${bacha.toFixed(2)} Kg</td>
-                    <td style="text-align:center; white-space:nowrap;">
-                        <button type="button" class="sheet-btn" style="background:#ea580c; padding:4px 10px; font-weight:bold; border-radius:4px; border:none; color:white; cursor:pointer;" onclick="openZariPassbook('${safeName}')">📖 Passbook</button>
-                        ${transferBtn}
-                    </td>
+                    <td><strong>${esc(z.name)}</strong></td>
+                    <td style="font-weight:700;">+${safeNum(z.aaya).toFixed(2)} Kg</td>
+                    <td style="font-weight:700; color:#6b7280;">-${safeNum(z.gaya).toFixed(2)} Kg</td>
+                    <td style="font-weight:800; color:#b47d00;">${bacha.toFixed(2)} Kg</td>
+                    <td style="text-align:right; font-weight:700; font-size:12px;">Passbook →</td>
                 </tr>`;
             });
             tbody.innerHTML = html;
 
-            // Render Stock Pagination Controls
             if (pager) {
                 pager.innerHTML = `
-                    <div style="font-size:12px; color:#475569; font-weight:600;">
+                    <div style="font-size:12px; color:#6b7280; font-weight:600;">
                         Showing <strong>${startIndex + 1}</strong> - <strong>${Math.min(startIndex + ZARI_STOCK_PAGE_SIZE, totalEntries)}</strong> of <strong>${totalEntries}</strong> Items
                     </div>
-                    <div style="display:flex; gap:6px;">
-                        <button type="button" class="sheet-btn" style="background:${zariStockCurrentPage <= 1 ? '#cbd5e1' : '#ea580c'}; color:white; padding:4px 10px; border-radius:4px; border:none; cursor:${zariStockCurrentPage <= 1 ? 'not-allowed' : 'pointer'};" ${zariStockCurrentPage <= 1 ? 'disabled' : ''} onclick="changeZariStockPage(-1)">◀ Prev</button>
-                        <span style="font-size:12px; font-weight:bold; padding:4px 8px; background:#f1f5f9; border-radius:4px;">${zariStockCurrentPage} / ${totalPages}</span>
-                        <button type="button" class="sheet-btn" style="background:${zariStockCurrentPage >= totalPages ? '#cbd5e1' : '#ea580c'}; color:white; padding:4px 10px; border-radius:4px; border:none; cursor:${zariStockCurrentPage >= totalPages ? 'not-allowed' : 'pointer'};" ${zariStockCurrentPage >= totalPages ? 'disabled' : ''} onclick="changeZariStockPage(1)">Next ▶</button>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button type="button" class="zari-tally-btn" ${zariStockCurrentPage <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''} onclick="changeZariStockPage(-1)">◀ Prev</button>
+                        <span style="font-size:12px; font-weight:700; padding:4px 8px; background:#fdf6e2; border:1px solid #e5d5a7; border-radius:4px;">${zariStockCurrentPage} / ${totalPages}</span>
+                        <button type="button" class="zari-tally-btn" ${zariStockCurrentPage >= totalPages ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''} onclick="changeZariStockPage(1)">Next ▶</button>
                     </div>`;
             }
         }
 
+        const opBox = document.getElementById('zari-opening-box');
         const opVal = document.getElementById('zari-opening-val');
-        if (opVal) opVal.textContent = `${totalBacha.toFixed(2)} Kg Kul Bachi`;
+        if (opVal) opVal.textContent = `Kul Bachi: ${totalBacha.toFixed(2)} Kg`;
+        if (opBox) {
+            let extra = document.getElementById('zari-summary-meta');
+            if (!extra) {
+                extra = document.createElement('div');
+                extra.id = 'zari-summary-meta';
+                extra.style.cssText = 'font-size:12px; color:#6b7280; font-weight:700;';
+                opBox.appendChild(extra);
+            }
+            extra.textContent = `Total Aayi: +${totalAaya.toFixed(2)} Kg · Total Gayi: -${totalGaya.toFixed(2)} Kg`;
+        }
+
+        const cntLbl = document.getElementById('zari-main-count-lbl');
+        if (cntLbl) cntLbl.textContent = `${totalEntries} Items`;
+    };
+
+    window.__zariSelectAndOpen = (idx, safeName) => {
+        highlightZariListRow(idx);
+        openZariPassbook(safeName);
+    };
+
+    const triggerSelectedZariTransfer = () => {
+        if (isZariPassbookViewOpen && window.currentPassbookZariItem) {
+            const stats = (typeof window.getZariItemStats === 'function')
+                ? window.getZariItemStats(window.currentPassbookZariItem, window.currentZariKarkhanaFilter)
+                : { bacha: 0 };
+            if (safeNum(stats.bacha) <= 0) return alert('Is item me transfer ke liye koi Zari nahi bachi hai.');
+            openZariTransferModal(encodeURIComponent(window.currentPassbookZariItem), safeNum(stats.bacha));
+            return;
+        }
+
+        const pageRows = getZariCurrentPageRows();
+        const chosen = pageRows[zariListActiveIdx];
+        if (!chosen) return alert('Pehle koi Zari item chunein!');
+        if (safeNum(chosen.bacha) <= 0) return alert(`[${chosen.name}] me transfer ke liye koi Zari nahi bachi hai.`);
+        openZariTransferModal(encodeURIComponent(chosen.name), safeNum(chosen.bacha));
     };
 
     const changeZariStockPage = (delta) => {
         zariStockCurrentPage += delta;
+        zariListActiveIdx = 0;
         renderZariTable();
     };
 
     /* ========================================================================
-       4. INTER-GODOWN TRANSFER POPUP
-       ------------------------------------------------------------------------
-    ======================================================================== */
+       6. INTER-GODOWN TRANSFER POPUP (TALLY WHITE & GOLD + ENTER CHAINING)
+       ======================================================================== */
     const openZariTransferModal = (safeName, availableBacha) => {
         const itemName = decodeURIComponent(safeName);
         const existingModal = document.getElementById('zari-transfer-popup-modal');
         if (existingModal) existingModal.remove();
 
-        let karkhanas = (typeof window.getKarkhanasSafe === 'function') 
-            ? window.getKarkhanasSafe() 
+        let karkhanas = (typeof window.getKarkhanasSafe === 'function')
+            ? window.getKarkhanasSafe()
             : (window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : []);
 
         const currentKid = (window.currentZariKarkhanaFilter !== 'all') ? window.currentZariKarkhanaFilter : 'k_main';
-        const currentGodamName = (typeof window.getKarkhanaNameById === 'function') 
-            ? window.getKarkhanaNameById(currentKid) 
+        const currentGodamName = (typeof window.getKarkhanaNameById === 'function')
+            ? window.getKarkhanaNameById(currentKid)
             : currentKid;
 
         let godownOptions = '';
         karkhanas.forEach((k) => {
             if (String(k.id) !== String(currentKid)) {
-                const isMain = (k.id === 'k_main' || k.isDefault);
-                godownOptions += `<option value="${esc(k.id)}">${isMain ? '🏢 ' : '🏭 '}${esc(k.name)}</option>`;
+                godownOptions += `<option value="${esc(k.id)}">${esc(k.name)}</option>`;
             }
         });
 
-        const today = (typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0];
+        const today = getToday();
 
         const modalHtml = `
-            <div id="zari-transfer-popup-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:99999; display:flex; align-items:center; justify-content:center; padding:15px; box-sizing:border-box;">
-                <div style="background:#ffffff; width:100%; max-width:460px; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); overflow:hidden;">
-                    <div style="background:#ea580c; color:#ffffff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
-                        <h3 style="margin:0; font-size:16px;">🚚 Zari Stock Transfer</h3>
-                        <button type="button" onclick="closeZariTransferModal()" style="background:transparent; border:none; color:#ffffff; font-size:22px; cursor:pointer;">&times;</button>
+            <div id="zari-transfer-popup-modal" class="zari-modal-overlay">
+                <div class="zari-modal-card">
+                    <div class="zari-modal-head">
+                        <h3>Zari Stock Transfer</h3>
+                        <button type="button" class="zari-tally-btn" onclick="closeZariTransferModal()">&larr; [Esc] Close</button>
                     </div>
                     <div style="padding:16px;">
-                        <div style="background:#fff7ed; border:1px solid #ffedd5; border-radius:8px; padding:10px; margin-bottom:12px; font-size:13px;">
+                        <div style="background:#fdf6e2; border:1px solid #e5d5a7; border-radius:6px; padding:10px 12px; margin-bottom:12px; font-size:12.5px;">
                             <div><strong>Zari Item:</strong> ${esc(itemName)}</div>
                             <div><strong>Bhejne Wala Godam:</strong> ${esc(currentGodamName)}</div>
-                            <div style="color:#ea580c; font-weight:bold; font-size:14px; margin-top:4px;">Maujooda Bacha Wazan: ${availableBacha.toFixed(2)} Kg</div>
+                            <div style="color:#b47d00; font-weight:800; font-size:13.5px; margin-top:4px;">Available Stock: ${availableBacha.toFixed(2)} Kg</div>
                         </div>
-                        <div style="margin-bottom:12px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151;">Kahan Bhejna Hai (Destination Godam):</label><br>
-                            <select id="zari-dest-godam" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; margin-top:4px;">
-                                ${godownOptions}
-                            </select>
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Destination Godam :</label>
+                            <select id="zari-dest-godam" class="zari-modal-inp">${godownOptions}</select>
                         </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
                             <div>
-                                <label style="font-size:12px; font-weight:700; color:#374151;">Kitna Wazan (Kg):</label><br>
-                                <input type="number" step="0.01" id="zari-transfer-qty" max="${availableBacha}" min="0.01" value="${availableBacha}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; font-weight:bold; box-sizing:border-box;">
+                                <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Wazan (Kg) :</label>
+                                <input type="number" step="0.01" id="zari-transfer-qty" max="${availableBacha}" min="0.01" value="${availableBacha}" class="zari-modal-inp">
                             </div>
                             <div>
-                                <label style="font-size:12px; font-weight:700; color:#374151;">Tarikh:</label><br>
-                                <input type="date" id="zari-transfer-date" value="${today}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; box-sizing:border-box;">
+                                <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Tarikh :</label>
+                                <input type="date" id="zari-transfer-date" value="${today}" class="zari-modal-inp">
                             </div>
                         </div>
                         <div style="margin-bottom:14px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151;">Note / Parchi No. (Optional):</label><br>
-                            <input type="text" id="zari-transfer-note" placeholder="e.g. Mubarakpur unit ke liye bheja" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; box-sizing:border-box;">
+                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Note / Parchi No. (Optional) :</label>
+                            <input type="text" id="zari-transfer-note" placeholder="e.g. Mubarakpur unit ke liye bheja" class="zari-modal-inp">
                         </div>
-                        <button type="button" onclick="submitZariTransferForm('${safeName}', '${currentKid}', ${availableBacha})" style="background:#ea580c; color:#ffffff; border:none; width:100%; padding:10px; border-radius:6px; font-weight:bold; font-size:14px; cursor:pointer;">
-                            🚀 Zari Transfer Confirm Karein
-                        </button>
+                        <div style="display:flex; justify-content:flex-end; gap:8px;">
+                            <button type="button" class="zari-tally-btn" onclick="closeZariTransferModal()">Cancel [Esc]</button>
+                            <button type="button" class="zari-tally-btn-gold" onclick="submitZariTransferForm('${safeName}', '${currentKid}', ${availableBacha})">Transfer Confirm [Enter]</button>
+                        </div>
                     </div>
                 </div>
             </div>`;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const order = ['zari-dest-godam', 'zari-transfer-qty', 'zari-transfer-date', 'zari-transfer-note'];
+        order.forEach((fid, i) => {
+            const el = document.getElementById(fid);
+            if (!el) return;
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (i < order.length - 1) {
+                        const nxt = document.getElementById(order[i + 1]);
+                        if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
+                    } else {
+                        submitZariTransferForm(safeName, currentKid, availableBacha);
+                    }
+                }
+            });
+        });
+
+        setTimeout(() => {
+            const qtyEl = document.getElementById('zari-transfer-qty');
+            if (qtyEl) { qtyEl.focus(); qtyEl.select(); }
+        }, 50);
     };
 
     const closeZariTransferModal = () => {
@@ -428,8 +876,7 @@
         const itemName = decodeURIComponent(safeName);
         const toKid = document.getElementById('zari-dest-godam')?.value;
         const qty = safeNum(document.getElementById('zari-transfer-qty')?.value);
-        const d = document.getElementById('zari-transfer-date')?.value || 
-                 ((typeof window.getTodayDate === 'function') ? window.getTodayDate() : '');
+        const d = document.getElementById('zari-transfer-date')?.value || getToday();
         const note = String(document.getElementById('zari-transfer-note')?.value || '').trim();
 
         if (!toKid) return alert('Kripya Paane wala Godam chunein!');
@@ -443,56 +890,156 @@
 
         if (success) {
             closeZariTransferModal();
-            renderZariTable();
+            if (isZariPassbookViewOpen) {
+                applyZariPassbookFilters();
+            } else {
+                renderZariTable();
+            }
+            if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
             alert(`✅ ${qty.toFixed(2)} Kg Zari safalta-poorvak transfer ho gayi!`);
         }
     };
 
     /* ========================================================================
-       5. 📱 PAGINATED ZARI PASSBOOK ENGINE (WITH A6 PRINT)
-       ------------------------------------------------------------------------
-    ======================================================================== */
-    const openZariPassbook = (safeName) => {
-        window.currentPassbookZariItem = decodeURIComponent(safeName);
-        zariPassbookCurrentPage = 1;
+       7. INLINE TALLY ZARI PASSBOOK ENGINE (WITH RUNNING CLOSING BALANCE)
+       ======================================================================== */
+    const ensureInlineZariPassbookContainer = () => {
+        const sec = document.getElementById('zari-section');
+        if (!sec) return null;
 
-        const modal = document.getElementById('item-modal');
-        if (!modal) return;
+        let container = document.getElementById('zari-inline-passbook-view');
+        if (container) return container;
 
-        const title = document.getElementById('modal-item-title');
-        if (title) title.textContent = `📖 Zari Passbook: ${window.currentPassbookZariItem}`;
-
-        const modalBody = modal.querySelector('.modal-body');
-        if (modalBody) {
-            modalBody.innerHTML = `
-                <div style="background:#f8fafc; border:1px solid #cbd5e1; padding:12px; border-radius:10px; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;">
-                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                        <div><label style="font-size:12px; font-weight:700;">From Date:</label><br><input type="date" id="zari-pass-from-date" onchange="applyZariPassbookFilters()"></div>
-                        <div><label style="font-size:12px; font-weight:700;">To Date:</label><br><input type="date" id="zari-pass-to-date" onchange="applyZariPassbookFilters()"></div>
-                        <div style="align-self:flex-end; display:flex; gap:6px;">
-                            <button type="button" class="quick-btn btn-out" onclick="resetZariPassbookFilters()">Reset</button>
-                            <button type="button" class="sheet-btn" style="background:#ea580c; color:#ffffff; padding:6px 12px; font-weight:bold; border-radius:6px; border:none; cursor:pointer;" onclick="printZariPassbookFiltered()">🖨️ A6 Print</button>
-                        </div>
-                    </div>
-                    <div style="flex:1; min-width:180px;">
-                        <label style="font-size:12px; font-weight:700;">🔍 Search:</label><br>
-                        <input type="text" id="zari-pass-search-input" class="search-box" placeholder="Search Date, Kariger..." oninput="applyZariPassbookFilters()">
-                    </div>
+        container = document.createElement('div');
+        container.id = 'zari-inline-passbook-view';
+        container.style.display = 'none';
+        container.innerHTML = `
+            <div style="margin:12px 20px 10px 20px; padding:10px 14px; background:#fdfcf7; border:1px solid #e5d5a7; border-radius:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <button type="button" class="zari-tally-btn" onclick="window.__closeZariPassbookView()">&larr; [Esc] Zari List</button>
+                    <strong id="zari-pass-summary-title" style="font-size:14px; color:#1f2937;">Item: -</strong>
+                    <span id="zari-pass-summary-totals" style="font-size:12px; color:#b47d00; font-weight:800;"></span>
                 </div>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr style="background:#ea580c; color:white; font-size:12px;">
-                                <th>TARIKH</th><th>DETAIL (TYPE)</th><th>KARIGER / SOURCE</th><th>AAYI (Kg)</th><th>GAYI (Kg)</th><th style="text-align:center;">ACTIONS</th>
-                            </tr>
-                        </thead>
-                        <tbody id="zari-passbook-table-body"></tbody>
-                    </table>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button type="button" class="zari-tally-btn" onclick="window.__zariPassAction('edit')">Edit [Enter]</button>
+                    <button type="button" class="zari-tally-btn" onclick="window.__zariPassAction('delete')">Delete [Del]</button>
+                    <button type="button" class="zari-tally-btn" onclick="window.__zariPassAction('print_single')">Slip [P]</button>
+                    <button type="button" class="zari-tally-btn" onclick="window.__zariTransferFromPass()">Bhejo [T]</button>
+                    <button type="button" class="zari-tally-btn-gold" onclick="printZariPassbookFiltered()">A6 Print [Alt+P]</button>
                 </div>
-                <div id="zari-passbook-pagination-controls" style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding:8px 4px; border-top:1px solid #e2e8f0; flex-wrap:wrap; gap:8px;"></div>`;
+            </div>
+
+            <div style="padding:0 20px 10px 20px; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end;">
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#6b7280; display:block; margin-bottom:2px;">From Date [F]:</label>
+                    <input type="date" id="zari-pass-from-date" onchange="applyZariPassbookFilters()" style="padding:6px 8px; border:1px solid #d1d5db; border-radius:4px; font-size:12.5px; font-weight:600;">
+                </div>
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#6b7280; display:block; margin-bottom:2px;">To Date:</label>
+                    <input type="date" id="zari-pass-to-date" onchange="applyZariPassbookFilters()" style="padding:6px 8px; border:1px solid #d1d5db; border-radius:4px; font-size:12.5px; font-weight:600;">
+                </div>
+                <div style="flex:1; min-width:180px;">
+                    <label style="font-size:11px; font-weight:700; color:#6b7280; display:block; margin-bottom:2px;">Search [/]:</label>
+                    <input type="text" id="zari-pass-search-input" class="search-box" placeholder="Search Date, Kariger, Type..." oninput="applyZariPassbookFilters()">
+                </div>
+                <button type="button" class="zari-tally-btn" onclick="resetZariPassbookFilters()">Reset [R]</button>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tarikh</th>
+                            <th>Particulars (Kariger / Source)</th>
+                            <th>Detail (Vch Type)</th>
+                            <th style="text-align:right;">Aayi (In)</th>
+                            <th style="text-align:right;">Gayi (Out)</th>
+                            <th style="text-align:right;">Closing Bal</th>
+                            <th style="text-align:center;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="zari-passbook-table-body"></tbody>
+                </table>
+            </div>
+
+            <div id="zari-passbook-pagination-controls" style="display:flex; justify-content:space-between; align-items:center; margin:10px 20px 0 20px; padding:8px 0; border-top:1px solid #eadab0; flex-wrap:wrap; gap:8px;"></div>
+
+            <div class="zari-status-strip">
+                <span style="color:#92400e; font-weight:700;">[↑ ↓] Entry Chunein · [Enter/E] Edit · [Del] Delete · [P] Single Slip · [Alt+P] Statement · [Esc] Zari List</span>
+                <span id="zari-passbook-entry-status">-</span>
+            </div>
+        `;
+
+        const mainStrip = document.getElementById('zari-main-status-strip');
+        if (mainStrip) {
+            sec.insertBefore(container, mainStrip);
+        } else {
+            sec.appendChild(container);
         }
 
-        modal.style.display = 'flex';
+        const fInp = document.getElementById('zari-pass-from-date');
+        const tInp = document.getElementById('zari-pass-to-date');
+        const sInp = document.getElementById('zari-pass-search-input');
+        if (fInp) {
+            fInp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); tInp?.focus(); }
+            });
+        }
+        if (tInp) {
+            tInp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); sInp?.focus(); }
+            });
+        }
+        if (sInp) {
+            sInp.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown' || e.key === 'Enter') {
+                    e.preventDefault();
+                    sInp.blur();
+                }
+            });
+        }
+
+        return container;
+    };
+
+    window.__closeZariPassbookView = closeZariPassbookToList;
+    window.__zariTransferFromPass = triggerSelectedZariTransfer;
+
+    window.__zariPassAction = (action) => {
+        const startIndex = (zariPassbookCurrentPage - 1) * ZARI_PAGE_SIZE;
+        const pageRows = filteredZariPassbookCache.slice(startIndex, startIndex + ZARI_PAGE_SIZE);
+        const entry = pageRows[zariPassbookActiveIdx];
+        if (!entry) return alert('Pehle koi entry chunein!');
+
+        if (action === 'print_single') {
+            printSingleZariPassbookEntry(entry.id);
+            return;
+        }
+
+        const isOpeningEntry = entry.isOpening || (entry.type && entry.type.toLowerCase().includes('opening'));
+        const isKarigerEntry = (entry.type && entry.type.toLowerCase().includes('kariger')) ||
+                               (entry.kariger && entry.kariger.toLowerCase().includes('kariger sheet'));
+
+        if (isOpeningEntry || isKarigerEntry) {
+            return alert('Ye entry locked hai (Kariger Sheet / Opening Balance). Isko wahan se edit karein.');
+        }
+
+        if (action === 'edit') openZariEditModal(entry.id);
+        else if (action === 'delete') deleteZariHistoryEntry(entry.id);
+    };
+
+    const openZariPassbook = (safeName) => {
+        ensureZariTallyStyles();
+        setDisplay('dashboard-view', 'none');
+        setDisplay('zari-section', 'block');
+
+        window.currentPassbookZariItem = decodeURIComponent(safeName);
+        zariPassbookCurrentPage = 1;
+        zariPassbookActiveIdx = 0;
+
+        ensureInlineZariPassbookContainer();
+        setZariSubViewMode(true);
+        bindZariKeyboardEngine();
         applyZariPassbookFilters();
     };
 
@@ -504,6 +1051,7 @@
         if (tDate) tDate.value = '';
         if (sInp) sInp.value = '';
         zariPassbookCurrentPage = 1;
+        zariPassbookActiveIdx = 0;
         applyZariPassbookFilters();
     };
 
@@ -511,7 +1059,7 @@
         const targetItemLower = window.currentPassbookZariItem.toLowerCase();
         const allHist = window.safeArray ? window.safeArray(window.getStore('zari_history')) : [];
 
-        let hist = allHist.filter((x) => {
+        let itemHist = allHist.filter((x) => {
             if (!x?.name) return false;
             if (x.name.toLowerCase() !== targetItemLower) return false;
 
@@ -522,24 +1070,75 @@
             return true;
         });
 
+        // Compute Running Closing Balance chronologically (without mutating original store objects)
+        const chrono = itemHist.slice().sort((a, b) => {
+            const ta = a.timestamp || 0;
+            const tb = b.timestamp || 0;
+            if (ta !== tb) return ta - tb;
+            return String(a.date || '').localeCompare(String(b.date || ''));
+        });
+
+        let runningBal = 0;
+        const withRunning = chrono.map((r) => {
+            const aayaQty = safeNum(r.aaya || r.qty);
+            const gayaQty = safeNum(r.gaya);
+            runningBal = safeNum((runningBal + aayaQty - gayaQty).toFixed(2));
+            return { ...r, _runningBal: runningBal };
+        });
+
         const fDate = document.getElementById('zari-pass-from-date')?.value || '';
         const tDate = document.getElementById('zari-pass-to-date')?.value || '';
         const sTxt = (document.getElementById('zari-pass-search-input')?.value || '').toLowerCase().trim();
 
-        if (fDate) hist = hist.filter(x => x.date >= fDate);
-        if (tDate) hist = hist.filter(x => x.date <= tDate);
+        let filtered = withRunning;
+        if (fDate) filtered = filtered.filter(x => (x.date || '') >= fDate);
+        if (tDate) filtered = filtered.filter(x => (x.date || '') <= tDate);
 
         if (sTxt) {
-            hist = hist.filter((x) => {
+            filtered = filtered.filter((x) => {
                 const rowString = `${x.date || ''} ${x.type || ''} ${x.kariger || ''} ${x.aaya || x.qty || ''} ${x.gaya || ''}`.toLowerCase();
                 return rowString.includes(sTxt);
             });
         }
 
-        hist.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-        filteredZariPassbookCache = hist;
+        filteredZariPassbookCache = filtered;
+
+        const stats = (typeof window.getZariItemStats === 'function')
+            ? window.getZariItemStats(window.currentPassbookZariItem, window.currentZariKarkhanaFilter)
+            : { aaya: 0, gaya: 0, bacha: runningBal };
+        const godamName = (typeof window.getKarkhanaNameById === 'function')
+            ? window.getKarkhanaNameById(window.currentZariKarkhanaFilter)
+            : 'Sabhi Karkhane';
+
+        const titleEl = document.getElementById('zari-pass-summary-title');
+        const totEl = document.getElementById('zari-pass-summary-totals');
+        if (titleEl) titleEl.textContent = `${window.currentPassbookZariItem} (${godamName})`;
+        if (totEl) {
+            totEl.textContent = `Aayi: +${safeNum(stats.aaya).toFixed(2)} Kg · Gayi: -${safeNum(stats.gaya).toFixed(2)} Kg · Closing: ${safeNum(stats.bacha).toFixed(2)} Kg`;
+        }
+
         renderPaginatedZariPassbook();
+    };
+
+    const highlightZariPassbookRow = (idx) => {
+        const rows = Array.from(document.querySelectorAll('#zari-passbook-table-body .zari-pass-row'));
+        if (!rows.length) return;
+        zariPassbookActiveIdx = ((idx % rows.length) + rows.length) % rows.length;
+        rows.forEach((r, i) => r.classList.toggle('active', i === zariPassbookActiveIdx));
+        rows[zariPassbookActiveIdx]?.scrollIntoView({ block: 'nearest' });
+
+        const startIndex = (zariPassbookCurrentPage - 1) * ZARI_PAGE_SIZE;
+        const pageRows = filteredZariPassbookCache.slice(startIndex, startIndex + ZARI_PAGE_SIZE);
+        const entry = pageRows[zariPassbookActiveIdx];
+        const statusEl = document.getElementById('zari-passbook-entry-status');
+        if (statusEl && entry) {
+            const isLocked = entry.isOpening ||
+                (entry.type && (entry.type.toLowerCase().includes('opening') || entry.type.toLowerCase().includes('kariger'))) ||
+                (entry.kariger && entry.kariger.toLowerCase().includes('kariger sheet'));
+            statusEl.textContent = isLocked ? 'Locked Entry (Kariger Sheet / Opening)' : 'Editable Entry [Enter / Del]';
+        }
     };
 
     const renderPaginatedZariPassbook = () => {
@@ -550,8 +1149,10 @@
 
         const totalEntries = filteredZariPassbookCache.length;
         if (!totalEntries) {
-            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:15px; color:#888;'>Koi entry nahi mili.</td></tr>";
+            tbody.innerHTML = "<tr><td colspan='7' style='text-align:center; padding:18px; color:#6b7280;'>Koi passbook entry nahi mili.</td></tr>";
             if (pager) pager.innerHTML = '';
+            const statusEl = document.getElementById('zari-passbook-entry-status');
+            if (statusEl) statusEl.textContent = '0 Entries';
             return;
         }
 
@@ -561,77 +1162,258 @@
 
         const startIndex = (zariPassbookCurrentPage - 1) * ZARI_PAGE_SIZE;
         const pageRows = filteredZariPassbookCache.slice(startIndex, startIndex + ZARI_PAGE_SIZE);
+        if (zariPassbookActiveIdx >= pageRows.length) zariPassbookActiveIdx = 0;
+        if (zariPassbookActiveIdx < 0) zariPassbookActiveIdx = 0;
 
         let html = '';
-        pageRows.forEach((r) => {
+        pageRows.forEach((r, idx) => {
             const aayaQty = safeNum(r.aaya || r.qty);
             const gayaQty = safeNum(r.gaya);
+            const runBal = safeNum(r._runningBal);
 
             const isOpeningEntry = r.isOpening || (r.type && r.type.toLowerCase().includes('opening'));
-            const isKarigerEntry = (r.type && r.type.toLowerCase().includes('kariger')) || 
+            const isKarigerEntry = (r.type && r.type.toLowerCase().includes('kariger')) ||
                                   (r.kariger && r.kariger.toLowerCase().includes('kariger sheet'));
 
-            const karigerDisplay = isOpeningEntry 
-                ? '📦 31st March Closing (Opening)' 
-                : ((r.kariger && r.kariger !== '-' && r.kariger !== 'undefined') ? `👤 ${esc(r.kariger)}` : '📦 Factory Inward');
+            const karigerDisplay = isOpeningEntry
+                ? '31st March Closing (Opening)'
+                : ((r.kariger && r.kariger !== '-' && r.kariger !== 'undefined') ? esc(r.kariger) : 'Factory Inward');
 
-            const singlePrintBtn = `<button type="button" title="A6 Slip Print" class="sheet-btn" style="background:#0284c7; color:#ffffff; padding:4px 7px; font-size:11px; font-weight:bold; border-radius:4px; border:none; cursor:pointer;" onclick="printSingleZariPassbookEntry('${esc(r.id)}')">🖨️</button>`;
+            const statusBadge = isOpeningEntry
+                ? '<span style="font-size:11px; color:#6b7280; font-weight:700;">Opening Lock</span>'
+                : (isKarigerEntry
+                    ? '<span style="font-size:11px; color:#6b7280; font-weight:700;">Kariger Sheet</span>'
+                    : '<span style="font-size:11px; color:#b47d00; font-weight:700;">Editable</span>');
 
-            let actBtn = '';
-            if (isOpeningEntry) {
-                actBtn = `<div style="display:flex; gap:6px; justify-content:center; align-items:center;">
-                    <span style='color:#64748b; font-size:11px; font-weight:700;'>🔒 Opening Lock</span>
-                    ${singlePrintBtn}
-                </div>`;
-            } else if (isKarigerEntry) {
-                actBtn = `<div style="display:flex; gap:6px; justify-content:center; align-items:center;">
-                    <span style='color:#64748b; font-size:11px; font-weight:700;'>🔒 Kariger Sheet</span>
-                    ${singlePrintBtn}
-                </div>`;
-            } else {
-                actBtn = `
-                    <div style="display:flex; gap:6px; justify-content:center; align-items:center;">
-                        <button type="button" class="sheet-btn" style="background:#3b82f6; color:#ffffff; padding:4px 8px; font-size:11px; font-weight:bold; border-radius:4px; border:none; cursor:pointer;" onclick="openZariEditModal('${esc(r.id)}')">✏️ Edit</button>
-                        <button type="button" class="sheet-btn" style="background:#ef4444; color:#ffffff; padding:4px 8px; font-size:11px; font-weight:bold; border-radius:4px; border:none; cursor:pointer;" onclick="deleteZariHistoryEntry('${esc(r.id)}')">🗑️ Del</button>
-                        ${singlePrintBtn}
-                    </div>`;
-            }
+            const activeCls = (idx === zariPassbookActiveIdx) ? ' active' : '';
 
-            html += `<tr>
+            html += `<tr class="zari-pass-row${activeCls}" data-pidx="${idx}" onclick="window.__zariSelectPassRow(${idx})">
                 <td>${esc(r.date || '-')}</td>
-                <td><strong>${esc(r.type || 'Godam Inward')}</strong></td>
-                <td style="color:#1e3a8a; font-weight:700;">${karigerDisplay}</td>
-                <td style="color:#059669; font-weight:700;">${aayaQty > 0 ? `+${aayaQty.toFixed(2)}` : '-'}</td>
-                <td style="color:#ea580c; font-weight:700;">${gayaQty > 0 ? `-${gayaQty.toFixed(2)}` : '-'}</td>
-                <td style="text-align:center; white-space:nowrap;">${actBtn}</td>
+                <td><strong>${karigerDisplay}</strong></td>
+                <td>${esc(r.type || 'Godam Inward')}</td>
+                <td style="text-align:right; font-weight:700;">${aayaQty > 0 ? `+${aayaQty.toFixed(2)}` : '-'}</td>
+                <td style="text-align:right; font-weight:700; color:#6b7280;">${gayaQty > 0 ? `-${gayaQty.toFixed(2)}` : '-'}</td>
+                <td style="text-align:right; font-weight:800; color:#b47d00;">${runBal.toFixed(2)} Kg</td>
+                <td style="text-align:center;">${statusBadge}</td>
             </tr>`;
         });
 
         tbody.innerHTML = html;
+        highlightZariPassbookRow(zariPassbookActiveIdx);
 
-        // Render Pagination Controls
         if (pager) {
             pager.innerHTML = `
-                <div style="font-size:12px; color:#475569; font-weight:600;">
+                <div style="font-size:12px; color:#6b7280; font-weight:600;">
                     Showing <strong>${startIndex + 1}</strong> - <strong>${Math.min(startIndex + ZARI_PAGE_SIZE, totalEntries)}</strong> of <strong>${totalEntries}</strong> entries
                 </div>
-                <div style="display:flex; gap:6px;">
-                    <button type="button" class="sheet-btn" style="background:${zariPassbookCurrentPage <= 1 ? '#cbd5e1' : '#ea580c'}; color:white; padding:4px 10px; border-radius:4px; border:none; cursor:${zariPassbookCurrentPage <= 1 ? 'not-allowed' : 'pointer'};" ${zariPassbookCurrentPage <= 1 ? 'disabled' : ''} onclick="changeZariPassbookPage(-1)">◀ Prev</button>
-                    <span style="font-size:12px; font-weight:bold; padding:4px 8px; background:#f1f5f9; border-radius:4px;">${zariPassbookCurrentPage} / ${totalPages}</span>
-                    <button type="button" class="sheet-btn" style="background:${zariPassbookCurrentPage >= totalPages ? '#cbd5e1' : '#ea580c'}; color:white; padding:4px 10px; border-radius:4px; border:none; cursor:${zariPassbookCurrentPage >= totalPages ? 'not-allowed' : 'pointer'};" ${zariPassbookCurrentPage >= totalPages ? 'disabled' : ''} onclick="changeZariPassbookPage(1)">Next ▶</button>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <button type="button" class="zari-tally-btn" ${zariPassbookCurrentPage <= 1 ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''} onclick="changeZariPassbookPage(-1)">◀ Prev</button>
+                    <span style="font-size:12px; font-weight:700; padding:4px 8px; background:#fdf6e2; border:1px solid #e5d5a7; border-radius:4px;">${zariPassbookCurrentPage} / ${totalPages}</span>
+                    <button type="button" class="zari-tally-btn" ${zariPassbookCurrentPage >= totalPages ? 'disabled style="opacity:0.45; cursor:not-allowed;"' : ''} onclick="changeZariPassbookPage(1)">Next ▶</button>
                 </div>`;
         }
     };
 
+    window.__zariSelectPassRow = (idx) => {
+        highlightZariPassbookRow(idx);
+    };
+
     const changeZariPassbookPage = (delta) => {
         zariPassbookCurrentPage += delta;
+        zariPassbookActiveIdx = 0;
         renderPaginatedZariPassbook();
     };
 
     /* ========================================================================
-       6. A6 PAPER & THERMAL PRINTER PRINT ENGINES
-       ------------------------------------------------------------------------
-    ======================================================================== */
+       8. KEYBOARD NAVIGATION ENGINE FOR #zari-section (ZERO CONFLICTS)
+       ======================================================================== */
+    const handleZariKeydown = (e) => {
+        const sec = document.getElementById('zari-section');
+        if (!sec || sec.style.display === 'none') return;
+        if (isAnyExpressOverlayOpen()) return;
+
+        // 1. Edit Modal open
+        const editModal = document.getElementById('zari-edit-popup-modal');
+        if (editModal) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeZariEditModal();
+            }
+            return;
+        }
+
+        // 2. Transfer Modal open
+        const trModal = document.getElementById('zari-transfer-popup-modal');
+        if (trModal) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeZariTransferModal();
+            }
+            return;
+        }
+
+        // 3. Add Zari Form open
+        const addForm = document.getElementById('add-zari-form');
+        if (addForm && addForm.style.display === 'block') {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                toggleZariForm();
+                return;
+            }
+            if (e.key === 'F4') {
+                e.preventDefault();
+                const rNew = document.getElementById('zari-type-new');
+                const rExt = document.getElementById('zari-type-existing');
+                if (rNew && rExt) {
+                    if (rNew.checked) rExt.checked = true;
+                    else rNew.checked = true;
+                    toggleZariItemType();
+                    const focusId = rNew.checked ? 'zari-new-name' : 'zari-select-existing';
+                    document.getElementById(focusId)?.focus();
+                }
+                return;
+            }
+            if (e.key === 'Enter') {
+                const activeId = document.activeElement?.id || '';
+                const isNew = document.getElementById('zari-type-new')?.checked;
+                const itemFieldId = isNew ? 'zari-new-name' : 'zari-select-existing';
+                if (activeId === 'zari-date') {
+                    e.preventDefault();
+                    document.getElementById(itemFieldId)?.focus();
+                } else if (activeId === itemFieldId) {
+                    e.preventDefault();
+                    document.getElementById('zari-aaya')?.focus();
+                } else if (activeId === 'zari-aaya') {
+                    e.preventDefault();
+                    saveNewZari();
+                }
+            }
+            return;
+        }
+
+        const tag = (document.activeElement && document.activeElement.tagName) || '';
+        const isTyping = (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA');
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            handleZariExitAction();
+            return;
+        }
+
+        if (e.altKey && (e.key === 'p' || e.key === 'P')) {
+            e.preventDefault();
+            if (isZariPassbookViewOpen) printZariPassbookFiltered();
+            else printZariStockReport();
+            return;
+        }
+
+        if (e.key === 'F4') {
+            e.preventDefault();
+            triggerSelectedZariTransfer();
+            return;
+        }
+
+        if (e.key === 'F7') {
+            e.preventDefault();
+            toggleZariForm();
+            return;
+        }
+
+        if (e.key === 'F2' && !isZariPassbookViewOpen) {
+            e.preventDefault();
+            cycleZariKarkhanaTab();
+            return;
+        }
+
+        if (e.key === 'F3') {
+            e.preventDefault();
+            const sEl = document.getElementById(isZariPassbookViewOpen ? 'zari-pass-search-input' : 'search-zari-input');
+            if (sEl) { sEl.focus(); sEl.select(); }
+            return;
+        }
+
+        if (isTyping) return;
+
+        // 4. Inside Passbook View
+        if (isZariPassbookViewOpen) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                highlightZariPassbookRow(zariPassbookActiveIdx + 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                highlightZariPassbookRow(zariPassbookActiveIdx - 1);
+            } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+                e.preventDefault();
+                changeZariPassbookPage(1);
+            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                e.preventDefault();
+                changeZariPassbookPage(-1);
+            } else if (e.key === 'Enter' || e.key === 'e' || e.key === 'E') {
+                e.preventDefault();
+                window.__zariPassAction('edit');
+            } else if (e.key === 'Delete' || e.key === 'd' || e.key === 'D') {
+                e.preventDefault();
+                window.__zariPassAction('delete');
+            } else if (e.key === 'p' || e.key === 'P') {
+                e.preventDefault();
+                window.__zariPassAction('print_single');
+            } else if (e.key === 't' || e.key === 'T') {
+                e.preventDefault();
+                triggerSelectedZariTransfer();
+            } else if (e.key === 'f' || e.key === 'F') {
+                e.preventDefault();
+                document.getElementById('zari-pass-from-date')?.focus();
+            } else if (e.key === 'r' || e.key === 'R') {
+                e.preventDefault();
+                resetZariPassbookFilters();
+            } else if (e.key === '/') {
+                e.preventDefault();
+                const sEl = document.getElementById('zari-pass-search-input');
+                if (sEl) { sEl.focus(); sEl.select(); }
+            }
+            return;
+        }
+
+        // 5. Inside Main Zari Stock List
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            highlightZariListRow(zariListActiveIdx + 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            highlightZariListRow(zariListActiveIdx - 1);
+        } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+            e.preventDefault();
+            changeZariStockPage(1);
+        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+            e.preventDefault();
+            changeZariStockPage(-1);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const pageRows = getZariCurrentPageRows();
+            const chosen = pageRows[zariListActiveIdx];
+            if (chosen) openZariPassbook(encodeURIComponent(chosen.name));
+        } else if (e.key === 't' || e.key === 'T') {
+            e.preventDefault();
+            triggerSelectedZariTransfer();
+        } else if (e.key === '+') {
+            e.preventDefault();
+            toggleZariForm();
+        } else if (e.key === '/') {
+            e.preventDefault();
+            const sEl = document.getElementById('search-zari-input');
+            if (sEl) { sEl.focus(); sEl.select(); }
+        }
+    };
+
+    const bindZariKeyboardEngine = () => {
+        if (window.__zariKeysBound) return;
+        window.__zariKeysBound = true;
+        document.addEventListener('keydown', handleZariKeydown);
+    };
+
+    /* ========================================================================
+       9. A6 PAPER & THERMAL PRINTER PRINT ENGINES (UNCHANGED)
+       ======================================================================== */
     const getZariKarkhanaPrintName = (kId) => {
         if (!kId || kId === 'all') return 'Sabhi Karkhane (All Units)';
         if (typeof window.getKarkhanaNameById === 'function') {
@@ -640,7 +1422,6 @@
         return kId;
     };
 
-    // 1. Main Zari Stock Report Print
     const printZariStockReport = () => {
         const rows = currentZariFilteredRowsCache;
         if (!rows || !rows.length) {
@@ -742,7 +1523,6 @@
         printWindow.document.close();
     };
 
-    // 2. Filtered Zari Passbook Statement Print
     const printZariPassbookFiltered = () => {
         const rows = filteredZariPassbookCache;
         if (!rows || !rows.length) {
@@ -848,7 +1628,6 @@
         printWindow.document.close();
     };
 
-    // 3. Single Entry Slip Print
     const printSingleZariPassbookEntry = (id) => {
         const hist = window.safeArray ? window.safeArray(window.getStore('zari_history')) : [];
         const entry = hist.find(x => x && String(x.id) === String(id));
@@ -914,9 +1693,8 @@
     };
 
     /* ========================================================================
-       7. DELETE & EDIT ENGINES
-       ------------------------------------------------------------------------
-    ======================================================================== */
+       10. DELETE & EDIT ENGINES (100% SUPABASE-SAFE & TALLY WHITE & GOLD)
+       ======================================================================== */
     const deleteZariHistoryEntry = (histId) => {
         if (!confirm('Kya aap sach me ye entry DELETE karna chahte hain?\nStock balance wapas sahi settle ho jayega.')) return;
 
@@ -924,7 +1702,7 @@
         const entry = hist.find(x => x && String(x.id) === String(histId));
         if (!entry) return alert('Entry nahi mili!');
 
-        const isTransfer = (entry.refId && String(entry.refId).includes('tr_zari')) || 
+        const isTransfer = (entry.refId && String(entry.refId).includes('tr_zari')) ||
                            (entry.type && entry.type.toLowerCase().includes('transfer'));
         const isPurchase = !isTransfer && (entry.type && (entry.type.toLowerCase().includes('khareed') || entry.type.toLowerCase().includes('inward')));
 
@@ -974,37 +1752,60 @@
         const typeLabel = isAaya ? 'Aaya (Inward)' : 'Gaya (Outward)';
 
         const modalHtml = `
-            <div id="zari-edit-popup-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999999; display:flex; align-items:center; justify-content:center; padding:15px; box-sizing:border-box;">
-                <div style="background:#ffffff; width:100%; max-width:420px; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.3); overflow:hidden;">
-                    <div style="background:#ea580c; color:#ffffff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
-                        <h3 style="margin:0; font-size:16px;">✏️ Edit Zari Entry</h3>
-                        <button type="button" onclick="closeZariEditModal()" style="background:transparent; border:none; color:#ffffff; font-size:22px; cursor:pointer;">&times;</button>
+            <div id="zari-edit-popup-modal" class="zari-modal-overlay">
+                <div class="zari-modal-card" style="max-width:420px;">
+                    <div class="zari-modal-head">
+                        <h3>Edit Zari Entry</h3>
+                        <button type="button" class="zari-tally-btn" onclick="closeZariEditModal()">&larr; [Esc] Close</button>
                     </div>
                     <div style="padding:16px;">
-                        <div style="background:#fff7ed; padding:8px 12px; border-radius:6px; margin-bottom:12px; font-size:13px;">
+                        <div style="background:#fdf6e2; border:1px solid #e5d5a7; padding:8px 12px; border-radius:6px; margin-bottom:12px; font-size:12.5px;">
                             <div><strong>Item:</strong> ${esc(entry.name)}</div>
                             <div><strong>Type:</strong> ${esc(entry.type || '-')}</div>
                         </div>
-                        <div style="margin-bottom:12px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151;">Tarikh (Date):</label><br>
-                            <input type="date" id="zari-edit-date" value="${entry.date || ''}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box;">
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Tarikh (Date) :</label>
+                            <input type="date" id="zari-edit-date" value="${entry.date || ''}" class="zari-modal-inp">
                         </div>
-                        <div style="margin-bottom:12px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151;">Party / Source / Note:</label><br>
-                            <input type="text" id="zari-edit-kariger" value="${esc(entry.kariger || '')}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box;">
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Party / Source / Note :</label>
+                            <input type="text" id="zari-edit-kariger" value="${esc(entry.kariger || '')}" class="zari-modal-inp">
                         </div>
-                        <div style="margin-bottom:16px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151;">Wazan (${typeLabel} Kg me):</label><br>
-                            <input type="number" step="0.01" id="zari-edit-qty" value="${currentQty.toFixed(2)}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; font-weight:bold; margin-top:4px; box-sizing:border-box;">
+                        <div style="margin-bottom:14px;">
+                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Wazan (${typeLabel} Kg) :</label>
+                            <input type="number" step="0.01" id="zari-edit-qty" value="${currentQty.toFixed(2)}" class="zari-modal-inp">
                         </div>
-                        <button type="button" onclick="saveZariHistoryEdit('${esc(id)}')" style="background:#ea580c; color:#ffffff; border:none; width:100%; padding:10px; border-radius:6px; font-weight:bold; font-size:14px; cursor:pointer;">
-                            💾 Badlaav Safe Karein
-                        </button>
+                        <div style="display:flex; justify-content:flex-end; gap:8px;">
+                            <button type="button" class="zari-tally-btn" onclick="closeZariEditModal()">Cancel [Esc]</button>
+                            <button type="button" class="zari-tally-btn-gold" onclick="saveZariHistoryEdit('${esc(id)}')">Update [Enter]</button>
+                        </div>
                     </div>
                 </div>
             </div>`;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const order = ['zari-edit-date', 'zari-edit-kariger', 'zari-edit-qty'];
+        order.forEach((fid, i) => {
+            const el = document.getElementById(fid);
+            if (!el) return;
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (i < order.length - 1) {
+                        const nxt = document.getElementById(order[i + 1]);
+                        if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
+                    } else {
+                        saveZariHistoryEdit(id);
+                    }
+                }
+            });
+        });
+
+        setTimeout(() => {
+            const kEl = document.getElementById('zari-edit-kariger');
+            if (kEl) { kEl.focus(); kEl.select(); }
+        }, 50);
     };
 
     const closeZariEditModal = () => {
@@ -1024,7 +1825,7 @@
         if (newQty <= 0) return alert('Kripya sahi wazan (Kg) darj karein!');
 
         const oldAaya = safeNum(entry.aaya);
-        const isTransfer = (entry.refId && String(entry.refId).includes('tr_zari')) || 
+        const isTransfer = (entry.refId && String(entry.refId).includes('tr_zari')) ||
                            (entry.type && entry.type.toLowerCase().includes('transfer'));
         const isPurchase = !isTransfer && (entry.type && (entry.type.toLowerCase().includes('khareed') || entry.type.toLowerCase().includes('inward')));
 
@@ -1084,9 +1885,8 @@
     };
 
     /* ========================================================================
-       8. GLOBAL EXPORTS
-       ------------------------------------------------------------------------
-    ======================================================================== */
+       11. GLOBAL EXPORTS
+       ======================================================================== */
     const zariUIAPI = {
         openZariModule,
         renderZariKarkhanaTabs,
