@@ -897,19 +897,21 @@
             if (window.KarigerCalcEngine && typeof window.KarigerCalcEngine.getKarkhanaProductionStats === 'function') {
                 const kStats = window.KarigerCalcEngine.getKarkhanaProductionStats(targetKid);
                 totalBakiAll = safeNum(kStats.totalPendingBani);
-            } else {
-                karList.forEach((k) => {
-                    if (k?.id && typeof window.calculateSheetTotals === 'function') {
-                        const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(k.id) : [];
-                        const curSheet = sheets[sheets.length - 1];
-                        if (curSheet) {
-                            const c = window.calculateSheetTotals(curSheet);
-                            totalDiyaAll += safeNum(c.totPaid);
+            }
+
+            karList.forEach((k) => {
+                if (k?.id && typeof window.calculateSheetTotals === 'function') {
+                    const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(k.id) : [];
+                    const curSheet = sheets[sheets.length - 1];
+                    if (curSheet) {
+                        const c = window.calculateSheetTotals(curSheet);
+                        totalDiyaAll += safeNum(c.totPaid);
+                        if (!(window.KarigerCalcEngine && typeof window.KarigerCalcEngine.getKarkhanaProductionStats === 'function')) {
                             totalBakiAll += safeNum(c.remainingAmt);
                         }
                     }
-                });
-            }
+                }
+            });
 
             setElementHTML('btn-total-payment', `<span style='color:#059669; font-weight:bold;'>Diya: ₹ ${roundCurrency(totalDiyaAll).toFixed(0)}</span> • <span style='color:#dc2626; font-weight:bold;'>Baki: ₹ ${roundCurrency(totalBakiAll).toFixed(0)}</span>`);
 
