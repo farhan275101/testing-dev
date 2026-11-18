@@ -1102,37 +1102,37 @@
         #dashboard-view .gateway-header {
             background: var(--brand-tint);
             border-bottom: 1px solid #fde68a;
-            padding: 14px 18px;
+            padding: 12px 18px;
             text-align: center;
         }
         #dashboard-view .gateway-header strong {
-            font-size: 15.5px;
+            font-size: 15px;
             font-weight: 700;
             color: var(--text-title);
         }
 
-        #dashboard-view .gateway-body { padding: 10px 0 12px; flex: 1; }
+        #dashboard-view .gateway-body { padding: 6px 0 8px; flex: 1; }
 
         #dashboard-view .gw-section-title {
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 600;
             letter-spacing: 0.06em;
             text-transform: uppercase;
             color: var(--text-muted);
-            padding: 9px 18px 4px;
+            padding: 6px 18px 3px;
         }
 
         #dashboard-view .gw-item {
             width: 100%;
             background: transparent;
             border: none;
-            padding: 7.5px 18px;
+            padding: 5.5px 18px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 10px;
             font-family: inherit;
-            font-size: 13.5px;
+            font-size: 13px;
             font-weight: 500;
             color: var(--text-title);
             cursor: pointer;
@@ -1146,7 +1146,7 @@
         }
         #dashboard-view .gw-item .gw-val,
         #dashboard-view .gw-item .gw-val * {
-            font-size: 11.5px;
+            font-size: 11px;
             font-weight: 600;
             color: #b47d00 !important;
             white-space: nowrap;
@@ -1171,16 +1171,326 @@
             color: #ffffff !important;
         }
 
-        #dashboard-view .gw-divider { height: 1px; background: var(--border-soft); margin: 6px 16px; }
+        #dashboard-view .gw-divider { height: 1px; background: var(--border-soft); margin: 4px 16px; }
 
         #dashboard-view .gateway-footer-tip {
             background: var(--bg-input);
             border-top: 1px solid var(--border-soft);
-            padding: 9px 14px;
-            font-size: 11px;
+            padding: 8px 14px;
+            font-size: 10.5px;
             color: var(--text-muted);
             text-align: center;
             font-weight: 500;
+        }
+
+        /* ====================================================================
+           3. TALLY MASTER CREATE & ALTER MODULE (WHITE & GOLD)
+        ==================================================================== */
+        #tally-master-section {
+            max-width: 1120px !important;
+            margin: 22px auto 32px !important;
+            background: #ffffff;
+            border: 1px solid #eef0f4;
+            border-radius: 12px;
+            box-shadow: 0 24px 55px rgba(133, 92, 0, 0.14), 0 4px 14px rgba(0, 0, 0, 0.04);
+            overflow: hidden;
+            padding: 0 !important;
+        }
+        #tally-master-section .tm-topbar {
+            background: #fdf6e2;
+            border-bottom: 2px solid #f2b71d;
+            padding: 12px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        #tally-master-section .tm-topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #tally-master-section .tm-topbar h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 800;
+            color: #1f2937;
+        }
+        #tally-master-section .tm-mode-tabs {
+            display: flex;
+            gap: 6px;
+        }
+        #tally-master-section .tm-tab-btn {
+            background: #ffffff;
+            color: #4b5563;
+            border: 1px solid #fde68a;
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        #tally-master-section .tm-tab-btn.active {
+            background: #f2b71d;
+            color: #ffffff;
+            border-color: #f2b71d;
+        }
+        #tally-master-section .tm-esc-btn {
+            background: #ffffff;
+            color: #374151;
+            border: 1px solid #e5e7eb;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        #tally-master-section .tm-esc-btn:hover {
+            border-color: #f2b71d;
+            color: #b45309;
+            background: #fffbeb;
+        }
+
+        /* Create / Alter Edit Form Grid */
+        #tally-master-section .tm-form-grid {
+            display: grid;
+            grid-template-columns: 1.45fr 0.9fr;
+            min-height: 410px;
+        }
+        @media (max-width: 820px) {
+            #tally-master-section .tm-form-grid { grid-template-columns: 1fr; }
+        }
+        #tally-master-section .tm-left-pane {
+            padding: 20px 24px;
+            border-right: 1px solid #eef0f4;
+        }
+        #tally-master-section .tm-row {
+            display: grid;
+            grid-template-columns: 155px 1fr;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        @media (max-width: 560px) {
+            #tally-master-section .tm-row { grid-template-columns: 1fr; gap: 4px; }
+        }
+        #tally-master-section .tm-row label {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #374151;
+        }
+        #tally-master-section .tm-row input,
+        #tally-master-section .tm-row select {
+            width: 100%;
+            padding: 8px 11px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #fbfbfc;
+            color: #1f2937;
+            font-weight: 600;
+            outline: none;
+        }
+        #tally-master-section .tm-row input:focus,
+        #tally-master-section .tm-row select:focus {
+            background: #fffbeb;
+            border-color: #f2b71d;
+            box-shadow: 0 0 0 3px rgba(242, 183, 29, 0.18);
+        }
+        #tally-master-section .tm-row input[readonly] {
+            background: #f3f4f6;
+            color: #6b7280;
+            cursor: not-allowed;
+        }
+        #tally-master-section .tm-divider {
+            border-top: 1px dashed #e5e7eb;
+            margin: 14px 0 12px;
+            padding-top: 12px;
+        }
+        #tally-master-section .tm-sec-lbl {
+            font-size: 11px;
+            font-weight: 800;
+            color: #b45309;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 10px;
+        }
+
+        /* Right Pane: List of Groups + Accept Box */
+        #tally-master-section .tm-right-pane {
+            background: #fcfcfd;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 14px;
+        }
+        #tally-master-section .tm-group-box {
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            background: #ffffff;
+            overflow: hidden;
+        }
+        #tally-master-section .tm-group-head {
+            background: #fdf6e2;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #92400e;
+            border-bottom: 1px solid #fde68a;
+        }
+        #tally-master-section .tm-group-opt {
+            padding: 9px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1f2937;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        #tally-master-section .tm-group-opt:last-child { border-bottom: none; }
+        #tally-master-section .tm-group-opt small {
+            font-size: 11px;
+            font-weight: 500;
+            color: #6b7280;
+        }
+        #tally-master-section .tm-group-opt:hover,
+        #tally-master-section .tm-group-opt.selected {
+            background: #f2b71d;
+            color: #ffffff;
+        }
+        #tally-master-section .tm-group-opt:hover small,
+        #tally-master-section .tm-group-opt.selected small {
+            color: #ffffff;
+        }
+
+        #tally-master-section .tm-accept-box {
+            border: 1.5px solid #f2b71d;
+            background: #fdf6e2;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            display: none;
+        }
+        #tally-master-section .tm-accept-box strong {
+            display: block;
+            font-size: 13.5px;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+        #tally-master-section .tm-btn-yes {
+            background: #f2b71d;
+            color: #ffffff;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(242, 183, 29, 0.25);
+        }
+        #tally-master-section .tm-btn-yes:hover { background: #e0a60d; }
+        #tally-master-section .tm-btn-no {
+            background: #ffffff;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        /* Bottom Live Counters Strip */
+        #tally-master-section .tm-status-strip {
+            background: #fbfbfc;
+            border-top: 1px solid #eef0f4;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        #tally-master-section .tm-toast {
+            font-weight: 700;
+            color: #92400e;
+        }
+
+        /* Alter Search Screen */
+        #tally-master-section .tm-alter-wrap {
+            padding: 18px 22px;
+        }
+        #tally-master-section .tm-alter-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        #tally-master-section .tm-alter-search {
+            flex: 1;
+            min-width: 220px;
+            padding: 9px 13px;
+            border: 1.5px solid #f2b71d;
+            border-radius: 6px;
+            background: #fffbeb;
+            font-weight: 600;
+            outline: none;
+        }
+        #tally-master-section .tm-alter-pills {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        #tally-master-section .tm-alter-list {
+            border: 1px solid #eef0f4;
+            border-radius: 8px;
+            max-height: 360px;
+            overflow-y: auto;
+            background: #ffffff;
+        }
+        #tally-master-section .tm-alter-row {
+            padding: 9px 14px;
+            border-bottom: 1px solid #f3f4f6;
+            display: grid;
+            grid-template-columns: 1.3fr 140px 1fr 80px;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        @media (max-width: 700px) {
+            #tally-master-section .tm-alter-row { grid-template-columns: 1fr auto; }
+            #tally-master-section .tm-alter-hide-sm { display: none; }
+        }
+        #tally-master-section .tm-alter-row:hover,
+        #tally-master-section .tm-alter-row.active {
+            background: #f2b71d;
+            color: #ffffff;
+        }
+        #tally-master-section .tm-alter-row:hover small,
+        #tally-master-section .tm-alter-row.active small,
+        #tally-master-section .tm-alter-row:hover .tm-grp-pill,
+        #tally-master-section .tm-alter-row.active .tm-grp-pill {
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.55);
+            background: rgba(255, 255, 255, 0.18);
+        }
+        #tally-master-section .tm-grp-pill {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 9px;
+            border-radius: 999px;
+            background: #fdf6e2;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            text-align: center;
         }
 
         @media (max-width: 860px) {
@@ -1517,82 +1827,230 @@
                         </div>
                     </div>
 
-                    <!-- RIGHT SIDE: GATEWAY OF SIMPLICITY (ALL 14 MODULES & LIVE BADGE IDS) -->
+                    <!-- RIGHT SIDE: GATEWAY OF SIMPLICITY (MASTERS CREATE/ALTER + ALL 14 MODULES) -->
                     <aside class="gateway-box">
                         <div class="gateway-header">
                             <strong>Gateway of Simplicity</strong>
                         </div>
 
                         <div class="gateway-body">
+                            <div class="gw-section-title">Masters</div>
+                            <button type="button" class="gw-item active" data-gw-key="c" onclick="slGwClick(this, openTallyCreateModule)">
+                                <span><span class="gw-key">C</span>reate (New Profile)</span>
+                                <span class="gw-val">Kariger / JobWork</span>
+                            </button>
+                            <button type="button" class="gw-item" data-gw-key="a" onclick="slGwClick(this, openTallyAlterModule)">
+                                <span><span class="gw-key">A</span>lter (Edit Profile)</span>
+                                <span class="gw-val" id="btn-total-all-profiles">Search &amp; Edit</span>
+                            </button>
+
+                            <div class="gw-divider"></div>
                             <div class="gw-section-title">Express Counters</div>
-                            <button type="button" class="gw-item active" onclick="slGwClick(this, openKarigerExpressModal)">
+                            <button type="button" class="gw-item" data-gw-key="k" onclick="slGwClick(this, openKarigerExpressModal)">
                                 <span><span class="gw-key">K</span>ariger Express</span>
                                 <span class="gw-val" id="btn-total-kariger-express">Baithak Mode</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openStockExpressModal)">
+                            <button type="button" class="gw-item" data-gw-key="s" onclick="slGwClick(this, openStockExpressModal)">
                                 <span><span class="gw-key">S</span>tock Express</span>
                                 <span class="gw-val">Inward Mode</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openJobWorkExpressModal)">
+                            <button type="button" class="gw-item" data-gw-key="j" onclick="slGwClick(this, openJobWorkExpressModal)">
                                 <span><span class="gw-key">J</span>obWork Express</span>
                                 <span class="gw-val">Batch Mode</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openTaniExpressModal)">
+                            <button type="button" class="gw-item" data-gw-key="t" onclick="slGwClick(this, openTaniExpressModal)">
                                 <span><span class="gw-key">T</span>ani Express</span>
                                 <span class="gw-val">Order Mode</span>
                             </button>
 
                             <div class="gw-divider"></div>
                             <div class="gw-section-title">Masters &amp; Stock</div>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openKarigerModule)">
+                            <button type="button" class="gw-item" data-gw-key="m" onclick="slGwClick(this, openKarigerModule)">
                                 <span>Kariger <span class="gw-key">M</span>aster</span>
                                 <span class="gw-val" id="btn-total-kariger">Total: 0</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openInfoLedgerModule)">
+                            <button type="button" class="gw-item" data-gw-key="i" onclick="slGwClick(this, openInfoLedgerModule)">
                                 <span><span class="gw-key">I</span>nfo Ledger</span>
                                 <span class="gw-val" id="btn-total-info">Total: 0</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openBanaModule)">
+                            <button type="button" class="gw-item" data-gw-key="b" onclick="slGwClick(this, openBanaModule)">
                                 <span><span class="gw-key">B</span>ana Stock</span>
                                 <span class="gw-val" id="btn-total-bana">Bacha: 0</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openZariModule)">
+                            <button type="button" class="gw-item" data-gw-key="z" onclick="slGwClick(this, openZariModule)">
                                 <span><span class="gw-key">Z</span>ari Stock</span>
                                 <span class="gw-val" id="btn-total-zari">Bacha: 0</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openSareeModule)">
+                            <button type="button" class="gw-item" data-gw-key="e" onclick="slGwClick(this, openSareeModule)">
                                 <span>Sare<span class="gw-key">e</span> Stock</span>
                                 <span class="gw-val" id="btn-total-saree">Stock: 0</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openSanchaModule)">
+                            <button type="button" class="gw-item" data-gw-key="n" onclick="slGwClick(this, openSanchaModule)">
                                 <span>Sa<span class="gw-key">n</span>cha (Tani)</span>
                                 <span class="gw-val" id="btn-total-sancha">Bacha: 0</span>
                             </button>
 
                             <div class="gw-divider"></div>
                             <div class="gw-section-title">Accounts &amp; Orders</div>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openPaymentModule)">
+                            <button type="button" class="gw-item" data-gw-key="p" onclick="slGwClick(this, openPaymentModule)">
                                 <span><span class="gw-key">P</span>ayments</span>
                                 <span class="gw-val" id="btn-total-payment">Baki: ₹ 0</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openJobWorkModule)">
+                            <button type="button" class="gw-item" data-gw-key="w" onclick="slGwClick(this, openJobWorkModule)">
                                 <span>Job <span class="gw-key">W</span>ork Hub</span>
                                 <span class="gw-val" id="btn-total-jobwork">Workers: 0</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openDayBookModule)">
+                            <button type="button" class="gw-item" data-gw-key="d" onclick="slGwClick(this, openDayBookModule)">
                                 <span>Rozana <span class="gw-key">D</span>ay-Book</span>
                                 <span class="gw-val">Daily Register</span>
                             </button>
-                            <button type="button" class="gw-item" onclick="slGwClick(this, openTaniOrderModule)">
+                            <button type="button" class="gw-item" data-gw-key="o" onclick="slGwClick(this, openTaniOrderModule)">
                                 <span>Tani <span class="gw-key">O</span>rder &amp; Rangai</span>
                                 <span class="gw-val" id="btn-total-tani-orders">0 Parchi</span>
                             </button>
                         </div>
 
                         <div class="gateway-footer-tip">
-                            ↑ ↓ Arrow Keys · [Enter] Kholein
+                            [C] Create · [A] Alter · ↑ ↓ Arrow · [Enter] Kholein
                         </div>
                     </aside>
+                </div>
+            </section>
+
+            <!-- MODULE 0: TALLY MASTER CREATE & ALTER (KARIGER + CUTTING + EMBROIDERY + CALENDER) -->
+            <section id="tally-master-section" class="module-section" style="display:none;">
+                <div class="tm-topbar">
+                    <div class="tm-topbar-left">
+                        <h2 id="tm-screen-title">Profile Creation (Tally Style)</h2>
+                        <div class="tm-mode-tabs">
+                            <button type="button" class="tm-tab-btn active" id="tm-tab-create" onclick="openTallyCreateModule()">+ Create</button>
+                            <button type="button" class="tm-tab-btn" id="tm-tab-alter" onclick="openTallyAlterModule()">✏️ Alter (Search &amp; Edit)</button>
+                        </div>
+                    </div>
+                    <button type="button" class="tm-esc-btn" onclick="tmHandleEscKey()">← [Esc] Back</button>
+                </div>
+
+                <!-- SUB-VIEW A: ALTER SEARCH LIST -->
+                <div id="tm-alter-view" class="tm-alter-wrap" style="display:none;">
+                    <div class="tm-alter-controls">
+                        <input type="text" id="tm-alter-search" class="tm-alter-search" placeholder="🔍 Naam, Mobile ya Mohalla type karke search karein..." autocomplete="off">
+                        <div class="tm-alter-pills">
+                            <button type="button" class="tm-tab-btn active" data-tm-filter="all" onclick="tmSetAlterFilter('all')">Sabhi</button>
+                            <button type="button" class="tm-tab-btn" data-tm-filter="kariger" onclick="tmSetAlterFilter('kariger')">Kariger</button>
+                            <button type="button" class="tm-tab-btn" data-tm-filter="cutting" onclick="tmSetAlterFilter('cutting')">Cutting</button>
+                            <button type="button" class="tm-tab-btn" data-tm-filter="embroidery" onclick="tmSetAlterFilter('embroidery')">Embroidery</button>
+                            <button type="button" class="tm-tab-btn" data-tm-filter="calender" onclick="tmSetAlterFilter('calender')">Calender</button>
+                        </div>
+                    </div>
+                    <div class="tm-alter-list" id="tm-alter-list"></div>
+                </div>
+
+                <!-- SUB-VIEW B: CREATE / ALTER EDIT FORM -->
+                <div id="tm-form-view">
+                    <div class="tm-form-grid">
+                        <div class="tm-left-pane">
+                            <input type="hidden" id="tm-edit-id">
+                            <input type="hidden" id="tm-edit-source">
+
+                            <div class="tm-row">
+                                <label for="tm-name">Name :</label>
+                                <input type="text" id="tm-name" placeholder="Jaise: FARHAN" autocomplete="off">
+                            </div>
+
+                            <div class="tm-row">
+                                <label for="tm-group">Under (Group) :</label>
+                                <input type="text" id="tm-group" placeholder="Type karein ya right list chunein..." autocomplete="off">
+                            </div>
+
+                            <!-- Kariger Specific Fields -->
+                            <div id="tm-kariger-fields" class="tm-divider">
+                                <div class="tm-sec-lbl">Kariger Master Details (Auto-Save: Kariger List)</div>
+                                <div class="tm-row">
+                                    <label for="tm-karkhana">Karkhana :</label>
+                                    <select id="tm-karkhana"></select>
+                                </div>
+                                <div class="tm-row">
+                                    <label for="tm-saree">Saree Design :</label>
+                                    <input type="text" id="tm-saree" placeholder="Jaise: Banarasi Katan">
+                                </div>
+                            </div>
+
+                            <!-- JobWork Specific Info -->
+                            <div id="tm-jobwork-fields" class="tm-divider" style="display:none;">
+                                <div class="tm-sec-lbl" id="tm-jw-sec-lbl">JobWork Details (Auto-Save: JobWork)</div>
+                                <div style="font-size:12px; color:#6b7280; background:#fffbeb; border:1px solid #fde68a; padding:8px 10px; border-radius:6px;">
+                                    Save karte hi ye worker seedha <strong id="tm-jw-target-txt">JobWork → Cutting</strong> list me aur Supabase me sync ho jayega.
+                                </div>
+                            </div>
+
+                            <!-- Contact Details -->
+                            <div class="tm-divider">
+                                <div class="tm-sec-lbl">Contact &amp; Mailing Details</div>
+                                <div class="tm-row">
+                                    <label for="tm-mobile">Mobile No. :</label>
+                                    <input type="tel" id="tm-mobile" maxlength="12" placeholder="10-digit Mobile">
+                                </div>
+                                <div class="tm-row">
+                                    <label for="tm-address">Address / Mohalla :</label>
+                                    <input type="text" id="tm-address" placeholder="Mohalla / City">
+                                </div>
+                                <div class="tm-row">
+                                    <label for="tm-date">Join Date :</label>
+                                    <input type="date" id="tm-date">
+                                </div>
+                            </div>
+
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; gap:10px;">
+                                <button type="button" class="tm-esc-btn" id="tm-back-to-alter-btn" style="display:none;" onclick="openTallyAlterModule()">← Alter List</button>
+                                <div style="margin-left:auto; display:flex; gap:8px;">
+                                    <button type="button" class="tm-btn-yes" onclick="tmAskAccept()">Save [Enter]</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT PANE: LIST OF GROUPS + ACCEPT BOX -->
+                        <div class="tm-right-pane">
+                            <div class="tm-group-box" id="tm-group-list-box">
+                                <div class="tm-group-head">List of Groups</div>
+                                <div id="tm-group-list">
+                                    <div class="tm-group-opt selected" data-grp="kariger" data-label="Kariger" onclick="tmPickGroup('kariger', true)">
+                                        <span>Kariger (Weaver)</span><small>Kariger Master</small>
+                                    </div>
+                                    <div class="tm-group-opt" data-grp="cutting" data-label="Cutting" onclick="tmPickGroup('cutting', true)">
+                                        <span>Cutting</span><small>JobWork</small>
+                                    </div>
+                                    <div class="tm-group-opt" data-grp="embroidery" data-label="Embroidery" onclick="tmPickGroup('embroidery', true)">
+                                        <span>Embroidery</span><small>JobWork</small>
+                                    </div>
+                                    <div class="tm-group-opt" data-grp="calender" data-label="Calender" onclick="tmPickGroup('calender', true)">
+                                        <span>Calender</span><small>JobWork</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="tm-group-box" id="tm-alter-info-box" style="display:none;">
+                                <div class="tm-group-head">Alteration Safety Info</div>
+                                <div style="padding:12px; font-size:12.5px; color:#4b5563; line-height:1.6;">
+                                    <div><strong>Group:</strong> <span id="tm-alter-grp-label">-</span></div>
+                                    <div><strong>ID:</strong> <span id="tm-alter-id-label" style="font-size:11px; color:#9ca3af;">-</span></div>
+                                    <div style="margin-top:6px; font-size:11.5px; color:#92400e;">Purani Tani / JobWork sheets aur Supabase sync surakshit rakhne ke liye Group lock hai.</div>
+                                </div>
+                            </div>
+
+                            <div class="tm-accept-box" id="tm-accept-box">
+                                <strong id="tm-accept-title">Accept?</strong>
+                                <div style="display:flex; gap:8px; justify-content:center;">
+                                    <button type="button" class="tm-btn-yes" id="tm-btn-yes" onclick="tmSaveProfile()">Yes (Y)</button>
+                                    <button type="button" class="tm-btn-no" onclick="tmCancelAccept()">No (N)</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tm-status-strip">
+                    <span class="tm-toast" id="tm-toast-msg">Tally Master Ready — Enter se aage badhein, Esc se wapas jayein.</span>
+                    <span id="tm-live-counts">Kariger: 0 · Cutting: 0 · Embroidery: 0 · Calender: 0</span>
                 </div>
             </section>
 
@@ -2489,17 +2947,521 @@
             slSyncDashboardCharts();
         }
 
+        /* ====================================================================
+           TALLY MASTER CREATE & ALTER ENGINE (ZERO-BREAK SUPABASE SAFE)
+        ==================================================================== */
+        let tmMode = 'create'; // 'create' | 'alter-list' | 'alter-edit'
+        let tmSelectedGroup = 'kariger';
+        let tmAlterFilter = 'all';
+        let tmAlterActiveIdx = 0;
+
+        const tmGetToday = () => (typeof window.getTodayDate === 'function')
+            ? window.getTodayDate()
+            : new Date().toISOString().split('T')[0];
+
+        const tmGetKarigers = () => {
+            if (typeof window.sanitizeKarigerList === 'function') return window.sanitizeKarigerList();
+            const raw = (typeof window.getStore === 'function') ? window.getStore('kariger_list') : [];
+            return Array.isArray(raw) ? raw.filter((k) => k && k.name) : [];
+        };
+
+        const tmGetJobWorkers = () => {
+            if (typeof window.getJobWorkers === 'function') return window.getJobWorkers();
+            const raw = (typeof window.getStore === 'function') ? window.getStore('jobwork_workers') : [];
+            return Array.isArray(raw) ? raw.filter((w) => w && w.name) : [];
+        };
+
+        function tmPopulateKarkhanaDropdown(selectedId) {
+            const sel = document.getElementById('tm-karkhana');
+            if (!sel) return;
+            sel.innerHTML = '';
+            let list = (typeof window.getKarkhanasSafe === 'function')
+                ? window.getKarkhanasSafe()
+                : ((typeof window.getStore === 'function') ? window.getStore('karkhana_list') : []);
+            if (!Array.isArray(list) || !list.length) {
+                list = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
+            }
+            list.forEach((k) => {
+                const opt = document.createElement('option');
+                opt.value = k.id;
+                opt.textContent = (k.id === 'k_main' || k.isDefault ? '🏢 ' : '🏭 ') + k.name;
+                if (selectedId && String(k.id) === String(selectedId)) opt.selected = true;
+                sel.appendChild(opt);
+            });
+            if (!selectedId && sel.options.length > 0) {
+                const navKid = document.getElementById('app-karkhana-select')?.value;
+                if (navKid && navKid !== 'all') sel.value = navKid;
+            }
+        }
+
+        function tmUpdateCountsBar() {
+            const kars = tmGetKarigers();
+            const jws = tmGetJobWorkers();
+            const cutC = jws.filter((w) => String(w.type || '').toLowerCase() === 'cutting').length;
+            const embC = jws.filter((w) => String(w.type || '').toLowerCase() === 'embroidery').length;
+            const calC = jws.filter((w) => String(w.type || '').toLowerCase() === 'calender').length;
+            const el = document.getElementById('tm-live-counts');
+            if (el) {
+                el.textContent = `Kariger: ${kars.length} · Cutting: ${cutC} · Embroidery: ${embC} · Calender: ${calC}`;
+            }
+        }
+
+        function tmSetToast(msg) {
+            const el = document.getElementById('tm-toast-msg');
+            if (el) el.textContent = msg;
+        }
+
+        function tmPickGroup(grp, moveFocus) {
+            tmSelectedGroup = grp || 'kariger';
+            const labelMap = {
+                kariger: 'Kariger',
+                cutting: 'Cutting',
+                embroidery: 'Embroidery',
+                calender: 'Calender'
+            };
+            const grpInput = document.getElementById('tm-group');
+            if (grpInput) grpInput.value = labelMap[tmSelectedGroup] || 'Kariger';
+
+            document.querySelectorAll('#tm-group-list .tm-group-opt').forEach((el) => {
+                el.classList.toggle('selected', el.dataset.grp === tmSelectedGroup);
+                el.style.display = 'flex';
+            });
+
+            const isKar = (tmSelectedGroup === 'kariger');
+            const karBox = document.getElementById('tm-kariger-fields');
+            const jwBox = document.getElementById('tm-jobwork-fields');
+            if (karBox) karBox.style.display = isKar ? 'block' : 'none';
+            if (jwBox) jwBox.style.display = isKar ? 'none' : 'block';
+            if (!isKar) {
+                const lbl = labelMap[tmSelectedGroup] || 'Cutting';
+                const sLbl = document.getElementById('tm-jw-sec-lbl');
+                const tTxt = document.getElementById('tm-jw-target-txt');
+                if (sLbl) sLbl.textContent = `JobWork Details (Auto-Save: ${lbl})`;
+                if (tTxt) tTxt.textContent = `JobWork → ${lbl}`;
+            }
+
+            if (moveFocus) {
+                const nextEl = document.getElementById(isKar ? 'tm-karkhana' : 'tm-mobile');
+                if (nextEl) nextEl.focus();
+            }
+        }
+
+        window.openTallyCreateModule = function() {
+            document.querySelectorAll('.module-section').forEach((s) => s.style.display = 'none');
+            const dView = document.getElementById('dashboard-view');
+            if (dView) dView.style.display = 'none';
+            const sec = document.getElementById('tally-master-section');
+            if (sec) sec.style.display = 'block';
+
+            tmMode = 'create';
+            document.getElementById('tm-screen-title').textContent = 'Profile Creation (Tally Style)';
+            document.getElementById('tm-tab-create').classList.add('active');
+            document.getElementById('tm-tab-alter').classList.remove('active');
+            document.getElementById('tm-alter-view').style.display = 'none';
+            document.getElementById('tm-form-view').style.display = 'block';
+            document.getElementById('tm-back-to-alter-btn').style.display = 'none';
+            document.getElementById('tm-group-list-box').style.display = 'block';
+            document.getElementById('tm-alter-info-box').style.display = 'none';
+            document.getElementById('tm-accept-box').style.display = 'none';
+
+            const grpInp = document.getElementById('tm-group');
+            if (grpInp) grpInp.readOnly = false;
+
+            document.getElementById('tm-edit-id').value = '';
+            document.getElementById('tm-edit-source').value = '';
+            document.getElementById('tm-name').value = '';
+            document.getElementById('tm-saree').value = '';
+            document.getElementById('tm-mobile').value = '';
+            document.getElementById('tm-address').value = '';
+            document.getElementById('tm-date').value = tmGetToday();
+
+            tmPopulateKarkhanaDropdown();
+            tmPickGroup('kariger', false);
+            tmUpdateCountsBar();
+            tmSetToast('Nayi Profile Banayein — Enter se aage badhein, Esc se Dashboard.');
+            setTimeout(() => document.getElementById('tm-name')?.focus(), 40);
+        };
+
+        window.openTallyAlterModule = function() {
+            document.querySelectorAll('.module-section').forEach((s) => s.style.display = 'none');
+            const dView = document.getElementById('dashboard-view');
+            if (dView) dView.style.display = 'none';
+            const sec = document.getElementById('tally-master-section');
+            if (sec) sec.style.display = 'block';
+
+            tmMode = 'alter-list';
+            document.getElementById('tm-screen-title').textContent = 'Master Alteration (Search & Edit Profile)';
+            document.getElementById('tm-tab-create').classList.remove('active');
+            document.getElementById('tm-tab-alter').classList.add('active');
+            document.getElementById('tm-alter-view').style.display = 'block';
+            document.getElementById('tm-form-view').style.display = 'none';
+            document.getElementById('tm-accept-box').style.display = 'none';
+
+            tmAlterActiveIdx = 0;
+            const sInp = document.getElementById('tm-alter-search');
+            if (sInp) sInp.value = '';
+            tmRenderAlterList();
+            tmUpdateCountsBar();
+            tmSetToast('Naam search karein · ↑ ↓ Arrow se chunein · Enter se Edit karein.');
+            setTimeout(() => sInp?.focus(), 40);
+        };
+
+        function tmSetAlterFilter(filterVal) {
+            tmAlterFilter = filterVal || 'all';
+            tmAlterActiveIdx = 0;
+            document.querySelectorAll('#tm-alter-view [data-tm-filter]').forEach((b) => {
+                b.classList.toggle('active', b.dataset.tmFilter === tmAlterFilter);
+            });
+            tmRenderAlterList();
+        }
+
+        function tmGetCombinedProfiles() {
+            const list = [];
+            tmGetKarigers().forEach((k) => {
+                list.push({
+                    id: k.id,
+                    source: 'kariger_list',
+                    group: 'kariger',
+                    groupLabel: 'Kariger',
+                    name: k.name || '',
+                    mobile: k.mobile || '',
+                    address: k.mohalla || k.address || '',
+                    saree: k.saree || '',
+                    karkhanaId: k.karkhanaId || 'k_main',
+                    karkhanaName: k.karkhanaName || 'Main Godown',
+                    date: k.date || ''
+                });
+            });
+            tmGetJobWorkers().forEach((w) => {
+                const t = String(w.type || 'cutting').toLowerCase();
+                const lbl = t === 'embroidery' ? 'Embroidery' : (t === 'calender' ? 'Calender' : 'Cutting');
+                list.push({
+                    id: w.id,
+                    source: 'jobwork_workers',
+                    group: t,
+                    groupLabel: lbl,
+                    name: w.name || '',
+                    mobile: w.mobile || '',
+                    address: w.address || '',
+                    saree: '',
+                    karkhanaId: '',
+                    karkhanaName: '',
+                    date: w.date || ''
+                });
+            });
+            return list;
+        }
+
+        function tmRenderAlterList() {
+            const container = document.getElementById('tm-alter-list');
+            if (!container) return;
+            const q = (document.getElementById('tm-alter-search')?.value || '').trim().toLowerCase();
+
+            const items = tmGetCombinedProfiles().filter((p) => {
+                if (tmAlterFilter !== 'all' && p.group !== tmAlterFilter) return false;
+                if (!q) return true;
+                return `${p.name} ${p.groupLabel} ${p.mobile} ${p.address} ${p.saree} ${p.karkhanaName}`.toLowerCase().includes(q);
+            });
+
+            if (!items.length) {
+                container.innerHTML = '<div style="padding:24px; text-align:center; color:#9ca3af; font-size:13px;">Koi profile nahi mili.</div>';
+                return;
+            }
+            if (tmAlterActiveIdx >= items.length) tmAlterActiveIdx = 0;
+
+            const escHtml = (s) => String(s || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+            container.innerHTML = items.map((p, idx) => {
+                const meta = p.group === 'kariger'
+                    ? `${escHtml(p.karkhanaName)}${p.saree ? ' · ' + escHtml(p.saree) : ''}${p.address ? ' · ' + escHtml(p.address) : ''}`
+                    : `${escHtml(p.address || '-')}${p.mobile ? ' · ' + escHtml(p.mobile) : ''}`;
+                return `
+                    <div class="tm-alter-row ${idx === tmAlterActiveIdx ? 'active' : ''}" data-idx="${idx}" onclick="tmOpenAlterEdit('${escHtml(p.id)}', '${escHtml(p.source)}')">
+                        <div><strong>${escHtml(p.name)}</strong>${p.mobile ? ` <small style="color:#6b7280;">(${escHtml(p.mobile)})</small>` : ''}</div>
+                        <div><span class="tm-grp-pill">${escHtml(p.groupLabel)}</span></div>
+                        <div class="tm-alter-hide-sm"><small style="color:#6b7280;">${meta || '-'}</small></div>
+                        <div style="text-align:right; font-weight:700; font-size:12px;">Edit →</div>
+                    </div>`;
+            }).join('');
+        }
+
+        function tmOpenAlterEdit(id, source) {
+            const found = tmGetCombinedProfiles().find((p) => String(p.id) === String(id) && p.source === source);
+            if (!found) return;
+
+            tmMode = 'alter-edit';
+            document.getElementById('tm-screen-title').textContent = `Alter Profile: ${found.name}`;
+            document.getElementById('tm-alter-view').style.display = 'none';
+            document.getElementById('tm-form-view').style.display = 'block';
+            document.getElementById('tm-back-to-alter-btn').style.display = 'inline-block';
+            document.getElementById('tm-group-list-box').style.display = 'none';
+            document.getElementById('tm-alter-info-box').style.display = 'block';
+            document.getElementById('tm-accept-box').style.display = 'none';
+
+            document.getElementById('tm-edit-id').value = found.id;
+            document.getElementById('tm-edit-source').value = found.source;
+            document.getElementById('tm-name').value = found.name;
+            document.getElementById('tm-mobile').value = found.mobile;
+            document.getElementById('tm-address').value = found.address;
+            document.getElementById('tm-date').value = found.date || tmGetToday();
+
+            const grpInp = document.getElementById('tm-group');
+            if (grpInp) grpInp.readOnly = true;
+
+            tmPopulateKarkhanaDropdown(found.karkhanaId);
+            document.getElementById('tm-saree').value = found.saree || '';
+            tmPickGroup(found.group, false);
+
+            document.getElementById('tm-alter-grp-label').textContent = found.groupLabel;
+            document.getElementById('tm-alter-id-label').textContent = found.id;
+            tmSetToast(`Editing [${found.name}] — Badlav karke Enter dabayein.`);
+            setTimeout(() => document.getElementById('tm-name')?.focus(), 40);
+        }
+
+        function tmAskAccept() {
+            const name = (document.getElementById('tm-name')?.value || '').trim();
+            if (!name) {
+                alert('Pehle Name bharein!');
+                document.getElementById('tm-name')?.focus();
+                return;
+            }
+            const box = document.getElementById('tm-accept-box');
+            const title = document.getElementById('tm-accept-title');
+            if (title) title.textContent = (tmMode === 'alter-edit') ? 'Update Profile? (Accept)' : 'Accept?';
+            if (box) box.style.display = 'block';
+            document.getElementById('tm-btn-yes')?.focus();
+        }
+
+        function tmCancelAccept() {
+            const box = document.getElementById('tm-accept-box');
+            if (box) box.style.display = 'none';
+            document.getElementById('tm-address')?.focus();
+        }
+
+        function tmSaveProfile() {
+            const editId = (document.getElementById('tm-edit-id')?.value || '').trim();
+            const editSource = (document.getElementById('tm-edit-source')?.value || '').trim();
+            const name = (document.getElementById('tm-name')?.value || '').trim().toUpperCase();
+            const mobile = (document.getElementById('tm-mobile')?.value || '').trim();
+            const address = (document.getElementById('tm-address')?.value || '').trim();
+            const dateVal = (document.getElementById('tm-date')?.value || '').trim() || tmGetToday();
+
+            if (!name) return;
+
+            if (tmSelectedGroup === 'kariger' || editSource === 'kariger_list') {
+                const kSel = document.getElementById('tm-karkhana');
+                const kId = kSel ? (kSel.value || 'k_main') : 'k_main';
+                const kName = (typeof window.getKarkhanaNameById === 'function') ? window.getKarkhanaNameById(kId) : 'Main Godown';
+                const saree = (document.getElementById('tm-saree')?.value || '').trim();
+
+                const list = tmGetKarigers();
+                if (editId) {
+                    const it = list.find((x) => String(x.id) === String(editId));
+                    if (it) {
+                        it.name = name;
+                        it.saree = saree;
+                        it.mobile = mobile;
+                        it.mohalla = address;
+                        it.date = dateVal;
+                        it.karkhanaId = kId;
+                        it.karkhanaName = kName;
+                    }
+                } else {
+                    list.push({
+                        id: `kar_${Date.now()}`,
+                        name: name,
+                        saree: saree,
+                        mobile: mobile,
+                        mohalla: address,
+                        date: dateVal,
+                        karkhanaId: kId,
+                        karkhanaName: kName
+                    });
+                }
+                if (typeof window.setStore === 'function') window.setStore('kariger_list', list);
+            } else {
+                const jwList = [...tmGetJobWorkers()];
+                if (editId) {
+                    const it = jwList.find((x) => String(x.id) === String(editId));
+                    if (it) {
+                        it.name = name;
+                        it.address = address;
+                        it.mobile = mobile;
+                        it.date = dateVal;
+                    }
+                } else {
+                    jwList.push({
+                        id: `jw_${Date.now()}`,
+                        type: tmSelectedGroup, // 'cutting' | 'embroidery' | 'calender'
+                        date: dateVal,
+                        name: name,
+                        address: address,
+                        mobile: mobile
+                    });
+                }
+                if (typeof window.saveJobWorkers === 'function') {
+                    window.saveJobWorkers(jwList);
+                } else if (typeof window.setStore === 'function') {
+                    window.setStore('jobwork_workers', jwList);
+                }
+                if (typeof window.invalidateJobWorkCache === 'function') window.invalidateJobWorkCache(editId || null);
+                if (typeof window.updateJobWorkHubBadges === 'function') window.updateJobWorkHubBadges();
+            }
+
+            if (typeof window.populateKarigersDatalist === 'function') window.populateKarigersDatalist();
+            if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
+            slSyncDashboardCharts();
+            tmUpdateCountsBar();
+
+            document.getElementById('tm-accept-box').style.display = 'none';
+
+            if (tmMode === 'alter-edit') {
+                openTallyAlterModule();
+                tmSetToast(`✅ [${name}] ki profile update ho gayi!`);
+            } else {
+                document.getElementById('tm-name').value = '';
+                document.getElementById('tm-saree').value = '';
+                document.getElementById('tm-mobile').value = '';
+                document.getElementById('tm-address').value = '';
+                tmSetToast(`✅ [${name}] (${tmSelectedGroup.toUpperCase()}) save ho gaya! Agli entry karein.`);
+                document.getElementById('tm-name')?.focus();
+            }
+        }
+
+        function tmHandleEscKey() {
+            const acc = document.getElementById('tm-accept-box');
+            if (acc && acc.style.display === 'block') {
+                tmCancelAccept();
+                return;
+            }
+            if (tmMode === 'alter-edit') {
+                openTallyAlterModule();
+                return;
+            }
+            backToDashboard();
+        }
+
+        // Group type-search + Alter live search listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            const grpInput = document.getElementById('tm-group');
+            if (grpInput) {
+                grpInput.addEventListener('input', function () {
+                    if (tmMode !== 'create') return;
+                    const q = this.value.trim().toLowerCase();
+                    const opts = Array.from(document.querySelectorAll('#tm-group-list .tm-group-opt'));
+                    let firstMatch = null;
+                    opts.forEach((el) => {
+                        const match = !q || el.dataset.grp.includes(q) || el.dataset.label.toLowerCase().includes(q);
+                        el.style.display = match ? 'flex' : 'none';
+                        if (match && !firstMatch) firstMatch = el;
+                    });
+                    if (firstMatch) {
+                        opts.forEach((o) => o.classList.remove('selected'));
+                        firstMatch.classList.add('selected');
+                        tmSelectedGroup = firstMatch.dataset.grp;
+                    }
+                });
+            }
+
+            const alterSearch = document.getElementById('tm-alter-search');
+            if (alterSearch) {
+                alterSearch.addEventListener('input', () => {
+                    tmAlterActiveIdx = 0;
+                    tmRenderAlterList();
+                });
+            }
+        });
+
         document.addEventListener('keydown', (e) => {
             const desk = document.getElementById('desktop-screen');
-            const dash = document.getElementById('dashboard-view');
             if (!desk || desk.style.display === 'none') return;
+
+            const anyModalOpen = Array.from(document.querySelectorAll('.modal-overlay')).some((m) => m.style.display && m.style.display !== 'none');
+            if (anyModalOpen) return;
+
+            // 1. Inside Tally Create / Alter screen
+            const tmSec = document.getElementById('tally-master-section');
+            if (tmSec && tmSec.style.display !== 'none') {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    tmHandleEscKey();
+                    return;
+                }
+
+                if (tmMode === 'alter-list') {
+                    const rows = Array.from(document.querySelectorAll('#tm-alter-list .tm-alter-row'));
+                    if (!rows.length) return;
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        rows[tmAlterActiveIdx]?.classList.remove('active');
+                        tmAlterActiveIdx = (tmAlterActiveIdx + 1) % rows.length;
+                        rows[tmAlterActiveIdx]?.classList.add('active');
+                        rows[tmAlterActiveIdx]?.scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        rows[tmAlterActiveIdx]?.classList.remove('active');
+                        tmAlterActiveIdx = (tmAlterActiveIdx - 1 + rows.length) % rows.length;
+                        rows[tmAlterActiveIdx]?.classList.add('active');
+                        rows[tmAlterActiveIdx]?.scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        rows[tmAlterActiveIdx]?.click();
+                    }
+                    return;
+                }
+
+                const accBox = document.getElementById('tm-accept-box');
+                if (accBox && accBox.style.display === 'block') {
+                    if (e.key.toLowerCase() === 'y' || e.key === 'Enter') {
+                        e.preventDefault();
+                        tmSaveProfile();
+                    } else if (e.key.toLowerCase() === 'n') {
+                        e.preventDefault();
+                        tmCancelAccept();
+                    }
+                    return;
+                }
+
+                const activeId = document.activeElement?.id || '';
+                if (activeId === 'tm-group' && tmMode === 'create' && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                    e.preventDefault();
+                    const visible = Array.from(document.querySelectorAll('#tm-group-list .tm-group-opt')).filter((x) => x.style.display !== 'none');
+                    if (!visible.length) return;
+                    let gIdx = visible.findIndex((x) => x.classList.contains('selected'));
+                    gIdx = (e.key === 'ArrowDown') ? (gIdx + 1) % visible.length : (gIdx - 1 + visible.length) % visible.length;
+                    visible.forEach((x) => x.classList.remove('selected'));
+                    visible[gIdx].classList.add('selected');
+                    tmSelectedGroup = visible[gIdx].dataset.grp;
+                    document.getElementById('tm-group').value = visible[gIdx].dataset.label;
+                    return;
+                }
+
+                if (e.key === 'Enter') {
+                    const order = (tmSelectedGroup === 'kariger')
+                        ? (tmMode === 'alter-edit' ? ['tm-name', 'tm-karkhana', 'tm-saree', 'tm-mobile', 'tm-address', 'tm-date'] : ['tm-name', 'tm-group', 'tm-karkhana', 'tm-saree', 'tm-mobile', 'tm-address', 'tm-date'])
+                        : (tmMode === 'alter-edit' ? ['tm-name', 'tm-mobile', 'tm-address', 'tm-date'] : ['tm-name', 'tm-group', 'tm-mobile', 'tm-address', 'tm-date']);
+                    const curIdx = order.indexOf(activeId);
+                    if (curIdx >= 0) {
+                        e.preventDefault();
+                        if (activeId === 'tm-group') {
+                            tmPickGroup(tmSelectedGroup, true);
+                            return;
+                        }
+                        if (curIdx < order.length - 1) {
+                            document.getElementById(order[curIdx + 1])?.focus();
+                        } else {
+                            tmAskAccept();
+                        }
+                    }
+                }
+                return;
+            }
+
+            // 2. Dashboard Gateway Arrow + Letter Shortcuts
+            const dash = document.getElementById('dashboard-view');
             if (!dash || dash.style.display === 'none') return;
 
             const tag = (document.activeElement && document.activeElement.tagName) || '';
             if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-
-            const anyModalOpen = Array.from(document.querySelectorAll('.modal-overlay')).some((m) => m.style.display && m.style.display !== 'none');
-            if (anyModalOpen) return;
 
             const items = Array.from(document.querySelectorAll('#dashboard-view .gw-item'));
             if (!items.length) return;
@@ -2517,6 +3479,13 @@
             } else if (e.key === 'Enter' && !document.activeElement.classList.contains('gw-item') && tag !== 'BUTTON') {
                 e.preventDefault();
                 items[idx].click();
+            } else if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
+                const k = e.key.toLowerCase();
+                const targetBtn = items.find((el) => el.dataset.gwKey === k);
+                if (targetBtn) {
+                    e.preventDefault();
+                    targetBtn.click();
+                }
             }
         });
 
