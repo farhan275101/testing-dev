@@ -1,13 +1,11 @@
 /* ============================================================================
-   SIMPLICITY ERP - WEAVER (KARIGER) UI & SHEET CONTROLLER
+   SIMPLICITY ERP - WEAVER (KARIGER) UI & SHEET CONTROLLER (TALLY WHITE & GOLD)
    File: kariger/kariger-ui.js • Developed by Farhan Jawed
    Features:
-   - Kariger Master with Dynamic Mohalla / Address Box
-   - Strict Gatekeeper: No New Sheet without 'Ready' Tani
-   - Instant Tani Order Deduction as soon as Sheet is Created
-   - Auto-Populates Sancha + Rangai Name into Sancha Box
-   - Auto-Fills Bana Color & 8 New Colors into Master Sheet
-   - 100% Untouched Manual Wazan System (Sancha Stock Safe)
+   - Pure White & Gold TallyPrime 2-Column Sheet (Table Left + Side Entry Right)
+   - Bottom 3-Card Aligned Summary Row (Mazdoori | Bana | Zari)
+   - Collapsible [F9] Tani Setup, Rates, Sancha Manual Wazan & 8 Colors
+   - Strict Tani Gatekeeper + Instant Order Deduction + A6 Print + Mobile PIN
 ============================================================================ */
 
 (() => {
@@ -19,6 +17,10 @@
     window.currentKarigerPage = 1;
     window.karigerPageSize = 50;
     window.editingRowIndex = null;
+
+    let karigerListActiveIdx = 0;
+    let currentKarigerPageRowsCache = [];
+    let sheetSetupExpanded = false;
 
     const setVal = (id, v) => {
         const el = document.getElementById(id);
@@ -46,10 +48,24 @@
         if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
         const parts = s.split(/[-/]/);
         if (parts.length === 3 && parts[0].length === 2 && parts[2].length === 4) {
-            return `${parts[2]}-${parts[1]}-${parts[0]}`;
+            return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
         }
         return new Date().toISOString().split('T')[0];
     };
+
+    const getTodayIso = () => {
+        const raw = (typeof window.getTodayDate === 'function')
+            ? window.getTodayDate()
+            : new Date().toISOString().split('T')[0];
+        return toIsoDate(raw);
+    };
+
+    const isAnyExpressOverlayOpen = () => Boolean(
+        document.getElementById('kariger-express-modal') ||
+        document.getElementById('master-stock-express-modal') ||
+        document.getElementById('master-jobwork-express-modal') ||
+        document.getElementById('tani-express-modal')
+    );
 
     const sanitizeKarigerList = () => {
         let raw = (typeof window.getStore === 'function') ? window.getStore('kariger_list') : null;
@@ -69,7 +85,7 @@
     const getKarigerAbsentDays = (kId, joinDate) => {
         if (!kId) return 0;
         const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(kId) : [];
-        const todayIso = toIsoDate((typeof window.getTodayDate === 'function') ? window.getTodayDate() : null);
+        const todayIso = getTodayIso();
         let lastIso = toIsoDate(joinDate || todayIso);
 
         sheets.forEach((sh) => {
@@ -84,62 +100,671 @@
 
         const today = new Date(todayIso);
         const last = new Date(lastIso);
-        const diffTime = today - last;
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        const diffDays = Math.floor((today - last) / (1000 * 60 * 60 * 24));
         return (!isNaN(diffDays) && diffDays > 0) ? diffDays : 0;
     };
 
+    const notifyGlobalSync = () => {
+        if (typeof window.invalidatePaymentCache === 'function' && window.activeKarigerId) {
+            window.invalidatePaymentCache(window.activeKarigerId);
+        }
+        if (typeof window.updateDashboardBadgeTotals === 'function') {
+            window.updateDashboardBadgeTotals();
+        }
+        if (typeof window.slSyncDashboardCharts === 'function') {
+            window.slSyncDashboardCharts();
+        }
+    };
+
+    const showSheetToast = (msg) => {
+        const el = document.getElementById('kar-sheet-toast-msg');
+        if (!el) return;
+        const orig = el.dataset.origText || el.textContent;
+        if (!el.dataset.origText) el.dataset.origText = orig;
+        el.textContent = msg;
+        clearTimeout(el.__tTimer);
+        el.__tTimer = setTimeout(() => {
+            el.textContent = el.dataset.origText || orig;
+        }, 3800);
+    };
+
     /* ========================================================================
-       1. NAVIGATION & KARIGER MASTER (WITH MOHALLA BOX INJECTION)
-       ------------------------------------------------------------------------
+       0. SCOPED TALLYPRIME WHITE & GOLD STYLES (#kariger-section & #kariger-sheet-section)
+    ======================================================================== */
+    const ensureKarigerTallyStyles = () => {
+        if (document.getElementById('kariger-tally-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'kariger-tally-styles';
+        style.textContent = `
+            /* --- SHARED WHITE & GOLD SHELL --- */
+            #kariger-section,
+            #kariger-sheet-section {
+                padding: 0 !important;
+                overflow-x: hidden;
+                background: #ffffff !important;
+                font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            }
+            #kariger-section .module-header,
+            #kariger-sheet-section .module-header {
+                background: #fdf6e2 !important;
+                border-bottom: 1.5px solid #e5d5a7 !important;
+                padding: 11px 20px !important;
+                margin-bottom: 0 !important;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+            #kariger-section .module-header h2,
+            #kariger-sheet-section .module-header h2 {
+                color: #1f2937 !important;
+                font-size: 16.5px !important;
+                font-weight: 800 !important;
+                margin: 0 !important;
+            }
+            #kariger-section .back-btn,
+            #kariger-sheet-section .back-btn,
+            .kar-btn-plain {
+                background: #ffffff !important;
+                color: #374151 !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 5px !important;
+                padding: 6px 12px !important;
+                font-size: 12px !important;
+                font-weight: 700 !important;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #kariger-section .back-btn:hover,
+            #kariger-sheet-section .back-btn:hover,
+            .kar-btn-plain:hover {
+                border-color: #d9a425 !important;
+                background: #fef9ea !important;
+                color: #1f2937 !important;
+            }
+            #kariger-section .add-btn,
+            #kariger-sheet-section .add-btn,
+            .kar-btn-gold {
+                background: #f2b71d !important;
+                color: #1f2937 !important;
+                border: 1px solid #d9a425 !important;
+                border-radius: 5px !important;
+                padding: 6px 13px !important;
+                font-size: 12px !important;
+                font-weight: 800 !important;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #kariger-section .add-btn:hover,
+            #kariger-sheet-section .add-btn:hover,
+            .kar-btn-gold:hover {
+                background: #e5aa12 !important;
+            }
+            #kariger-sheet-section .module-header .sheet-btn,
+            #kariger-sheet-section .module-header .add-btn[onclick*="WhatsApp"] {
+                background: #ffffff !important;
+                color: #1f2937 !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 5px !important;
+                padding: 6px 11px !important;
+                font-size: 12px !important;
+                font-weight: 700 !important;
+            }
+            #kariger-sheet-section .module-header .sheet-btn:hover,
+            #kariger-sheet-section .module-header .add-btn[onclick*="WhatsApp"]:hover {
+                border-color: #d9a425 !important;
+                background: #fef9ea !important;
+            }
+
+            /* --- TABS --- */
+            #kariger-karkhana-tabs-bar,
+            #sheet-tabs-container {
+                padding: 10px 20px 0 20px !important;
+                margin-bottom: 10px !important;
+                display: flex;
+                gap: 6px;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+            #kariger-section .sheet-tab,
+            #kariger-sheet-section .sheet-tab {
+                background: #ffffff !important;
+                color: #374151 !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 5px !important;
+                padding: 5px 12px !important;
+                font-size: 12px !important;
+                font-weight: 700 !important;
+                cursor: pointer;
+            }
+            #kariger-section .sheet-tab.active,
+            #kariger-sheet-section .sheet-tab.active {
+                background: #f2b71d !important;
+                color: #1f2937 !important;
+                border-color: #d9a425 !important;
+                font-weight: 800 !important;
+            }
+            #sheet-tabs-container .del-tab-btn {
+                margin-left: 6px;
+                color: #92400e;
+                font-weight: 900;
+            }
+
+            /* --- KARIGER DIRECTORY --- */
+            #kariger-section .filter-panel {
+                padding: 0 20px 10px 20px !important;
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+            #kariger-section .search-box {
+                padding: 7px 12px !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 5px !important;
+                font-size: 13px !important;
+                font-weight: 600 !important;
+                background: #ffffff !important;
+                color: #111827 !important;
+                outline: none;
+            }
+            #kariger-section .search-box:focus {
+                border-color: #d9a425 !important;
+                background: #fffdf5 !important;
+                box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.2);
+            }
+            #kariger-section #add-kariger-form {
+                margin: 0 20px 12px 20px !important;
+                background: #fdfcf7 !important;
+                border: 1.5px solid #d9b86c !important;
+                border-radius: 8px !important;
+                padding: 14px 16px !important;
+            }
+            #kariger-section .table-responsive {
+                padding: 0 20px !important;
+                box-sizing: border-box;
+            }
+            #kariger-section table,
+            #kariger-sheet-section .kar-khata-table {
+                width: 100%;
+                border-collapse: collapse;
+                border: 1px solid #e5d5a7;
+                background: #ffffff;
+            }
+            #kariger-section table thead tr,
+            #kariger-sheet-section .kar-khata-table thead tr {
+                background: #fdf6e2 !important;
+                color: #1f2937 !important;
+            }
+            #kariger-section table th,
+            #kariger-sheet-section .kar-khata-table th {
+                padding: 8px 10px !important;
+                font-size: 11.5px !important;
+                font-weight: 800 !important;
+                color: #1f2937 !important;
+                border-bottom: 1.5px solid #e5d5a7 !important;
+                text-align: left;
+                white-space: nowrap;
+            }
+            #kariger-section table td,
+            #kariger-sheet-section .kar-khata-table td {
+                padding: 8px 10px !important;
+                font-size: 12.5px !important;
+                color: #1f2937 !important;
+                border-bottom: 1px solid #f3f4f6 !important;
+                font-variant-numeric: tabular-nums;
+            }
+            #kariger-section .kar-dir-row {
+                cursor: pointer;
+                transition: background 0.1s ease;
+            }
+            #kariger-section .kar-dir-row:hover {
+                background: #fef9ea !important;
+            }
+            #kariger-section .kar-dir-row.active {
+                background: #f2b71d !important;
+                color: #1f2937 !important;
+            }
+            #kariger-section .kar-dir-row.active td {
+                font-weight: 700 !important;
+                color: #1f2937 !important;
+            }
+            #kariger-pagination-bar {
+                padding: 10px 20px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 8px;
+                font-size: 12px;
+            }
+            .kar-status-strip {
+                background: #fdf6e2;
+                border-top: 1px solid #e5d5a7;
+                padding: 9px 20px;
+                margin-top: 10px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 8px;
+                font-size: 11.5px;
+                color: #6b7280;
+                font-weight: 600;
+            }
+
+            /* --- TANI KHATA SHEET: TOP SETUP BAR [F9] --- */
+            .kar-setup-wrap {
+                margin: 0 20px 10px 20px;
+                border: 1px solid #e5d5a7;
+                border-radius: 6px;
+                background: #fdfcf7;
+                overflow: hidden;
+            }
+            .kar-setup-strip {
+                padding: 7px 14px;
+                background: #fdf6e2;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 10px;
+                flex-wrap: wrap;
+                cursor: pointer;
+            }
+            .kar-setup-summary {
+                font-size: 12px;
+                font-weight: 700;
+                color: #92400e;
+            }
+            .kar-setup-body {
+                padding: 12px 14px;
+                border-top: 1px solid #e5d5a7;
+                background: #ffffff;
+            }
+            #kariger-sheet-section .tani-closing-grid {
+                display: grid !important;
+                grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+                gap: 10px !important;
+                margin-bottom: 12px !important;
+                padding: 10px !important;
+                background: #fdfcf7 !important;
+                border: 1px solid #e5d5a7 !important;
+                border-radius: 6px !important;
+            }
+            #kariger-sheet-section .tani-closing-grid > div {
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+                min-width: 0;
+            }
+            #kariger-sheet-section .tani-closing-grid label {
+                font-size: 11px !important;
+                font-weight: 700 !important;
+                color: #6b7280 !important;
+            }
+            #kariger-sheet-section .tani-closing-grid input {
+                width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 6px 8px;
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+                font-size: 12.5px;
+                font-weight: 700;
+                color: #111827;
+                background: #ffffff;
+            }
+            #kariger-sheet-section .tani-closing-grid input:focus {
+                border-color: #d9a425;
+                outline: none;
+                background: #fffdf5;
+            }
+            .kar-setup-item-box {
+                background: #ffffff !important;
+                border: 1px solid #e5d5a7 !important;
+                border-radius: 6px !important;
+                padding: 10px 12px !important;
+                margin-bottom: 0 !important;
+            }
+            .kar-setup-item-box .form-row-4 {
+                background: #fdfcf7 !important;
+                border: 1px solid #e5d5a7 !important;
+                padding: 8px 10px !important;
+                border-radius: 6px !important;
+            }
+            .kar-setup-item-box label {
+                color: #374151 !important;
+                font-size: 11.5px !important;
+            }
+            .kar-setup-item-box small {
+                color: #b47d00 !important;
+            }
+            .kar-setup-item-box input {
+                border-color: #d1d5db !important;
+            }
+            .kar-setup-item-box > div[style*="fffbeb"] {
+                background: #fdfcf7 !important;
+                border-color: #e5d5a7 !important;
+            }
+            .kar-setup-item-box > div[style*="fffbeb"] label {
+                color: #92400e !important;
+            }
+
+            /* --- 2-COLUMN MAIN SHEET SPLIT (TABLE LEFT + SIDE ENTRY RIGHT) --- */
+            .kar-sheet-split {
+                display: grid;
+                grid-template-columns: minmax(0, 1.38fr) minmax(350px, 415px);
+                gap: 14px;
+                padding: 0 20px 14px 20px;
+                align-items: start;
+                box-sizing: border-box;
+            }
+            .kar-left-card,
+            .kar-right-card {
+                background: #ffffff;
+                border: 1.5px solid #d9b86c;
+                border-radius: 8px;
+                overflow: hidden;
+                min-width: 0;
+            }
+            .kar-pane-head {
+                background: #fdf6e2;
+                border-bottom: 1.5px solid #e5d5a7;
+                padding: 9px 14px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 8px;
+            }
+            .kar-pane-head strong {
+                font-size: 13.5px;
+                font-weight: 800;
+                color: #1f2937;
+            }
+            .kar-pane-head small {
+                font-size: 11.5px;
+                font-weight: 700;
+                color: #92400e;
+            }
+            .kar-left-card .table-responsive {
+                padding: 0 !important;
+                max-height: 495px;
+                overflow-y: auto;
+            }
+            .kar-left-card .kar-khata-table {
+                border: none !important;
+            }
+            .kar-khata-table tfoot tr {
+                background: #fdf6e2 !important;
+                border-top: 1.5px solid #d9b86c !important;
+            }
+            .kar-khata-table tfoot th {
+                padding: 8px 8px !important;
+                font-size: 12px !important;
+                font-weight: 800 !important;
+                color: #1f2937 !important;
+            }
+            .kar-khata-row:hover {
+                background: #fef9ea !important;
+            }
+            .kar-khata-row.editing {
+                background: #fef3c7 !important;
+            }
+            .kar-row-act-btn {
+                background: #ffffff;
+                border: 1px solid #d1d5db;
+                color: #374151;
+                border-radius: 4px;
+                padding: 2px 6px;
+                font-size: 11px;
+                font-weight: 700;
+                cursor: pointer;
+                margin-left: 2px;
+            }
+            .kar-row-act-btn:hover {
+                border-color: #d9a425;
+                background: #fdf6e2;
+            }
+
+            /* --- RIGHT SIDE VOUCHER ENTRY PANEL (SCREENSHOT STYLE) --- */
+            .kar-voucher-body {
+                padding: 12px 14px;
+                background: #ffffff;
+            }
+            .kar-v-sec {
+                font-size: 10.5px;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: 0.45px;
+                color: #92400e;
+                border-top: 1px solid #efe4c4;
+                padding-top: 8px;
+                margin: 9px 0 6px 0;
+            }
+            .kar-v-grid-2 {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                gap: 8px;
+                margin-bottom: 6px;
+            }
+            .kar-v-row-1 {
+                display: grid;
+                grid-template-columns: 118px minmax(0, 1fr);
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 6px;
+                min-width: 0;
+            }
+            .kar-v-row-1 label,
+            .kar-v-grid-2 .input-group label {
+                font-size: 11.5px !important;
+                font-weight: 700 !important;
+                color: #374151 !important;
+                margin: 0 !important;
+                display: block;
+            }
+            .kar-voucher-body .input-group {
+                margin: 0 !important;
+                min-width: 0;
+            }
+            .kar-voucher-body input {
+                width: 100% !important;
+                min-width: 0 !important;
+                box-sizing: border-box !important;
+                padding: 6px 9px !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 4px !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                color: #111827 !important;
+                background: #ffffff !important;
+                outline: none;
+            }
+            .kar-voucher-body input:focus {
+                border-color: #d9a425 !important;
+                background: #fffdf5 !important;
+                box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.22);
+            }
+            .kar-voucher-body small {
+                display: block;
+                margin-top: 2px;
+                font-size: 11px !important;
+                font-weight: 700 !important;
+                color: #b47d00 !important;
+            }
+            .kar-voucher-actions {
+                display: flex;
+                gap: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                border-top: 1px solid #efe4c4;
+            }
+            .kar-voucher-actions #row-submit-btn {
+                flex: 1;
+                padding: 9px 12px !important;
+                font-size: 13px !important;
+                font-weight: 800 !important;
+            }
+
+            /* --- BOTTOM 3-CARD ALIGNED SUMMARY ROW --- */
+            .kar-summary-3col {
+                display: grid !important;
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                gap: 14px !important;
+                padding: 0 20px 14px 20px !important;
+                margin: 0 !important;
+                box-sizing: border-box;
+            }
+            .kar-summary-3col > div {
+                background: #ffffff !important;
+                border: 1.5px solid #e5d5a7 !important;
+                border-radius: 8px !important;
+                padding: 13px 15px !important;
+                box-shadow: none !important;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                min-width: 0;
+            }
+            .kar-summary-3col > div > div:first-child {
+                color: #1f2937 !important;
+                font-size: 14px !important;
+                font-weight: 800 !important;
+                border-bottom: 1.5px solid #fdf6e2;
+                padding-bottom: 7px;
+                margin-bottom: 9px !important;
+            }
+            .kar-summary-3col > div > div {
+                font-size: 12.5px !important;
+                color: #374151 !important;
+                margin-bottom: 5px !important;
+            }
+            .kar-summary-3col > div > div:last-child {
+                background: #fdf6e2 !important;
+                border-left: 4px solid #f2b71d !important;
+                border-radius: 5px !important;
+                padding: 8px 12px !important;
+                margin-top: 8px !important;
+                margin-bottom: 0 !important;
+            }
+            .kar-summary-3col > div > div:last-child span {
+                color: #92400e !important;
+                font-size: 12px !important;
+                font-weight: 800 !important;
+            }
+            .kar-summary-3col > div > div:last-child strong {
+                color: #b47d00 !important;
+                font-size: 16px !important;
+                font-weight: 900 !important;
+            }
+
+            /* --- RESPONSIVE FALLBACK --- */
+            @media (max-width: 980px) {
+                .kar-sheet-split {
+                    grid-template-columns: 1fr;
+                }
+                .kar-summary-3col {
+                    grid-template-columns: 1fr !important;
+                }
+                #kariger-sheet-section .tani-closing-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    };
+
+    /* ========================================================================
+       1. NAVIGATION & KARIGER MASTER (PURE WHITE & GOLD DIRECTORY)
     ======================================================================== */
     const ensureKarigerMohallaField = () => {
         if (document.getElementById('kar-mohalla')) return;
-
         const mobileInp = document.getElementById('kar-mobile');
         if (!mobileInp) return;
 
-        const container = mobileInp.closest('div') || mobileInp.parentElement;
+        const container = mobileInp.closest('.input-group') || mobileInp.closest('div') || mobileInp.parentElement;
         if (!container || !container.parentElement) return;
 
         const wrap = document.createElement('div');
         wrap.id = 'kar-mohalla-wrapper';
-        wrap.style.cssText = 'margin-bottom:10px;';
+        wrap.className = 'input-group';
         wrap.innerHTML = `
-            <label style="font-size:12px; font-weight:700; color:#374151;">محلہ / پتہ (MOHALLA / ADDRESS):</label><br>
-            <input type="text" id="kar-mohalla" placeholder="" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box;">
+            <label for="kar-mohalla">Mohalla / Address:</label>
+            <input type="text" id="kar-mohalla" placeholder="Mohalla / City">
         `;
 
-        container.parentElement.insertBefore(wrap, container.nextSibling);
+        const emptySibling = container.nextElementSibling;
+        if (emptySibling && emptySibling.tagName === 'DIV' && emptySibling.children.length === 0) {
+            emptySibling.replaceWith(wrap);
+        } else {
+            container.parentElement.insertBefore(wrap, container.nextSibling);
+        }
+    };
+
+    const ensureKarigerDirectoryChrome = () => {
+        const kSec = document.getElementById('kariger-section');
+        if (!kSec || kSec.dataset.dirChromeReady === '1') return;
+        kSec.dataset.dirChromeReady = '1';
+
+        const headerTitle = kSec.querySelector('.module-header h2');
+        if (headerTitle) headerTitle.textContent = 'Kariger Master Directory';
+        const backBtn = kSec.querySelector('.module-header .back-btn');
+        if (backBtn) backBtn.textContent = '← [Esc] Dashboard';
+
+        const filterPanel = kSec.querySelector('.filter-panel');
+        if (filterPanel && !document.getElementById('kar-dir-toolbar-actions')) {
+            const actWrap = document.createElement('div');
+            actWrap.id = 'kar-dir-toolbar-actions';
+            actWrap.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; align-items:center;';
+            actWrap.innerHTML = `
+                <button type="button" class="kar-btn-plain" onclick="window.__karEditSelected()">Edit [E]</button>
+                <button type="button" class="kar-btn-plain" onclick="window.__karDeleteSelected()">Delete [Del]</button>
+                <button type="button" class="kar-btn-plain" onclick="openKarigerPortalLoginModal()">App PIN [A]</button>
+            `;
+            filterPanel.appendChild(actWrap);
+        }
+
+        if (!document.getElementById('kar-dir-status-strip')) {
+            const strip = document.createElement('div');
+            strip.id = 'kar-dir-status-strip';
+            strip.className = 'kar-status-strip';
+            strip.innerHTML = `
+                <span style="color:#92400e; font-weight:700;">[↑ ↓] Kariger Chunein · [Enter / Click] Open Tani Khata · [E] Edit · [Del] Delete · [F7 / +] Naya Kariger · [A] App PIN · [F2] Karkhana · [/] Search · [Esc] Back</span>
+                <span id="kar-dir-count-lbl">0 Karigers</span>
+            `;
+            kSec.appendChild(strip);
+        }
     };
 
     const openKarigerModule = () => {
+        ensureKarigerTallyStyles();
+        ensureKarigerDirectoryChrome();
+
+        document.querySelectorAll('.module-section').forEach((s) => { s.style.display = 'none'; });
         const dView = document.getElementById('dashboard-view');
-        const shView = document.getElementById('kariger-sheet-section');
-        const kSec = document.getElementById('kariger-section');
         if (dView) dView.style.display = 'none';
-        if (shView) shView.style.display = 'none';
+        const kSec = document.getElementById('kariger-section');
         if (kSec) kSec.style.display = 'block';
 
         window.currentKarigerPage = 1;
+        karigerListActiveIdx = 0;
         ensureKarigerMohallaField();
         renderKarigerKarkhanaTabs();
         populateKarigerKarkhanaDropdown();
         renderKarigerTable();
         bindKarigerSearchInput();
+        bindKarigerKeyboardEngine();
     };
 
     const backToDashboard = () => {
-        const kSec = document.getElementById('kariger-section');
-        const shSec = document.getElementById('kariger-sheet-section');
-        const dView = document.getElementById('dashboard-view');
-        if (kSec) kSec.style.display = 'none';
-        if (shSec) shSec.style.display = 'none';
-        if (dView) dView.style.display = 'block';
-
-        if (typeof window.updateDashboardBadgeTotals === 'function') {
-            window.updateDashboardBadgeTotals();
+        if (typeof window.DaybookEngine === 'object' && typeof window.DaybookEngine.backToDashboard === 'function' && window.slSyncDashboardCharts) {
+            // Defer to global shell backToDashboard if tally-master loaded
         }
+        document.querySelectorAll('.module-section').forEach((s) => { s.style.display = 'none'; });
+        const dView = document.getElementById('dashboard-view');
+        if (dView) dView.style.display = window.innerWidth <= 860 ? 'block' : 'flex';
+        notifyGlobalSync();
     };
 
     const renderKarigerKarkhanaTabs = () => {
@@ -147,20 +772,20 @@
         if (!bar) return;
 
         const allKarigers = sanitizeKarigerList();
-        let karkhanas = (typeof window.getKarkhanasSafe === 'function') ? window.getKarkhanasSafe() : (window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : []);
+        let karkhanas = (typeof window.getKarkhanasSafe === 'function')
+            ? window.getKarkhanasSafe()
+            : (window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : []);
         if (!karkhanas.length) karkhanas = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
 
         const isAllActive = window.currentKarigerKarkhanaFilter === 'all';
-        let html = `<button type="button" class="sheet-tab ${isAllActive ? 'active' : ''}" onclick="switchKarigerKarkhanaTab('all')">👥 Sabhi (${allKarigers.length})</button>`;
+        let html = `<button type="button" class="sheet-tab ${isAllActive ? 'active' : ''}" onclick="switchKarigerKarkhanaTab('all')">Sabhi (${allKarigers.length})</button>`;
 
         karkhanas.forEach((k) => {
-            const count = allKarigers.filter((w) => 
+            const count = allKarigers.filter((w) =>
                 String(w.karkhanaId) === String(k.id) || (!w.karkhanaId && (k.isDefault || k.id === 'k_main'))
             ).length;
-            const isMain = (k.id === 'k_main' || k.isDefault);
-            const icon = isMain ? '🏢 ' : '🏭 ';
             const isActive = String(window.currentKarigerKarkhanaFilter) === String(k.id) ? 'active' : '';
-            html += `<button type="button" class="sheet-tab ${isActive}" onclick="switchKarigerKarkhanaTab('${esc(k.id)}')">${icon}${esc(k.name)} (${count})</button>`;
+            html += `<button type="button" class="sheet-tab ${isActive}" onclick="switchKarigerKarkhanaTab('${esc(k.id)}')">${esc(k.name)} (${count})</button>`;
         });
 
         bar.innerHTML = html;
@@ -169,9 +794,20 @@
     const switchKarigerKarkhanaTab = (kId) => {
         window.currentKarigerKarkhanaFilter = kId || 'all';
         window.currentKarigerPage = 1;
+        karigerListActiveIdx = 0;
         renderKarigerKarkhanaTabs();
         populateKarigerKarkhanaDropdown();
         renderKarigerTable();
+    };
+
+    const cycleKarigerKarkhanaTab = () => {
+        let karkhanas = (typeof window.getKarkhanasSafe === 'function')
+            ? window.getKarkhanasSafe()
+            : (window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : []);
+        if (!karkhanas.length) karkhanas = [{ id: 'k_main', name: 'Main Godown' }];
+        const ids = ['all', ...karkhanas.map((k) => String(k.id))];
+        const curIdx = ids.indexOf(String(window.currentKarigerKarkhanaFilter));
+        switchKarigerKarkhanaTab(ids[(curIdx + 1) % ids.length]);
     };
 
     const bindKarigerSearchInput = () => {
@@ -180,17 +816,39 @@
             searchInput.dataset.bound = 'true';
             searchInput.addEventListener('input', () => {
                 window.currentKarigerPage = 1;
+                karigerListActiveIdx = 0;
                 renderKarigerTable();
+            });
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown' || e.key === 'Enter') {
+                    e.preventDefault();
+                    searchInput.blur();
+                    if (e.key === 'Enter' && currentKarigerPageRowsCache.length > 0) {
+                        const chosen = currentKarigerPageRowsCache[karigerListActiveIdx] || currentKarigerPageRowsCache[0];
+                        if (chosen) openKarigerSheet(chosen.id);
+                    }
+                }
             });
         }
     };
 
     const filterKariger = () => {
         window.currentKarigerPage = 1;
+        karigerListActiveIdx = 0;
         renderKarigerTable();
     };
 
+    const highlightKarigerDirRow = (idx) => {
+        const rows = Array.from(document.querySelectorAll('#kariger-table-body .kar-dir-row'));
+        if (!rows.length) return;
+        karigerListActiveIdx = ((idx % rows.length) + rows.length) % rows.length;
+        rows.forEach((r, i) => r.classList.toggle('active', i === karigerListActiveIdx));
+        rows[karigerListActiveIdx]?.scrollIntoView({ block: 'nearest' });
+    };
+
     const renderKarigerTable = () => {
+        ensureKarigerTallyStyles();
+        ensureKarigerDirectoryChrome();
         bindKarigerSearchInput();
 
         const tbody = document.getElementById('kariger-table-body');
@@ -199,8 +857,8 @@
         let list = sanitizeKarigerList();
 
         if (window.currentKarigerKarkhanaFilter !== 'all') {
-            list = list.filter((k) => 
-                String(k.karkhanaId) === String(window.currentKarigerKarkhanaFilter) || 
+            list = list.filter((k) =>
+                String(k.karkhanaId) === String(window.currentKarigerKarkhanaFilter) ||
                 (!k.karkhanaId && window.currentKarigerKarkhanaFilter === 'k_main')
             );
         }
@@ -226,6 +884,8 @@
         if (window.currentKarigerPage > totalPages) window.currentKarigerPage = totalPages;
         if (window.currentKarigerPage < 1) window.currentKarigerPage = 1;
 
+        setText('kar-dir-count-lbl', `${totalItems} Karigers`);
+
         const pagBar = document.getElementById('kariger-pagination-bar');
         if (pagBar) {
             if (!totalItems) {
@@ -236,75 +896,94 @@
                 const endIdx = Math.min(window.currentKarigerPage * window.karigerPageSize, totalItems);
 
                 pagBar.innerHTML = `
-                    <div style="color:#2563eb; font-weight:600;">📊 Dikh rahe hain: ${startIdx} - ${endIdx} (Kul: ${totalItems})</div>
+                    <div style="color:#6b7280; font-weight:600;">Dikh rahe hain: <strong>${startIdx} - ${endIdx}</strong> (Kul: <strong>${totalItems}</strong>)</div>
                     <div style="display:flex; gap:8px; align-items:center;">
-                        <button type="button" class="quick-btn btn-out" onclick="prevKarigerPage()">◀️ Pichla</button>
-                        <span style="background:#fff; border:1px solid #cbd5e1; padding:4px 10px; border-radius:6px; font-weight:600;">Page ${window.currentKarigerPage} / ${totalPages}</span>
-                        <button type="button" class="quick-btn btn-in" onclick="nextKarigerPage()">Agla ▶️</button>
+                        <button type="button" class="kar-btn-plain" onclick="prevKarigerPage()">◀ Pichla</button>
+                        <span style="background:#fdf6e2; border:1px solid #e5d5a7; padding:4px 10px; border-radius:4px; font-weight:700;">Page ${window.currentKarigerPage} / ${totalPages}</span>
+                        <button type="button" class="kar-btn-plain" onclick="nextKarigerPage()">Agla ▶</button>
                     </div>`;
             }
         }
 
         if (!totalItems) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px; color:#888;">Koi Kariger nahi mila${absentFilterVal > 0 ? ` jo ${absentFilterVal} din se absent ho.` : '.'}</td></tr>`;
+            currentKarigerPageRowsCache = [];
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:22px; color:#6b7280;">Koi Kariger nahi mila${absentFilterVal > 0 ? ` jo ${absentFilterVal} din se absent ho.` : '.'}</td></tr>`;
             return;
         }
 
         const startIndex = (window.currentKarigerPage - 1) * window.karigerPageSize;
         const pageList = list.slice(startIndex, startIndex + window.karigerPageSize);
+        currentKarigerPageRowsCache = pageList;
+        if (karigerListActiveIdx >= pageList.length) karigerListActiveIdx = 0;
+        if (karigerListActiveIdx < 0) karigerListActiveIdx = 0;
 
         let html = '';
         pageList.forEach((k, idx) => {
             const actualIdx = startIndex + idx + 1;
-            const kName = k.karkhanaName || ((typeof window.getKarkhanaNameById === 'function') 
-                ? window.getKarkhanaNameById(k.karkhanaId) 
+            const kName = k.karkhanaName || ((typeof window.getKarkhanaNameById === 'function')
+                ? window.getKarkhanaNameById(k.karkhanaId)
                 : 'Main Godown');
 
-            const isMain = (!k.karkhanaId || k.karkhanaId === 'k_main');
-            const kBadge = `<span class="badge-blue" style="font-size:11px; background:${isMain ? '#eff6ff' : '#fef3c7'}; color:${isMain ? '#1d4ed8' : '#b45309'}; padding:3px 7px; border-radius:6px;">${isMain ? '🏢 ' : '🏭 '}${esc(kName)}</span>`;
+            const kBadge = `<span style="font-size:11px; background:#fdf6e2; color:#92400e; border:1px solid #e5d5a7; padding:2px 7px; border-radius:4px; font-weight:700;">${esc(kName)}</span>`;
 
             const absentDays = getKarigerAbsentDays(k.id, k.date);
             let absentBadge = '';
             if (absentDays >= 30) {
-                absentBadge = ` <span style="background:#fef2f2; color:#b91c1c; border:1px solid #f87171; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px;">🔴 ${absentDays} Din Gayab</span>`;
+                absentBadge = ` <span style="background:#fdf6e2; color:#92400e; border:1px solid #d9a425; font-size:10px; font-weight:800; padding:1px 6px; border-radius:4px;">${absentDays}d Absent</span>`;
             } else if (absentDays >= 15) {
-                absentBadge = ` <span style="background:#fffbeb; color:#b45309; border:1px solid #fcd34d; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px;">⚠️ ${absentDays} Din Gayab</span>`;
+                absentBadge = ` <span style="background:#fdfcf7; color:#b47d00; border:1px solid #e5d5a7; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px;">${absentDays}d Absent</span>`;
             }
 
-            const mohallaDisplay = k.mohalla ? `<br><small style="color:#64748b; font-size:11px;">📍 ${esc(k.mohalla)}</small>` : '';
+            const mohallaDisplay = k.mohalla ? `<br><small style="color:#6b7280; font-size:11px;">${esc(k.mohalla)}</small>` : '';
+            const activeCls = (idx === karigerListActiveIdx) ? ' active' : '';
 
-            html += `<tr>
+            html += `<tr class="kar-dir-row${activeCls}" data-kidx="${idx}" onclick="window.__karSelectAndOpen(${idx}, '${esc(k.id)}')">
                 <td>${actualIdx}</td>
                 <td>${kBadge}</td>
                 <td><strong>${esc(k.name)}</strong>${absentBadge}${mohallaDisplay}</td>
                 <td>${esc(k.saree || '-')}</td>
                 <td>${esc(k.mobile || '-')}</td>
                 <td>${esc(k.date || '-')}</td>
-                <td style="text-align:center;">
-                    <button type="button" class="sheet-btn" onclick="openKarigerSheet('${esc(k.id)}')">📊 Tani Khata</button> 
-                    <button type="button" class="edit-btn" onclick="editKariger('${esc(k.id)}')">✏️</button> 
-                    <button type="button" class="delete-btn" onclick="deleteKariger('${esc(k.id)}')">🗑️</button>
-                </td>
+                <td style="text-align:right; font-weight:700; font-size:12px;">Tani Khata →</td>
             </tr>`;
         });
 
         tbody.innerHTML = html;
     };
 
-    const nextKarigerPage = () => { window.currentKarigerPage++; renderKarigerTable(); };
-    const prevKarigerPage = () => { if (window.currentKarigerPage > 1) { window.currentKarigerPage--; renderKarigerTable(); } };
+    window.__karSelectAndOpen = (idx, id) => {
+        highlightKarigerDirRow(idx);
+        openKarigerSheet(id);
+    };
+
+    window.__karEditSelected = () => {
+        const chosen = currentKarigerPageRowsCache[karigerListActiveIdx];
+        if (!chosen) return alert('Pehle list me se Kariger chunein!');
+        editKariger(chosen.id);
+    };
+
+    window.__karDeleteSelected = () => {
+        const chosen = currentKarigerPageRowsCache[karigerListActiveIdx];
+        if (!chosen) return alert('Pehle list me se Kariger chunein!');
+        deleteKariger(chosen.id);
+    };
+
+    const nextKarigerPage = () => { window.currentKarigerPage++; karigerListActiveIdx = 0; renderKarigerTable(); };
+    const prevKarigerPage = () => { if (window.currentKarigerPage > 1) { window.currentKarigerPage--; karigerListActiveIdx = 0; renderKarigerTable(); } };
 
     const populateKarigerKarkhanaDropdown = () => {
         const sel = document.getElementById('kar-karkhana') || document.getElementById('kar-karkhana-select');
         if (!sel) return;
         sel.innerHTML = '';
-        let kList = (typeof window.getKarkhanasSafe === 'function') ? window.getKarkhanasSafe() : (window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : []);
+        let kList = (typeof window.getKarkhanasSafe === 'function')
+            ? window.getKarkhanasSafe()
+            : (window.safeArray ? window.safeArray(window.getStore('karkhana_list')) : []);
         if (!kList.length) kList = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
 
         kList.forEach((k) => {
             const opt = document.createElement('option');
             opt.value = k.id;
-            opt.textContent = `${k.id === 'k_main' ? '🏢 ' : '🏭 '}${k.name}`;
+            opt.textContent = k.name;
             sel.appendChild(opt);
         });
 
@@ -320,9 +999,14 @@
         f.style.display = isOpening ? 'block' : 'none';
         if (isOpening) {
             ensureKarigerMohallaField();
-            setVal('kar-date', (typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0]);
+            setVal('kar-edit-id', '');
+            setVal('kar-name', '');
+            setVal('kar-saree', '');
+            setVal('kar-mobile', '');
             setVal('kar-mohalla', '');
+            setVal('kar-date', getTodayIso());
             populateKarigerKarkhanaDropdown();
+            setTimeout(() => document.getElementById('kar-name')?.focus(), 40);
         }
     };
 
@@ -333,7 +1017,7 @@
         const s = String(document.getElementById('kar-saree')?.value || '').trim();
         const m = String(document.getElementById('kar-mobile')?.value || '').trim();
         const moh = String(document.getElementById('kar-mohalla')?.value || '').trim();
-        const d = String(document.getElementById('kar-date')?.value || '') || ((typeof window.getTodayDate === 'function') ? window.getTodayDate() : '');
+        const d = toIsoDate(document.getElementById('kar-date')?.value || '') || getTodayIso();
 
         if (!n) return alert('Kariger ka naam zaroori hai!');
 
@@ -341,7 +1025,7 @@
         const chosenKid = kSel ? kSel.value : (window.currentKarigerKarkhanaFilter !== 'all' ? window.currentKarigerKarkhanaFilter : 'k_main');
         const kName = (typeof window.getKarkhanaNameById === 'function') ? window.getKarkhanaNameById(chosenKid) : 'Main Godown';
 
-        let list = sanitizeKarigerList();
+        const list = sanitizeKarigerList();
 
         if (editId) {
             const it = list.find((x) => String(x.id) === String(editId));
@@ -368,9 +1052,11 @@
         }
 
         if (typeof window.setStore === 'function') window.setStore('kariger_list', list);
+        if (typeof window.populateKarigersDatalist === 'function') window.populateKarigersDatalist();
         toggleKarigerForm();
         renderKarigerKarkhanaTabs();
         renderKarigerTable();
+        notifyGlobalSync();
         alert('✅ Kariger safalta-poorvak save ho gaya!');
     };
 
@@ -381,29 +1067,32 @@
         if (f) f.style.display = 'block';
 
         ensureKarigerMohallaField();
+        populateKarigerKarkhanaDropdown();
 
         setVal('kar-edit-id', k.id);
         setVal('kar-name', k.name);
         setVal('kar-saree', k.saree || '');
         setVal('kar-mobile', k.mobile || '');
         setVal('kar-mohalla', k.mohalla || k.address || k.pata || '');
-        setVal('kar-date', k.date || ((typeof window.getTodayDate === 'function') ? window.getTodayDate() : ''));
+        setVal('kar-date', toIsoDate(k.date || getTodayIso()));
 
         const kSel = document.getElementById('kar-karkhana') || document.getElementById('kar-karkhana-select');
         if (kSel) kSel.value = k.karkhanaId || 'k_main';
+        setTimeout(() => document.getElementById('kar-name')?.focus(), 40);
     };
 
     const deleteKariger = (id) => {
         if (!confirm('Kya is Kariger ko delete karna chahte hain?')) return;
         const list = sanitizeKarigerList().filter((x) => String(x.id) !== String(id));
         if (typeof window.setStore === 'function') window.setStore('kariger_list', list);
+        if (typeof window.populateKarigersDatalist === 'function') window.populateKarigersDatalist();
         renderKarigerKarkhanaTabs();
         renderKarigerTable();
+        notifyGlobalSync();
     };
 
     /* ========================================================================
        2. LIVE STOCK DISPLAY & DATALISTS
-       ------------------------------------------------------------------------
     ======================================================================== */
     const populateSheetDatalists = () => {
         const banaDl = document.getElementById('sheet-bana-dl');
@@ -504,8 +1193,281 @@
     };
 
     /* ========================================================================
+       2B. TALLYPRIME 2-COLUMN WORKSPACE BUILDER (NO index.html EDIT NEEDED)
+    ======================================================================== */
+    const toggleSheetSetupDrawer = (forceState = null) => {
+        const body = document.getElementById('kar-sheet-setup-body');
+        const btn = document.getElementById('kar-sheet-setup-toggle-btn');
+        if (!body) return;
+        sheetSetupExpanded = (forceState !== null) ? Boolean(forceState) : !sheetSetupExpanded;
+        body.style.display = sheetSetupExpanded ? 'block' : 'none';
+        if (btn) btn.textContent = sheetSetupExpanded ? 'Hide Setup [F9]' : 'Rates, Sancha & 8 Colors [F9]';
+    };
+
+    const updateSheetSetupSummaryLine = (sh) => {
+        if (!sh) return;
+        const rateBani = (sh.rateBani !== undefined) ? sh.rateBani : 240;
+        const tPcs = (sh.taniPcs !== undefined) ? sh.taniPcs : 72;
+        const pBani = safeNum(sh.pichlaBani);
+        const sanchaTxt = sh.taniSancha ? sh.taniSancha : '-';
+        setText(
+            'kar-sheet-setup-summary',
+            `Bani: ₹${rateBani}/Pc · Target: ${tPcs} Pcs · Pichla Bani: ₹${pBani.toFixed(0)} · Sancha: ${sanchaTxt}`
+        );
+    };
+
+    const cancelEditTaniRow = () => {
+        window.editingRowIndex = null;
+        setVal('row-date', getTodayIso());
+        setVal('row-cone', '');
+        setVal('row-lesstp', '');
+        setVal('row-zariqty', '');
+        setVal('row-topi', '');
+        setVal('row-saree', '');
+        setVal('row-lott', '');
+        setVal('row-paid', '');
+        setVal('row-retbana', '');
+        setVal('row-retzari', '');
+
+        const btn = document.getElementById('row-submit-btn');
+        if (btn) btn.textContent = '+ Line Jodein & Stock Minus';
+        const cBtn = document.getElementById('kar-row-cancel-edit-btn');
+        if (cBtn) cBtn.style.display = 'none';
+        document.querySelectorAll('#sheet-table-body .kar-khata-row').forEach((tr) => tr.classList.remove('editing'));
+    };
+
+    const bindLineEntryEnterFlow = () => {
+        const order = [
+            'row-date', 'row-saree', 'row-lott', 'row-retbana', 'row-retzari',
+            'line-bana-name', 'row-cone', 'row-lesstp',
+            'line-zari-name', 'row-zariqty', 'row-topi', 'row-paid'
+        ];
+        order.forEach((fid, idx) => {
+            const el = document.getElementById(fid);
+            if (!el || el.dataset.karEnterBound) return;
+            el.dataset.karEnterBound = 'true';
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    e.preventDefault();
+                    saveTaniRow();
+                    return;
+                }
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        if (idx > 0) document.getElementById(order[idx - 1])?.focus();
+                        return;
+                    }
+                    if (idx < order.length - 1) {
+                        const nxt = document.getElementById(order[idx + 1]);
+                        if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
+                    } else {
+                        saveTaniRow();
+                    }
+                }
+            });
+        });
+    };
+
+    const setupKarigerSheetTallyLayout = () => {
+        ensureKarigerTallyStyles();
+        const shSec = document.getElementById('kariger-sheet-section');
+        if (!shSec || shSec.dataset.tallyLayoutBuilt === '1') return;
+        shSec.dataset.tallyLayoutBuilt = '1';
+
+        const backBtn = shSec.querySelector('.module-header .back-btn');
+        if (backBtn) backBtn.textContent = '← [Esc] Kariger List';
+
+        const tabsBar = document.getElementById('sheet-tabs-container');
+        const closingGrid = shSec.querySelector('.tani-closing-grid');
+        const banaInput = document.getElementById('line-bana-name');
+        const zariInput = document.getElementById('line-zari-name');
+        const banaGroup = banaInput?.closest('.input-group');
+        const zariGroup = zariInput?.closest('.input-group');
+        const itemBox = banaInput?.closest('div[style*="background:#f1f5f9"]') || shSec.querySelector('div[style*="background:#f1f5f9"]');
+        const submitBtn = document.getElementById('row-submit-btn');
+        const entryBox = submitBtn?.closest('div[style*="background:#f8fafc"]');
+        const tableWrap = document.getElementById('sheet-table-body')?.closest('.table-responsive');
+        const summaryWrap = document.getElementById('calc-remaining-amt')?.closest('div[style*="flex-direction:column"]');
+
+        const tbl = tableWrap?.querySelector('table');
+        if (tbl) tbl.classList.add('kar-khata-table');
+        const theadRow = tbl?.querySelector('thead tr');
+        if (theadRow) theadRow.removeAttribute('style');
+        const tfoot = tbl?.querySelector('tfoot');
+        if (tfoot) tfoot.removeAttribute('style');
+
+        // 1. Setup Collapsible Strip [F9]
+        const setupWrap = document.createElement('div');
+        setupWrap.id = 'kar-sheet-setup-wrapper';
+        setupWrap.className = 'kar-setup-wrap';
+        setupWrap.innerHTML = `
+            <div class="kar-setup-strip" onclick="window.__karToggleSetupDrawer()">
+                <span class="kar-setup-summary" id="kar-sheet-setup-summary">Bani: ₹240/Pc · Target: 72 Pcs</span>
+                <button type="button" id="kar-sheet-setup-toggle-btn" class="kar-btn-plain" onclick="event.stopPropagation(); window.__karToggleSetupDrawer()">Rates, Sancha &amp; 8 Colors [F9]</button>
+            </div>
+            <div class="kar-setup-body" id="kar-sheet-setup-body" style="display:none;"></div>
+        `;
+        if (tabsBar) tabsBar.insertAdjacentElement('afterend', setupWrap);
+        else shSec.appendChild(setupWrap);
+
+        const setupBody = document.getElementById('kar-sheet-setup-body');
+        if (closingGrid) setupBody.appendChild(closingGrid);
+        if (itemBox) {
+            itemBox.className = 'kar-setup-item-box';
+            itemBox.removeAttribute('style');
+            const firstTitle = itemBox.querySelector('div');
+            if (firstTitle && firstTitle.textContent.includes('Item Selection')) {
+                firstTitle.style.display = 'none';
+            }
+            const emptyRow2 = banaGroup?.parentElement;
+            setupBody.appendChild(itemBox);
+            // Hide empty 2-col placeholder once banaGroup & zariGroup move to right voucher panel
+            if (emptyRow2) emptyRow2.style.display = 'none';
+        }
+
+        // 2. Main 2-Column Split: Table Left + Side Line Entry Right
+        const splitGrid = document.createElement('div');
+        splitGrid.id = 'kar-sheet-split-grid';
+        splitGrid.className = 'kar-sheet-split';
+
+        const leftCard = document.createElement('div');
+        leftCard.className = 'kar-left-card';
+        leftCard.innerHTML = `
+            <div class="kar-pane-head">
+                <strong>Tani Khata Register</strong>
+                <small id="kar-sheet-row-count">0 Entries</small>
+            </div>
+        `;
+        if (tableWrap) leftCard.appendChild(tableWrap);
+
+        const rightCard = document.createElement('div');
+        rightCard.className = 'kar-right-card';
+        rightCard.innerHTML = `
+            <div class="kar-pane-head">
+                <strong>Rozana Line Entry (Side Voucher)</strong>
+                <small>[Enter] Next / Save</small>
+            </div>
+            <div class="kar-voucher-body" id="kar-voucher-entry-body"></div>
+        `;
+
+        splitGrid.appendChild(leftCard);
+        splitGrid.appendChild(rightCard);
+        setupWrap.insertAdjacentElement('afterend', splitGrid);
+
+        // Move exact input-groups into the clean Side Voucher layout (preserving all IDs & hooks)
+        const vBody = document.getElementById('kar-voucher-entry-body');
+        const gDate = document.getElementById('row-date')?.closest('.input-group');
+        const gCone = document.getElementById('row-cone')?.closest('.input-group');
+        const gLessTp = document.getElementById('row-lesstp')?.closest('.input-group');
+        const gZariQty = document.getElementById('row-zariqty')?.closest('.input-group');
+        const gTopi = document.getElementById('row-topi')?.closest('.input-group');
+        const gSaree = document.getElementById('row-saree')?.closest('.input-group');
+        const gLott = document.getElementById('row-lott')?.closest('.input-group');
+        const gPaid = document.getElementById('row-paid')?.closest('.input-group');
+        const gRetBana = document.getElementById('row-retbana')?.closest('.input-group');
+        const gRetZari = document.getElementById('row-retzari')?.closest('.input-group');
+
+        if (gDate) {
+            gDate.classList.remove('input-group');
+            gDate.classList.add('kar-v-row-1');
+            vBody.appendChild(gDate);
+        }
+
+        const secIn = document.createElement('div');
+        secIn.className = 'kar-v-sec';
+        secIn.textContent = 'INWARD — SAREE JAMA & MATERIAL RETURN';
+        vBody.appendChild(secIn);
+
+        const rIn1 = document.createElement('div');
+        rIn1.className = 'kar-v-grid-2';
+        if (gSaree) rIn1.appendChild(gSaree);
+        if (gLott) rIn1.appendChild(gLott);
+        vBody.appendChild(rIn1);
+
+        const rIn2 = document.createElement('div');
+        rIn2.className = 'kar-v-grid-2';
+        if (gRetBana) rIn2.appendChild(gRetBana);
+        if (gRetZari) rIn2.appendChild(gRetZari);
+        vBody.appendChild(rIn2);
+
+        const secOut = document.createElement('div');
+        secOut.className = 'kar-v-sec';
+        secOut.textContent = 'OUTWARD — BANA & ZARI ISSUE';
+        vBody.appendChild(secOut);
+
+        if (banaGroup) {
+            banaGroup.style.marginBottom = '6px';
+            vBody.appendChild(banaGroup);
+        }
+        const rOut1 = document.createElement('div');
+        rOut1.className = 'kar-v-grid-2';
+        if (gCone) rOut1.appendChild(gCone);
+        if (gLessTp) rOut1.appendChild(gLessTp);
+        vBody.appendChild(rOut1);
+
+        if (zariGroup) {
+            zariGroup.style.marginBottom = '6px';
+            vBody.appendChild(zariGroup);
+        }
+        const rOut2 = document.createElement('div');
+        rOut2.className = 'kar-v-grid-2';
+        if (gZariQty) rOut2.appendChild(gZariQty);
+        if (gTopi) rOut2.appendChild(gTopi);
+        vBody.appendChild(rOut2);
+
+        const secPay = document.createElement('div');
+        secPay.className = 'kar-v-sec';
+        secPay.textContent = 'MAZDOORI & ROKAD PAYMENT';
+        vBody.appendChild(secPay);
+
+        if (gPaid) {
+            gPaid.classList.remove('input-group');
+            gPaid.classList.add('kar-v-row-1');
+            vBody.appendChild(gPaid);
+        }
+
+        const actRow = document.createElement('div');
+        actRow.className = 'kar-voucher-actions';
+        const cancelEditBtn = document.createElement('button');
+        cancelEditBtn.type = 'button';
+        cancelEditBtn.id = 'kar-row-cancel-edit-btn';
+        cancelEditBtn.className = 'kar-btn-plain';
+        cancelEditBtn.style.display = 'none';
+        cancelEditBtn.textContent = 'Cancel Edit';
+        cancelEditBtn.onclick = () => cancelEditTaniRow();
+        actRow.appendChild(cancelEditBtn);
+        if (submitBtn) actRow.appendChild(submitBtn);
+        vBody.appendChild(actRow);
+
+        // Remove empty old entryBox wrapper
+        if (entryBox && entryBox !== vBody) entryBox.style.display = 'none';
+
+        // 3. Bottom 3-Column Summary Row
+        if (summaryWrap) {
+            summaryWrap.classList.add('kar-summary-3col');
+            splitGrid.insertAdjacentElement('afterend', summaryWrap);
+        }
+
+        // 4. Bottom Status Strip
+        if (!document.getElementById('kar-sheet-status-strip')) {
+            const strip = document.createElement('div');
+            strip.id = 'kar-sheet-status-strip';
+            strip.className = 'kar-status-strip';
+            strip.innerHTML = `
+                <span id="kar-sheet-toast-msg" style="color:#92400e; font-weight:700;">[Enter] Next / Save Line · [F9] Rates, Sancha &amp; 8 Colors · [Alt+N] Nayi Tani · [Alt+P] A6 Print · [Esc] Kariger List</span>
+                <span>TallyPrime Sheet Workspace</span>
+            `;
+            shSec.appendChild(strip);
+        }
+
+        bindLineEntryEnterFlow();
+    };
+
+    window.__karToggleSetupDrawer = () => toggleSheetSetupDrawer();
+
+    /* ========================================================================
        3. TANI KHATA CONTROLLER & STRICT GATEKEEPER
-       ------------------------------------------------------------------------
     ======================================================================== */
     const openKarigerSheet = (id) => {
         const k = sanitizeKarigerList().find((x) => String(x.id) === String(id));
@@ -520,14 +1482,20 @@
             window.CloudEngine.syncKarigerSheetLive(k.id);
         }
 
-        const kSec = document.getElementById('kariger-section');
+        ensureKarigerTallyStyles();
+        document.querySelectorAll('.module-section').forEach((s) => { s.style.display = 'none'; });
+        const dView = document.getElementById('dashboard-view');
+        if (dView) dView.style.display = 'none';
         const shSec = document.getElementById('kariger-sheet-section');
-        if (kSec) kSec.style.display = 'none';
         if (shSec) shSec.style.display = 'block';
 
+        setupKarigerSheetTallyLayout();
+        cancelEditTaniRow();
+        bindKarigerKeyboardEngine();
+
         const kGodamName = (typeof window.getKarkhanaNameById === 'function') ? window.getKarkhanaNameById(k.karkhanaId) : 'Main Godown';
-        setText('sheet-kariger-title', `${k.name} (${kGodamName}) - Saree: ${k.saree || '-'}`);
-        setVal('row-date', (typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0]);
+        setText('sheet-kariger-title', `${k.name} (${kGodamName}) — Saree: ${k.saree || '-'}`);
+        setVal('row-date', getTodayIso());
 
         const waBtn = document.querySelector('button[onclick*="sendKarigerWhatsAppParchi"]');
         if (waBtn && waBtn.parentElement && !document.getElementById('btn-print-kariger-sheet')) {
@@ -535,8 +1503,7 @@
             printBtn.id = 'btn-print-kariger-sheet';
             printBtn.type = 'button';
             printBtn.className = 'sheet-btn';
-            printBtn.style.cssText = 'background:#1e3a8a; color:#ffffff; padding:6px 12px; font-weight:bold; border-radius:6px; border:none; cursor:pointer; margin-left:6px; display:inline-flex; align-items:center; gap:4px;';
-            printBtn.innerHTML = '🖨️ A6 Print Khata';
+            printBtn.innerHTML = 'A6 Print Khata [Alt+P]';
             printBtn.onclick = () => openKarigerPrintModal();
             waBtn.parentElement.insertBefore(printBtn, waBtn.nextSibling);
         }
@@ -559,6 +1526,7 @@
         populateSheetDatalists();
         renderSheetTabs();
         loadCurrentSheetData();
+        setTimeout(() => document.getElementById('row-saree')?.focus(), 50);
     };
 
     const renderSheetTabs = () => {
@@ -579,9 +1547,7 @@
 
     const switchTaniSheetTab = (idx) => {
         window.activeSheetIndex = idx;
-        window.editingRowIndex = null;
-        const btn = document.getElementById('row-submit-btn');
-        if (btn) btn.textContent = '+ Line Jodein & Stock Minus';
+        cancelEditTaniRow();
         renderSheetTabs();
         loadCurrentSheetData();
     };
@@ -591,18 +1557,16 @@
         const kariger = sanitizeKarigerList().find((x) => String(x.id) === String(window.activeKarigerId));
         const kName = kariger ? String(kariger.name || '').trim().toUpperCase() : '';
 
-        // 1. Tani Order me check karein ki kya is kariger ki Ready Tani maujood hai
         const rawOrders = (typeof window.getStore === 'function') ? window.getStore('tani_orders_list') : localStorage.getItem('tani_orders_list');
         const orders = window.safeArray ? window.safeArray(rawOrders) : (Array.isArray(rawOrders) ? rawOrders : []);
 
-        const readyTani = orders.find(o => {
+        const readyTani = orders.find((o) => {
             if (!o) return false;
             const isReady = String(o.status || '').toLowerCase() === 'ready';
             const oKariger = String(o.kariger || '').trim().toUpperCase();
             return isReady && oKariger === kName;
         });
 
-        // Agar Ready nahi hai to aage badhne hi na de (STRICT GATEKEEPER)
         if (!readyTani) {
             return alert(`⚠️ تانی ابھی تیار نہیں ہے!\n\nکاریگر [${kariger?.name || 'Kariger'}] کا نیا تانہ ابھی رنگائی سے تیار ہو کر نہیں آیا ہے (Status: 'Ready' نہیں ہے)۔\n\nپہلے Tani Order & Rangai ماڈیول میں جا کر تانے کو 'Ready' مارک کریں، تبھی نئی شیٹ کھلے گی!`);
         }
@@ -613,7 +1577,6 @@
             ? window.calculateSheetTotals(cur)
             : { remainingBana: 0, remainingZari: 0, remainingAmt: 0 };
 
-        // Unique sheet number (beech ki sheet delete karne par bhi duplicate ID na bane)
         let maxNum = sheets.length;
         sheets.forEach((s) => {
             if (!s) return;
@@ -624,18 +1587,15 @@
         });
         const nextNum = maxNum + 1;
 
-        // 2. Naye ready taane ke 8 colors extract karein (purani sheet se copy nahi hoga!)
         const newColors = [];
         if (Array.isArray(readyTani.matchingTable)) {
-            readyTani.matchingTable.forEach(m => {
+            readyTani.matchingTable.forEach((m) => {
                 if (m) newColors.push(m.saree || m.bana || m.border || '');
             });
         }
 
-        // 3. Saancha box me Sancha aur Rangai dono ka naam
         const sanchaRangiCombined = `${readyTani.sancha || ''}${readyTani.rangi ? ' | Rangi: ' + readyTani.rangi : ''}`.trim();
 
-        // 4. ⭐ SHEET BANATE HI TANI ORDER LIST SE TURANT MINUS KARNA (INSTANT DEDUCTION)
         if (window.TaniOrderEngine && typeof window.TaniOrderEngine.markTaniMountedOnLoom === 'function') {
             window.TaniOrderEngine.markTaniMountedOnLoom(readyTani.id, kName);
         } else {
@@ -643,7 +1603,7 @@
             if (!Array.isArray(readyTani.statusHistory)) readyTani.statusHistory = [];
             readyTani.statusHistory.push({
                 status: 'loom',
-                date: (typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0],
+                date: getTodayIso(),
                 note: `🪡 Kariger ${kName} ne Loom par taana chadha liya (Consumed)`,
                 timestamp: Date.now()
             });
@@ -652,7 +1612,6 @@
             }
         }
 
-        // 5. Nayi Sheet create karein
         sheets.push({
             id: `tani_${nextNum}`,
             title: `Tani ${nextNum}`,
@@ -679,6 +1638,7 @@
         window.activeSheetIndex = sheets.length - 1;
         renderSheetTabs();
         loadCurrentSheetData();
+        notifyGlobalSync();
 
         alert(`✅ Tani #${readyTani.orderNo} safalta-poorvak load ho gayi aur Tani Order list se minus ho gayi!\n• Saancha: ${readyTani.sancha || '-'}\n• Rangi: ${readyTani.rangi || '-'}\n• Bana: ${readyTani.bana || '-'}`);
     };
@@ -722,6 +1682,7 @@
         window.activeSheetIndex = 0;
         renderSheetTabs();
         loadCurrentSheetData();
+        notifyGlobalSync();
     };
 
     const loadCurrentSheetData = () => {
@@ -754,13 +1715,13 @@
             setVal(`sheet-color-${i}`, (sh.colors && sh.colors[i - 1]) ? sh.colors[i - 1] : '');
         }
 
+        updateSheetSetupSummaryLine(sh);
         renderSheetRows(sh);
         updateLiveStockDisplay();
     };
 
     /* ========================================================================
-       ⭐ 4. SAVE CONFIG (MANUAL WAZAN INTACT + TANI ORDER MINUS)
-       ------------------------------------------------------------------------
+       4. SAVE CONFIG (MANUAL WAZAN INTACT + TANI ORDER MINUS)
     ======================================================================== */
     const saveCurrentSheetConfig = () => {
         if (!window.activeKarigerId) return;
@@ -793,7 +1754,7 @@
             if (cVal) sh.colors.push(cVal);
         }
 
-        // ⚠️ AAPKI HIYADAT: MANUAL WAZAN SYSTEM 100% SURAKSHIT AUR EXACT HAI
+        // MANUAL WAZAN SYSTEM 100% PRESERVED
         const oldTaniWazan = safeNum(sh.taniWazan);
         const newTaniWazan = safeNum(document.getElementById('sheet-tani-wazan')?.value);
         const oldChukkaWazan = safeNum(sh.chukkaWazan);
@@ -809,7 +1770,6 @@
         sh.chukkaSancha = String(document.getElementById('sheet-chukka-sancha')?.value || '').trim();
         sh.chukkaWazan = newChukkaWazan;
 
-        // Manual Tani Wazan stock deduction
         const taniItemChanged = oldTaniItem.toLowerCase() !== sh.taniItem.toLowerCase();
         if (newTaniWazan !== oldTaniWazan || taniItemChanged) {
             if (oldTaniItem && taniItemChanged && oldTaniWazan > 0) {
@@ -838,7 +1798,7 @@
                 sHist.push({
                     id: `shist_${Date.now()}_t`,
                     refId: refKey,
-                    date: (typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0],
+                    date: getTodayIso(),
                     category: 'tani',
                     name: sh.taniItem,
                     kariger: kName,
@@ -852,7 +1812,6 @@
             if (typeof window.setStore === 'function') window.setStore('sancha_history', sHist);
         }
 
-        // Manual Chukka Wazan stock deduction
         const chukkaItemChanged = oldChukkaItem.toLowerCase() !== sh.chukkaItem.toLowerCase();
         if (newChukkaWazan !== oldChukkaWazan || chukkaItemChanged) {
             if (oldChukkaItem && chukkaItemChanged && oldChukkaWazan > 0) {
@@ -881,7 +1840,7 @@
                 sHist2.push({
                     id: `shist_${Date.now()}_c`,
                     refId: refKey2,
-                    date: (typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0],
+                    date: getTodayIso(),
                     category: 'chukka',
                     name: sh.chukkaItem,
                     kariger: kName,
@@ -895,7 +1854,6 @@
             if (typeof window.setStore === 'function') window.setStore('sancha_history', sHist2);
         }
 
-        // TANI ORDER AUTO-MINUS SYNC
         const linkedId = sh.linkedTaniOrderId || sh.linkedTaniOrderNo;
         if (linkedId) {
             if (window.TaniOrderEngine && typeof window.TaniOrderEngine.markTaniMountedOnLoom === 'function') {
@@ -903,7 +1861,7 @@
             } else {
                 const rawOrders = (typeof window.getStore === 'function') ? window.getStore('tani_orders_list') : localStorage.getItem('tani_orders_list');
                 const orders = window.safeArray ? window.safeArray(rawOrders) : (Array.isArray(rawOrders) ? rawOrders : []);
-                const it = orders.find(x => String(x.id) === String(linkedId) || String(x.orderNo) === String(linkedId));
+                const it = orders.find((x) => String(x.id) === String(linkedId) || String(x.orderNo) === String(linkedId));
                 if (it) {
                     it.status = 'loom';
                     if (typeof window.setStore === 'function') window.setStore('tani_orders_list', orders);
@@ -912,17 +1870,19 @@
         }
 
         if (typeof window.saveKarigerSheets === 'function') window.saveKarigerSheets(window.activeKarigerId, sheets);
+        updateSheetSetupSummaryLine(sh);
         renderSheetRows(sh);
         updateLiveStockDisplay();
+        notifyGlobalSync();
+        showSheetToast('✅ Sheet config save & sync ho gayi!');
     };
 
     /* ========================================================================
-       5. LINE ROW SAVE / EDIT / DELETE (WITH AUTO ROLLOVER)
-       ------------------------------------------------------------------------
+       5. LINE ROW SAVE / EDIT / DELETE
     ======================================================================== */
     const saveTaniRow = () => {
         if (!window.activeKarigerId) return alert('Pehle Kariger chunein!');
-        let sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(window.activeKarigerId) : [];
+        const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(window.activeKarigerId) : [];
         const sh = sheets[window.activeSheetIndex];
         if (!sh) return;
 
@@ -931,8 +1891,7 @@
         const sDesign = (kariger && kariger.saree) ? kariger.saree : 'General Saree';
         const kGodown = kariger ? (kariger.karkhanaId || 'k_main') : 'k_main';
 
-        const d = (document.getElementById('row-date')?.value) || 
-                  ((typeof window.getTodayDate === 'function') ? window.getTodayDate() : new Date().toISOString().split('T')[0]);
+        const d = toIsoDate(document.getElementById('row-date')?.value || '') || getTodayIso();
 
         const bCone = safeNum(document.getElementById('row-cone')?.value);
         const bLess = safeNum(document.getElementById('row-lesstp')?.value);
@@ -944,6 +1903,12 @@
         const paid = safeNum(document.getElementById('row-paid')?.value);
         const retB = safeNum(document.getElementById('row-retbana')?.value);
         const retZ = safeNum(document.getElementById('row-retzari')?.value);
+
+        if (bCone === 0 && zQty === 0 && saree === 0 && lott === 0 && paid === 0 && retB === 0 && retZ === 0) {
+            alert('Kripya kam se kam ek value (Saree, Bana, Zari ya Paid) bharein!');
+            document.getElementById('row-saree')?.focus();
+            return;
+        }
 
         const banaItemName = String(document.getElementById('line-bana-name')?.value || sh.banaItem || '').trim();
         const zariItemName = String(document.getElementById('line-zari-name')?.value || sh.zariItem || '').trim();
@@ -1001,6 +1966,8 @@
             window.editingRowIndex = null;
             const sBtn = document.getElementById('row-submit-btn');
             if (sBtn) sBtn.textContent = '+ Line Jodein & Stock Minus';
+            const cBtn = document.getElementById('kar-row-cancel-edit-btn');
+            if (cBtn) cBtn.style.display = 'none';
         } else {
             savedIndex = sh.rows.length;
             sh.rows.push(rowObj);
@@ -1089,6 +2056,7 @@
             if (typeof window.setStore === 'function') window.setStore('zari_history', zHist);
         }
 
+        setVal('row-date', getTodayIso());
         setVal('row-saree', '');
         setVal('row-lott', '');
         setVal('row-cone', '');
@@ -1107,18 +2075,20 @@
         const isLastSheet = (window.activeSheetIndex === sheets.length - 1);
         const savedSheetIndex = window.activeSheetIndex;
 
-        if (!isEditing && isLastSheet && targetTaniPcs > 0 && deliveredSoFar >= targetTaniPcs) {
-            alert(`🎉 मुबारक!\n\n${kName} की [${sh.title}] (${targetTaniPcs} साड़ी) पूरी हो गई!\n\nनई तानी जोड़ने के लिए '+ Nayi Tani Sheet' बटन दबाएं (अगर नया ताना तैयार है)।`);
-            renderSheetRows(sh);
-            updateLiveStockDisplay();
-        } else {
-            renderSheetRows(sh);
-            updateLiveStockDisplay();
+        renderSheetRows(sh);
+        updateLiveStockDisplay();
+        notifyGlobalSync();
+        showSheetToast(isEditing ? '✅ Line update ho gayi!' : '✅ Line save & stock sync ho gaya!');
 
+        if (!isEditing && isLastSheet && targetTaniPcs > 0 && deliveredSoFar >= targetTaniPcs) {
+            alert(`🎉 मुबारक!\n\n${kName} की [${sh.title}] (${targetTaniPcs} साड़ी) पूरी हो गई!\n\nनई तानी जोड़ने के लिए '+ Nayi Tani' बटन दबाएं (अगर नया ताना तैयार है)।`);
+        } else if (!isEditing) {
             if (confirm('✅ Line jud gayi!\n\nKya aap is le-den ki A6 Thermal Parchi print karna chahte hain?')) {
                 printSingleKarigerRowSlip(savedIndex, savedSheetIndex);
             }
         }
+
+        setTimeout(() => document.getElementById('row-saree')?.focus(), 40);
     };
 
     const editTaniRow = (idx) => {
@@ -1128,7 +2098,7 @@
         const r = sh.rows[idx];
 
         window.editingRowIndex = idx;
-        setVal('row-date', r.date || ((typeof window.getTodayDate === 'function') ? window.getTodayDate() : ''));
+        setVal('row-date', toIsoDate(r.date || getTodayIso()));
         setVal('row-cone', r.cone || '');
         setVal('row-lesstp', r.lessTp || '');
         setVal('row-zariqty', r.zariQty || '');
@@ -1140,8 +2110,12 @@
         setVal('row-retzari', r.retZari || '');
 
         const sBtn = document.getElementById('row-submit-btn');
-        if (sBtn) sBtn.textContent = '✏️ Update Line';
-        window.scrollTo({ top: 350, behavior: 'smooth' });
+        if (sBtn) sBtn.textContent = 'Update Line [Enter]';
+        const cBtn = document.getElementById('kar-row-cancel-edit-btn');
+        if (cBtn) cBtn.style.display = 'inline-block';
+
+        renderSheetRows(sh);
+        setTimeout(() => document.getElementById('row-saree')?.focus(), 40);
     };
 
     const deleteTaniRow = (idx) => {
@@ -1167,25 +2141,27 @@
         sh.rows.splice(idx, 1);
         if (typeof window.saveKarigerSheets === 'function') window.saveKarigerSheets(window.activeKarigerId, sheets);
 
+        if (window.editingRowIndex === idx) cancelEditTaniRow();
         renderSheetRows(sh);
         updateLiveStockDisplay();
-        alert('🗑️ Line delete ho gayi!');
+        notifyGlobalSync();
+        showSheetToast('🗑️ Line delete ho gayi!');
     };
 
     /* ========================================================================
        6. 9-COLUMN SHEET ROWS RENDERER & CALCULATIONS
-       ------------------------------------------------------------------------
     ======================================================================== */
     const renderSheetRows = (sh) => {
         const tbody = document.getElementById('sheet-table-body');
         if (!tbody) return;
 
         const rows = window.safeArray ? window.safeArray(sh?.rows) : [];
+        setText('kar-sheet-row-count', `${rows.length} Entries`);
 
         let totS = 0, totL = 0, totB = 0, totZ = 0, totP = 0, totRB = 0, totRZ = 0;
 
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:15px; color:#888;">Is Tani me koi entry nahi hai.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px; color:#6b7280;">Is Tani me koi entry nahi hai. Right side panel se pehli line jodein.</td></tr>';
         } else {
             let html = '';
             rows.forEach((r, idx) => {
@@ -1198,19 +2174,21 @@
                 totRB += safeNum(r.retBana);
                 totRZ += safeNum(r.retZari);
 
-                html += `<tr>
+                const isEditCls = (window.editingRowIndex === idx) ? ' editing' : '';
+
+                html += `<tr class="kar-khata-row${isEditCls}">
                     <td>${esc(r.date || '-')}</td>
-                    <td><strong style="color:#059669;">${r.netBana ? safeNum(r.netBana).toFixed(2) : '-'}</strong></td>
-                    <td><strong style="color:#ea580c;">${r.netZari ? safeNum(r.netZari).toFixed(2) : '-'}</strong></td>
-                    <td>${safeNum(r.saree)}</td>
-                    <td style="color:#dc2626;"><strong>${safeNum(r.lott)}</strong></td>
-                    <td style="color:#059669; font-weight:700;">₹ ${safeNum(r.paid)}</td>
-                    <td>${safeNum(r.retBana)}</td>
-                    <td>${safeNum(r.retZari)}</td>
+                    <td><strong style="color:#92400e;">${r.netBana ? safeNum(r.netBana).toFixed(2) : '-'}</strong></td>
+                    <td><strong style="color:#b47d00;">${r.netZari ? safeNum(r.netZari).toFixed(2) : '-'}</strong></td>
+                    <td><strong>${safeNum(r.saree) || '-'}</strong></td>
+                    <td style="color:#6b7280;">${safeNum(r.lott) || '-'}</td>
+                    <td style="color:#b47d00; font-weight:800;">${safeNum(r.paid) ? `₹ ${safeNum(r.paid)}` : '-'}</td>
+                    <td>${safeNum(r.retBana) || '-'}</td>
+                    <td>${safeNum(r.retZari) || '-'}</td>
                     <td style="text-align:center; white-space:nowrap;">
-                        <button type="button" title="Is Line Ki Parchi Print" class="sheet-btn" style="background:#0284c7; color:#fff; padding:3px 7px; font-size:11px; font-weight:bold; border-radius:4px; border:none; cursor:pointer;" onclick="printSingleKarigerRowSlip(${idx})">🖨️</button>
-                        <button type="button" class="edit-btn" onclick="editTaniRow(${idx})">✏️</button> 
-                        <button type="button" class="delete-btn" onclick="deleteTaniRow(${idx})">🗑️</button>
+                        <button type="button" title="Is Line Ki Parchi Print" class="kar-row-act-btn" onclick="printSingleKarigerRowSlip(${idx})">Slip</button>
+                        <button type="button" title="Edit Line" class="kar-row-act-btn" onclick="editTaniRow(${idx})">Edit</button>
+                        <button type="button" title="Delete Line" class="kar-row-act-btn" onclick="deleteTaniRow(${idx})">Del</button>
                     </td>
                 </tr>`;
             });
@@ -1258,8 +2236,148 @@
     };
 
     /* ========================================================================
-       7. PRINT ENGINES & WHATSAPP
-       ------------------------------------------------------------------------
+       7. KEYBOARD NAVIGATION ENGINE (#kariger-section & #kariger-sheet-section)
+    ======================================================================== */
+    const handleKarigerKeydown = (e) => {
+        if (isAnyExpressOverlayOpen()) return;
+
+        // 1. Modals take priority
+        const printModal = document.getElementById('kariger-print-options-modal');
+        if (printModal) {
+            if (e.key === 'Escape') { e.preventDefault(); closeKarigerPrintModal(); }
+            else if (e.key === 'Enter') { e.preventDefault(); confirmPrintKarigerSheet(); }
+            return;
+        }
+        const pinModal = document.getElementById('kariger-portal-admin-modal');
+        if (pinModal) {
+            if (e.key === 'Escape') { e.preventDefault(); pinModal.remove(); }
+            return;
+        }
+
+        const kSec = document.getElementById('kariger-section');
+        const shSec = document.getElementById('kariger-sheet-section');
+        const isDirOpen = kSec && kSec.style.display !== 'none';
+        const isSheetOpen = shSec && shSec.style.display !== 'none';
+        if (!isDirOpen && !isSheetOpen) return;
+
+        const tag = (document.activeElement && document.activeElement.tagName) || '';
+        const isTyping = (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA');
+
+        // 2. Inside Tani Khata Sheet
+        if (isSheetOpen) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                if (window.editingRowIndex !== null) {
+                    cancelEditTaniRow();
+                } else if (sheetSetupExpanded) {
+                    toggleSheetSetupDrawer(false);
+                } else {
+                    openKarigerModule();
+                }
+                return;
+            }
+            if (e.key === 'F9') {
+                e.preventDefault();
+                toggleSheetSetupDrawer();
+                return;
+            }
+            if (e.altKey && (e.key === 'n' || e.key === 'N')) {
+                e.preventDefault();
+                addNewTaniSheet();
+                return;
+            }
+            if (e.altKey && (e.key === 'p' || e.key === 'P')) {
+                e.preventDefault();
+                openKarigerPrintModal();
+                return;
+            }
+            if (e.altKey && (e.key === 'w' || e.key === 'W')) {
+                e.preventDefault();
+                sendKarigerWhatsAppParchi();
+                return;
+            }
+            if (e.key === 'F6') {
+                e.preventDefault();
+                document.getElementById('row-saree')?.focus();
+                return;
+            }
+            if (!isTyping && (e.key === '[' || e.key === ']')) {
+                const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(window.activeKarigerId) : [];
+                if (sheets.length > 1) {
+                    e.preventDefault();
+                    const nextIdx = (e.key === ']')
+                        ? (window.activeSheetIndex + 1) % sheets.length
+                        : (window.activeSheetIndex - 1 + sheets.length) % sheets.length;
+                    switchTaniSheetTab(nextIdx);
+                }
+            }
+            return;
+        }
+
+        // 3. Inside Kariger Directory
+        if (isDirOpen) {
+            const addForm = document.getElementById('add-kariger-form');
+            const isFormOpen = addForm && addForm.style.display === 'block';
+
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                if (isFormOpen) toggleKarigerForm();
+                else if (typeof window.backToDashboard === 'function') window.backToDashboard();
+                return;
+            }
+
+            if (e.key === 'F2') {
+                e.preventDefault();
+                cycleKarigerKarkhanaTab();
+                return;
+            }
+
+            if (isTyping) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                highlightKarigerDirRow(karigerListActiveIdx + 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                highlightKarigerDirRow(karigerListActiveIdx - 1);
+            } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+                e.preventDefault();
+                nextKarigerPage();
+            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                e.preventDefault();
+                prevKarigerPage();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const chosen = currentKarigerPageRowsCache[karigerListActiveIdx];
+                if (chosen) openKarigerSheet(chosen.id);
+            } else if (e.key === 'e' || e.key === 'E') {
+                e.preventDefault();
+                window.__karEditSelected();
+            } else if (e.key === 'Delete') {
+                e.preventDefault();
+                window.__karDeleteSelected();
+            } else if (e.key === 'a' || e.key === 'A') {
+                e.preventDefault();
+                openKarigerPortalLoginModal();
+            } else if (e.key === 'F7' || e.key === '+') {
+                e.preventDefault();
+                toggleKarigerForm();
+            } else if (e.key === '/') {
+                e.preventDefault();
+                const sEl = document.getElementById('search-kariger-input');
+                if (sEl) { sEl.focus(); sEl.select(); }
+            }
+        }
+    };
+
+    const bindKarigerKeyboardEngine = () => {
+        if (window.__karigerKeysBound) return;
+        window.__karigerKeysBound = true;
+        document.addEventListener('keydown', handleKarigerKeydown);
+    };
+
+    /* ========================================================================
+       8. PRINT ENGINES & WHATSAPP (WHITE & GOLD MODAL + A6 THERMAL PRINT)
     ======================================================================== */
     const printSingleKarigerRowSlip = (idx, sheetIdx = null) => {
         if (!window.activeKarigerId) return alert('Pehle Kariger chunein!');
@@ -1313,9 +2431,9 @@
                         <tbody>
                             ${safeNum(r.netBana) > 0 ? `<tr><td>बाना दिया (${esc(r.banaItem || sh.banaItem || 'बाना')})</td><td style="text-align:right; font-weight:bold;">${safeNum(r.netBana).toFixed(2)} Kg</td></tr>` : ''}
                             ${safeNum(r.netZari) > 0 ? `<tr><td>जरी दिया (${esc(r.zariItem || sh.zariItem || 'जरी')})</td><td style="text-align:right; font-weight:bold;">${safeNum(r.netZari).toFixed(2)} Kg</td></tr>` : ''}
-                            ${safeNum(r.saree) > 0 ? `<tr><td>साड़ी जमा</td><td style="text-align:right; font-weight:bold; color:#059669;">+${safeNum(r.saree)} Pcs</td></tr>` : ''}
-                            ${safeNum(r.lott) > 0 ? `<tr><td>लोट साड़ी</td><td style="text-align:right; font-weight:bold; color:#dc2626;">-${safeNum(r.lott)} Pcs</td></tr>` : ''}
-                            ${safeNum(r.paid) > 0 ? `<tr><td>मजदूरी दिया (Paid)</td><td style="text-align:right; font-weight:bold; color:#059669;">₹ ${safeNum(r.paid).toFixed(2)}</td></tr>` : ''}
+                            ${safeNum(r.saree) > 0 ? `<tr><td>साड़ी जमा</td><td style="text-align:right; font-weight:bold;">+${safeNum(r.saree)} Pcs</td></tr>` : ''}
+                            ${safeNum(r.lott) > 0 ? `<tr><td>लोट साड़ी</td><td style="text-align:right; font-weight:bold;">-${safeNum(r.lott)} Pcs</td></tr>` : ''}
+                            ${safeNum(r.paid) > 0 ? `<tr><td>मजदूरी दिया (Paid)</td><td style="text-align:right; font-weight:bold;">₹ ${safeNum(r.paid).toFixed(2)}</td></tr>` : ''}
                             ${safeNum(r.retBana) > 0 ? `<tr><td>वापस बाना</td><td style="text-align:right;">${safeNum(r.retBana).toFixed(2)} Kg</td></tr>` : ''}
                             ${safeNum(r.retZari) > 0 ? `<tr><td>वापस जरी</td><td style="text-align:right;">${safeNum(r.retZari).toFixed(2)} Kg</td></tr>` : ''}
                         </tbody>
@@ -1343,30 +2461,26 @@
         if (existingModal) existingModal.remove();
 
         const modalHtml = `
-            <div id="kariger-print-options-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999999; display:flex; align-items:center; justify-content:center; padding:15px; box-sizing:border-box;">
-                <div style="background:#ffffff; width:100%; max-width:420px; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.3); overflow:hidden;">
-                    <div style="background:#1e3a8a; color:#ffffff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
-                        <h3 style="margin:0; font-size:16px;">🖨️ Tani Khata Print (A6 Format)</h3>
-                        <button type="button" onclick="closeKarigerPrintModal()" style="background:transparent; border:none; color:#ffffff; font-size:22px; cursor:pointer;">&times;</button>
+            <div id="kariger-print-options-modal" style="position:fixed; inset:0; background:rgba(31,41,55,0.38); backdrop-filter:blur(2px); z-index:999999; display:flex; align-items:center; justify-content:center; padding:15px; box-sizing:border-box; font-family:'Inter','Segoe UI',system-ui,sans-serif;">
+                <div style="background:#ffffff; width:100%; max-width:420px; border:1.5px solid #d9b86c; border-radius:8px; box-shadow:0 18px 42px rgba(0,0,0,0.16); overflow:hidden;">
+                    <div style="background:#fdf6e2; color:#1f2937; border-bottom:1.5px solid #e5d5a7; padding:11px 16px; display:flex; justify-content:space-between; align-items:center;">
+                        <h3 style="margin:0; font-size:15px; font-weight:800;">Tani Khata Print (A6 Format)</h3>
+                        <button type="button" onclick="closeKarigerPrintModal()" style="background:#ffffff; border:1px solid #d1d5db; border-radius:4px; color:#374151; font-size:12px; font-weight:700; padding:4px 9px; cursor:pointer;">[Esc] Close</button>
                     </div>
                     <div style="padding:16px;">
                         <p style="font-size:13px; color:#374151; margin-top:0;">Aap is Tani Khata ko kis format me print karna chahte hain?</p>
-                        <div style="background:#f8fafc; border:1px solid #cbd5e1; padding:12px; border-radius:8px; margin-bottom:15px;">
+                        <div style="background:#fdfcf7; border:1px solid #e5d5a7; padding:12px; border-radius:6px; margin-bottom:15px;">
                             <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
                                 <input type="checkbox" id="chk-include-tani-summary" checked style="margin-top:3px; cursor:pointer;">
                                 <div>
-                                    <strong style="color:#1e3a8a; font-size:13px;">Niche wali Summary sath me print karein</strong>
-                                    <div style="font-size:11px; color:#64748b; margin-top:2px;">(Gross Mazdoori, Diya, Baaki Rupya, aur Bana/Zari ka bacha wazan sath me aayega)</div>
+                                    <strong style="color:#92400e; font-size:13px;">Niche wali Summary sath me print karein</strong>
+                                    <div style="font-size:11px; color:#6b7280; margin-top:2px;">(Gross Mazdoori, Diya, Baaki Rupya, aur Bana/Zari ka bacha wazan sath me aayega)</div>
                                 </div>
                             </label>
                         </div>
-                        <div style="display:flex; gap:8px;">
-                            <button type="button" onclick="confirmPrintKarigerSheet()" style="background:#1e3a8a; color:#ffffff; border:none; flex:1; padding:10px; border-radius:6px; font-weight:bold; font-size:13px; cursor:pointer;">
-                                🚀 Print Shuru Karein
-                            </button>
-                            <button type="button" onclick="closeKarigerPrintModal()" style="background:#e2e8f0; color:#334155; border:none; padding:10px 14px; border-radius:6px; font-weight:bold; font-size:13px; cursor:pointer;">
-                                Cancel
-                            </button>
+                        <div style="display:flex; justify-content:flex-end; gap:8px;">
+                            <button type="button" onclick="closeKarigerPrintModal()" style="background:#ffffff; color:#374151; border:1px solid #d1d5db; padding:8px 14px; border-radius:5px; font-weight:700; font-size:12.5px; cursor:pointer;">Cancel [Esc]</button>
+                            <button type="button" onclick="confirmPrintKarigerSheet()" style="background:#f2b71d; color:#1f2937; border:1px solid #d9a425; padding:8px 16px; border-radius:5px; font-weight:800; font-size:12.5px; cursor:pointer;">Print Shuru Karein [Enter]</button>
                         </div>
                     </div>
                 </div>
@@ -1435,7 +2549,7 @@
         if (includeSummary) {
             summaryHtml = `
                 <div style="margin-top:8px; border-top:1.5px dashed #000; padding-top:4px;">
-                    <div style="font-weight:bold; font-size:11px; margin-bottom:3px; background:#f1f5f9; padding:2px 4px; border:1px solid #cbd5e1;">💰 मजदूरी & साड़ी हिसाब</div>
+                    <div style="font-weight:bold; font-size:11px; margin-bottom:3px; background:#f5f5f5; padding:2px 4px; border:1px solid #999;">💰 मजदूरी & साड़ी हिसाब</div>
                     <div style="display:flex; justify-content:space-between; font-size:10px;">
                         <span>कुल साड़ी: ${c.totSaree} Pcs | लोट: -${c.totLott} Pcs</span>
                         <span><strong>नेट साड़ी: ${c.netSaree} Pcs</strong></span>
@@ -1449,7 +2563,7 @@
                         <span style="font-size:11px; font-weight:bold; color:#000;">अंतिम बाकी: ₹ ${c.remainingAmt.toFixed(2)}</span>
                     </div>
 
-                    <div style="font-weight:bold; font-size:11px; margin:6px 0 3px; background:#f1f5f9; padding:2px 4px; border:1px solid #cbd5e1;">🧶 कच्चा माल हिसाब (बाना & जरी)</div>
+                    <div style="font-weight:bold; font-size:11px; margin:6px 0 3px; background:#f5f5f5; padding:2px 4px; border:1px solid #999;">🧶 कच्चा माल हिसाब (बाना & जरी)</div>
                     <div style="display:flex; justify-content:space-between; font-size:10px;">
                         <span>बाना (खपत: ${c.banaConsumption.toFixed(2)} Kg)</span>
                         <span><strong>बचा बाना: ${c.remainingBana.toFixed(2)} Kg</strong></span>
@@ -1564,8 +2678,7 @@
     };
 
     /* ========================================================================
-       8. GLOBAL EXPORTS
-       ------------------------------------------------------------------------
+       9. GLOBAL EXPORTS
     ======================================================================== */
     const karigerUIAPI = {
         openKarigerModule,
@@ -1607,13 +2720,14 @@
     };
 
     Object.keys(karigerUIAPI).forEach((fnName) => {
+        if (fnName === 'backToDashboard' && typeof window.backToDashboard === 'function') return;
         window[fnName] = karigerUIAPI[fnName];
     });
 
     window.KarigerUIEngine = karigerUIAPI;
 })();
 /* ============================================================================
-   KARIGER MOBILE PORTAL ADMIN MODAL (STRICT TENANT LOCKED)
+   KARIGER MOBILE PORTAL ADMIN MODAL (STRICT TENANT LOCKED — WHITE & GOLD)
 ============================================================================ */
 (() => {
     'use strict';
@@ -1676,14 +2790,14 @@
         const tenantId = detectTenantId();
         const tbody = document.getElementById('kp-accounts-tbody');
         if (!tenantId) {
-            if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#dc2626; padding:12px;">Pehle apne account se login karein!</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#92400e; padding:12px;">Pehle apne account se login karein!</td></tr>';
             return;
         }
-        if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:12px;">Loading... ⏳</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:12px; color:#6b7280;">Loading...</td></tr>';
 
         const { data, error } = await sb.rpc('kariger_admin_list_accounts', { p_tenant_id: tenantId });
         if (error || !data || !data.ok) {
-            if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#dc2626; padding:12px;">Error: ${escH(error?.message || 'Load nahi hua')}</td></tr>`;
+            if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#92400e; padding:12px;">Error: ${escH(error?.message || 'Load nahi hua')}</td></tr>`;
             return;
         }
         cachedAccounts = Array.isArray(data.accounts) ? data.accounts : [];
@@ -1694,19 +2808,19 @@
         const tbody = document.getElementById('kp-accounts-tbody');
         if (!tbody) return;
         if (!cachedAccounts.length) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:14px; color:#64748b;">Abhi koi Kariger PIN nahi bana hai.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:14px; color:#6b7280;">Abhi koi Kariger PIN nahi bana hai.</td></tr>';
             return;
         }
         tbody.innerHTML = cachedAccounts.map((a) => `
-            <tr style="border-bottom:1px solid #e2e8f0;">
-                <td style="padding:8px 6px; font-weight:700;">${escH(a.kariger_name)}</td>
-                <td style="padding:8px 6px;">${escH(a.mobile)}</td>
-                <td style="padding:8px 6px; font-weight:800; color:#ea580c;">${escH(a.pin)}</td>
-                <td style="padding:8px 6px;">${a.is_active ? '<span style="color:#15803d; font-weight:700;">🟢 Active</span>' : '<span style="color:#dc2626; font-weight:700;">🔴 Blocked</span>'}</td>
+            <tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:8px 6px; font-weight:700; color:#1f2937;">${escH(a.kariger_name)}</td>
+                <td style="padding:8px 6px; color:#374151;">${escH(a.mobile)}</td>
+                <td style="padding:8px 6px; font-weight:800; color:#b47d00;">${escH(a.pin)}</td>
+                <td style="padding:8px 6px;">${a.is_active ? '<span style="color:#92400e; font-weight:700;">Active</span>' : '<span style="color:#6b7280; font-weight:700;">Blocked</span>'}</td>
                 <td style="padding:8px 6px; white-space:nowrap;">
-                    <button type="button" onclick="kpShareWa('${escH(a.kariger_id)}')" style="background:#16a34a; color:#fff; border:none; border-radius:5px; padding:4px 7px; font-size:11px; cursor:pointer;">📲 WA</button>
-                    <button type="button" onclick="kpFillForm('${escH(a.kariger_id)}')" style="background:#0284c7; color:#fff; border:none; border-radius:5px; padding:4px 7px; font-size:11px; cursor:pointer;">✏️</button>
-                    <button type="button" onclick="kpDeleteAcc('${escH(a.kariger_id)}')" style="background:#dc2626; color:#fff; border:none; border-radius:5px; padding:4px 7px; font-size:11px; cursor:pointer;">🗑️</button>
+                    <button type="button" onclick="kpShareWa('${escH(a.kariger_id)}')" style="background:#f2b71d; color:#1f2937; border:1px solid #d9a425; border-radius:4px; padding:3px 7px; font-size:11px; font-weight:700; cursor:pointer;">WA</button>
+                    <button type="button" onclick="kpFillForm('${escH(a.kariger_id)}')" style="background:#ffffff; color:#374151; border:1px solid #d1d5db; border-radius:4px; padding:3px 7px; font-size:11px; font-weight:700; cursor:pointer;">Edit</button>
+                    <button type="button" onclick="kpDeleteAcc('${escH(a.kariger_id)}')" style="background:#ffffff; color:#374151; border:1px solid #d1d5db; border-radius:4px; padding:3px 7px; font-size:11px; font-weight:700; cursor:pointer;">Del</button>
                 </td>
             </tr>
         `).join('');
@@ -1750,7 +2864,7 @@
         localStorage.setItem(`${tenantId}_kariger_portal_firm_name`, firm);
 
         const btn = document.getElementById('kp-save-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Saving... ⏳'; }
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
 
         const { data, error } = await sb.rpc('kariger_admin_save_account', {
             p_tenant_id: tenantId,
@@ -1762,7 +2876,7 @@
             p_is_active: isActive
         });
 
-        if (btn) { btn.disabled = false; btn.textContent = '💾 Save ID'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Save ID'; }
 
         if (error || !data || !data.ok) {
             return alert('Save nahi hua: ' + (error?.message || data?.error || ''));
@@ -1820,61 +2934,61 @@
         const savedFirm = getDefaultFirmName(tenantId);
 
         const html = `
-        <div id="kariger-portal-admin-modal" style="position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:999999; display:flex; align-items:center; justify-content:center; padding:12px;">
-            <div style="background:#fff; width:100%; max-width:520px; max-height:92vh; border-radius:16px; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.4);">
-                <div style="background:#0f172a; color:#fff; padding:14px 16px; display:flex; justify-content:space-between; align-items:center;">
+        <div id="kariger-portal-admin-modal" style="position:fixed; inset:0; background:rgba(31,41,55,0.38); backdrop-filter:blur(2px); z-index:999999; display:flex; align-items:center; justify-content:center; padding:12px; font-family:'Inter','Segoe UI',system-ui,sans-serif;">
+            <div style="background:#ffffff; width:100%; max-width:540px; max-height:92vh; border:1.5px solid #d9b86c; border-radius:8px; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+                <div style="background:#fdf6e2; color:#1f2937; border-bottom:1.5px solid #e5d5a7; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <div style="font-size:16px; font-weight:800;">🧵 Kariger Mobile Logins (Hisab Portal)</div>
-                        <div style="font-size:11.5px; color:#94a3b8;">Master list se Kariger chunein aur 4-Digit PIN banayein</div>
+                        <div style="font-size:15px; font-weight:800;">Kariger Mobile Logins (Hisab Portal)</div>
+                        <div style="font-size:11.5px; color:#92400e;">Master list se Kariger chunein aur 4-Digit PIN banayein</div>
                     </div>
-                    <button type="button" onclick="document.getElementById('kariger-portal-admin-modal').remove()" style="background:transparent; border:none; color:#fff; font-size:24px; cursor:pointer;">&times;</button>
+                    <button type="button" onclick="document.getElementById('kariger-portal-admin-modal').remove()" style="background:#ffffff; border:1px solid #d1d5db; border-radius:4px; color:#374151; font-size:12px; font-weight:700; padding:4px 9px; cursor:pointer;">[Esc] Close</button>
                 </div>
                 <div style="padding:14px; overflow-y:auto; flex:1;">
-                    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:10px 12px; margin-bottom:12px;">
-                        <div style="font-size:12px; font-weight:700; color:#1e3a8a;">📱 Kariger Mobile Link:</div>
-                        <div style="font-size:12px; color:#2563eb; word-break:break-all; margin:4px 0 8px; font-weight:700;">${PORTAL_LINK}</div>
-                        <button type="button" onclick="kpCopyLink()" style="background:#0284c7; color:#fff; border:none; border-radius:7px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer;">📋 Copy Link</button>
+                    <div style="background:#fdfcf7; border:1px solid #e5d5a7; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
+                        <div style="font-size:12px; font-weight:700; color:#92400e;">Kariger Mobile Link:</div>
+                        <div style="font-size:12px; color:#1f2937; word-break:break-all; margin:4px 0 8px; font-weight:700;">${PORTAL_LINK}</div>
+                        <button type="button" onclick="kpCopyLink()" style="background:#ffffff; color:#1f2937; border:1px solid #d1d5db; border-radius:5px; padding:5px 12px; font-size:12px; font-weight:700; cursor:pointer;">Copy Link</button>
                     </div>
 
-                    <div style="border:1.5px solid #e2e8f0; border-radius:12px; padding:12px; margin-bottom:14px; background:#f8fafc;">
-                        <div style="font-size:13px; font-weight:800; color:#0f172a; margin-bottom:10px;">➕ Kariger Login Banayein / Update Karein:</div>
+                    <div style="border:1px solid #e5d5a7; border-radius:6px; padding:12px; margin-bottom:14px; background:#fdfcf7;">
+                        <div style="font-size:13px; font-weight:800; color:#1f2937; margin-bottom:10px;">Kariger Login Banayein / Update Karein:</div>
                         <div style="margin-bottom:8px;">
-                            <label style="font-size:11.5px; font-weight:700; color:#334155;">Kariger Chunein (Master Sheet Se):</label>
-                            <select id="kp-kar-select" onchange="kpFillForm(this.value)" style="width:100%; padding:9px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; margin-top:3px; background:#fff;">
+                            <label style="font-size:11.5px; font-weight:700; color:#374151;">Kariger Chunein:</label>
+                            <select id="kp-kar-select" onchange="kpFillForm(this.value)" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; margin-top:3px; background:#fff;">
                                 <option value="">-- Kariger Select Karein --</option>
                                 ${optionsHtml}
                             </select>
                         </div>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
                             <div>
-                                <label style="font-size:11.5px; font-weight:700; color:#334155;">Mobile No (Login ID):</label>
-                                <input type="tel" id="kp-mobile" maxlength="10" placeholder="10-digit Mobile" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; margin-top:3px;">
+                                <label style="font-size:11.5px; font-weight:700; color:#374151;">Mobile No (Login ID):</label>
+                                <input type="tel" id="kp-mobile" maxlength="10" placeholder="10-digit Mobile" style="width:100%; box-sizing:border-box; padding:8px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; margin-top:3px;">
                             </div>
                             <div>
-                                <label style="font-size:11.5px; font-weight:700; color:#334155;">4-Digit PIN:</label>
-                                <input type="text" id="kp-pin" maxlength="4" value="1234" style="width:100%; padding:8px; border:1px solid #ef4444; border-radius:8px; font-size:13px; font-weight:800; margin-top:3px;">
+                                <label style="font-size:11.5px; font-weight:700; color:#374151;">4-Digit PIN:</label>
+                                <input type="text" id="kp-pin" maxlength="4" value="1234" style="width:100%; box-sizing:border-box; padding:8px; border:1px solid #d9a425; border-radius:4px; font-size:13px; font-weight:800; margin-top:3px;">
                             </div>
                         </div>
                         <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:end;">
                             <div>
-                                <label style="font-size:11.5px; font-weight:700; color:#334155;">Karkhane Ka Naam:</label>
-                                <input type="text" id="kp-firm" value="${escH(savedFirm)}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; margin-top:3px;">
+                                <label style="font-size:11.5px; font-weight:700; color:#374151;">Karkhane Ka Naam:</label>
+                                <input type="text" id="kp-firm" value="${escH(savedFirm)}" style="width:100%; box-sizing:border-box; padding:8px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; margin-top:3px;">
                             </div>
                             <div>
-                                <label style="font-size:11.5px; font-weight:700; color:#334155;">Status:</label>
-                                <select id="kp-status" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; margin-top:3px; background:#fff;">
-                                    <option value="true">🟢 Active</option>
-                                    <option value="false">🔴 Blocked</option>
+                                <label style="font-size:11.5px; font-weight:700; color:#374151;">Status:</label>
+                                <select id="kp-status" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; margin-top:3px; background:#fff;">
+                                    <option value="true">Active</option>
+                                    <option value="false">Blocked</option>
                                 </select>
                             </div>
-                            <button type="button" id="kp-save-btn" onclick="kpSaveAccount()" style="background:#16a34a; color:#fff; border:none; border-radius:8px; padding:9px 14px; font-size:12.5px; font-weight:800; cursor:pointer;">💾 Save ID</button>
+                            <button type="button" id="kp-save-btn" onclick="kpSaveAccount()" style="background:#f2b71d; color:#1f2937; border:1px solid #d9a425; border-radius:5px; padding:8px 14px; font-size:12.5px; font-weight:800; cursor:pointer;">Save ID</button>
                         </div>
                     </div>
 
                     <div style="overflow-x:auto;">
-                        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                        <table style="width:100%; border-collapse:collapse; font-size:12px; border:1px solid #e5d5a7;">
                             <thead>
-                                <tr style="background:#0f172a; color:#fff; text-align:left;">
+                                <tr style="background:#fdf6e2; color:#1f2937; text-align:left; border-bottom:1.5px solid #e5d5a7;">
                                     <th style="padding:8px 6px;">Kariger</th>
                                     <th style="padding:8px 6px;">Mobile</th>
                                     <th style="padding:8px 6px;">PIN</th>
@@ -1896,37 +3010,17 @@
     };
 
     const injectPortalButtons = () => {
-        const tabsBar = document.getElementById('kariger-karkhana-tabs-bar');
-        if (tabsBar && tabsBar.parentElement && !document.getElementById('btn-kariger-portal-logins')) {
-            const btn = document.createElement('button');
-            btn.id = 'btn-kariger-portal-logins';
-            btn.type = 'button';
-            btn.textContent = '📱 Kariger App Logins (PIN)';
-            btn.style.cssText = 'background:#0f172a; color:#fff; border:none; padding:8px 14px; border-radius:8px; font-size:12.5px; font-weight:800; cursor:pointer; margin:0 0 10px 0;';
-            btn.onclick = () => openKarigerPortalLoginModal();
-            tabsBar.parentElement.insertBefore(btn, tabsBar);
-        }
-
         const waBtn = document.querySelector('button[onclick*="sendKarigerWhatsAppParchi"]');
         if (waBtn && waBtn.parentElement && !document.getElementById('btn-sheet-kariger-pin')) {
             const sBtn = document.createElement('button');
             sBtn.id = 'btn-sheet-kariger-pin';
             sBtn.type = 'button';
             sBtn.className = 'sheet-btn';
-            sBtn.textContent = '📱 App PIN & Link';
-            sBtn.style.cssText = 'background:#0f172a; color:#fff; padding:6px 12px; font-weight:bold; border-radius:6px; border:none; cursor:pointer; margin-left:6px;';
+            sBtn.textContent = 'App PIN & Link';
             sBtn.onclick = () => openKarigerPortalLoginModal(window.activeKarigerId || null);
             waBtn.parentElement.insertBefore(sBtn, waBtn.nextSibling);
         }
     };
-
-    const origOpenModule = window.openKarigerModule;
-    if (typeof origOpenModule === 'function') {
-        window.openKarigerModule = function () {
-            origOpenModule.apply(this, arguments);
-            injectPortalButtons();
-        };
-    }
 
     const origOpenSheet = window.openKarigerSheet;
     if (typeof origOpenSheet === 'function') {
