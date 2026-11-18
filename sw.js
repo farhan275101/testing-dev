@@ -1,17 +1,17 @@
 /* ============================================================================
    SIMPLICITY ERP - HIGH-PERFORMANCE OFFLINE-FIRST PWA SERVICE WORKER
    File: sw.js • Developed by Farhan Jawed
-   Architecture: Network-First for Fresh Updates | Safe Offline Fallback (v10)
+   Architecture: Network-First for Fresh Updates | Safe Offline Fallback (v11)
 ============================================================================ */
 
-const CACHE_NAME = 'simplicity-cache-v10';
+const CACHE_NAME = 'simplicity-cache-v11';
 
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './sancha.html',
   './landing.html',
-  './style.css',
+  './style.css?v=3.4',
   './manifest.json?v=3.3',
   './icon-192.png?v=3.3',
   './icon-512.png?v=3.3',
@@ -21,6 +21,7 @@ const ASSETS_TO_CACHE = [
   './core/storage.js',
   './core/database.js',
   './core/karkhana.js',
+  './core/tally-master.js?v=3.4',
 
   // Access & Profile
   './auth/auth.js',
@@ -94,7 +95,6 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Never cache Supabase, Firebase, Google APIs or WebSockets
   if (
     url.hostname.includes('supabase.co') ||
     url.hostname.includes('firebaseio.com') ||
@@ -106,7 +106,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-First with Safe Offline Cache Fallback
   event.respondWith(
     fetch(request, { cache: 'no-cache' })
       .then((networkResponse) => {
