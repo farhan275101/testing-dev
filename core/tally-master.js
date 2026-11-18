@@ -1,5 +1,5 @@
 /* ============================================================================
-   SIMPLICITY ERP - TALLYPRIME DASHBOARD, GATEWAY & CREATE/ALTER ENGINE
+   SIMPLICITY ERP - TALLYPRIME DASHBOARD, GATEWAY, STOCK SUMMARY & CREATE/ALTER
    File: core/tally-master.js • Developed by Farhan Jawed
    Note: Uses existing kariger_list & jobwork_workers stores (100% Supabase-safe)
 ============================================================================ */
@@ -96,6 +96,24 @@
         return m ? parseFloat(m[0]) || 0 : 0;
     };
 
+    const slSyncStockSummaryValues = (banaVal, zariVal, taniVal, chukkaVal, sareeVal) => {
+        const gwValEl = document.getElementById('btn-total-stock-summary');
+        if (gwValEl) {
+            const fmtShort = (n) => (n % 1 === 0 ? String(Math.round(n)) : n.toFixed(1));
+            gwValEl.textContent = `${fmtShort(banaVal + zariVal)} Kg · ${Math.round(sareeVal)} Pc`;
+        }
+
+        const ssBana = document.getElementById('ss-val-bana');
+        const ssZari = document.getElementById('ss-val-zari');
+        const ssSancha = document.getElementById('ss-val-sancha');
+        const ssSaree = document.getElementById('ss-val-saree');
+
+        if (ssBana) ssBana.textContent = `Bacha: ${banaVal.toFixed(2)} Kg`;
+        if (ssZari) ssZari.textContent = `Bacha: ${zariVal.toFixed(2)} Kg`;
+        if (ssSancha) ssSancha.textContent = `Tani: ${taniVal.toFixed(1)} Kg · Chukka: ${chukkaVal.toFixed(1)} Kg`;
+        if (ssSaree) ssSaree.textContent = `Stock: ${Math.round(sareeVal)} Pcs`;
+    };
+
     window.slSyncDashboardCharts = function () {
         const todayEl = document.getElementById('sl-today-date');
         if (todayEl) {
@@ -132,6 +150,8 @@
             taniVal = slParseNum(sanchaTxt);
         }
         const sareeVal = slParseNum(sareeTxt);
+
+        slSyncStockSummaryValues(banaVal, zariVal, taniVal, chukkaVal, sareeVal);
 
         const fmtKg = (n) => (n % 1 === 0 ? String(Math.round(n)) : n.toFixed(1));
         const setBar = (idVal, idH, label, pct) => {
@@ -256,7 +276,146 @@
     };
 
     /* ========================================================================
-       3. TALLY MASTER CREATE & ALTER MODULE (SELF-INJECTED HTML + ENGINE)
+       3. TALLY STOCK SUMMARY HUB (BANA / ZARI / SANCHA / SAREE DRILL-DOWN)
+    ======================================================================== */
+    let ssActiveIdx = 0;
+
+    const ensureStockSummaryStyles = () => {
+        if (document.getElementById('ss-tally-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'ss-tally-styles';
+        style.textContent = `
+            .ss-wrap { padding: 16px 20px; }
+            .ss-table { width: 100%; border-collapse: collapse; border: 1px solid #e5d5a7; border-radius: 6px; overflow: hidden; background: #ffffff; }
+            .ss-table th {
+                background: #fdf6e2; color: #1f2937; font-size: 12px; font-weight: 800;
+                padding: 10px 14px; text-align: left; border-bottom: 1.5px solid #e5d5a7;
+            }
+            .ss-row {
+                cursor: pointer; border-bottom: 1px solid #f3f4f6;
+                transition: background 0.1s ease;
+            }
+            .ss-row:hover { background: #fef9ea; }
+            .ss-row.active { background: #f2b71d !important; color: #1f2937; }
+            .ss-row td { padding: 12px 14px; font-size: 13.5px; color: #1f2937; }
+            .ss-row.active td { font-weight: 700; }
+            .ss-key-badge {
+                display: inline-block; min-width: 22px; text-align: center;
+                padding: 2px 7px; border-radius: 4px; font-size: 11.5px; font-weight: 800;
+                background: #fdf6e2; border: 1px solid #d9b86c; color: #92400e;
+            }
+            .ss-row.active .ss-key-badge { background: #ffffff; color: #1f2937; border-color: #b47d00; }
+            .ss-val-cell { font-weight: 800; color: #b47d00; text-align: right; font-variant-numeric: tabular-nums; }
+            .ss-row.active .ss-val-cell { color: #1f2937; }
+        `;
+        document.head.appendChild(style);
+    };
+
+    const ensureStockSummaryDOM = () => {
+        ensureStockSummaryStyles();
+        const sec = document.getElementById('stock-summary-section');
+        if (!sec || sec.dataset.ssInitialized === '1') return;
+
+        sec.innerHTML = `
+            <div class="tm-topbar">
+                <div class="tm-topbar-left">
+                    <h2>Stock Summary (Tally Style)</h2>
+                    <span class="tm-grp-pill" id="ss-godown-badge">Sabhi Karkhane</span>
+                </div>
+                <button type="button" class="tm-esc-btn" onclick="backToDashboard()">← [Esc] Dashboard</button>
+            </div>
+
+            <div class="ss-wrap">
+                <table class="ss-table">
+                    <thead>
+                        <tr>
+                            <th style="width:55px;">#</th>
+                            <th>Stock Group (Particulars)</th>
+                            <th style="width:100px; text-align:center;">Key</th>
+                            <th style="text-align:right;">Available Stock (Closing)</th>
+                            <th style="width:110px; text-align:right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="ss-row active" data-ss-idx="0" onclick="ssOpenStockGroup(0)">
+                            <td>1</td>
+                            <td><strong>Bana Stock</strong> <small style="color:#6b7280; display:block; font-size:11.5px;">Raw Bana Yarn &amp; Kariger Issue Register</small></td>
+                            <td style="text-align:center;"><span class="ss-key-badge">B</span></td>
+                            <td class="ss-val-cell" id="ss-val-bana">Bacha: 0.00 Kg</td>
+                            <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
+                        </tr>
+                        <tr class="ss-row" data-ss-idx="1" onclick="ssOpenStockGroup(1)">
+                            <td>2</td>
+                            <td><strong>Zari Stock</strong> <small style="color:#6b7280; display:block; font-size:11.5px;">Zari &amp; Metallic Thread Register</small></td>
+                            <td style="text-align:center;"><span class="ss-key-badge">Z</span></td>
+                            <td class="ss-val-cell" id="ss-val-zari">Bacha: 0.00 Kg</td>
+                            <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
+                        </tr>
+                        <tr class="ss-row" data-ss-idx="2" onclick="ssOpenStockGroup(2)">
+                            <td>3</td>
+                            <td><strong>Sancha (Tani &amp; Chukka)</strong> <small style="color:#6b7280; display:block; font-size:11.5px;">Tani &amp; Chukka Warp Stock Register</small></td>
+                            <td style="text-align:center;"><span class="ss-key-badge">N</span></td>
+                            <td class="ss-val-cell" id="ss-val-sancha">Tani: 0.0 Kg · Chukka: 0.0 Kg</td>
+                            <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
+                        </tr>
+                        <tr class="ss-row" data-ss-idx="3" onclick="ssOpenStockGroup(3)">
+                            <td>4</td>
+                            <td><strong>Saree Stock</strong> <small style="color:#6b7280; display:block; font-size:11.5px;">Fresh, Cutting, Embroidery, Finished &amp; Lott</small></td>
+                            <td style="text-align:center;"><span class="ss-key-badge">E</span></td>
+                            <td class="ss-val-cell" id="ss-val-saree">Stock: 0 Pcs</td>
+                            <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="tm-status-strip">
+                <span class="tm-toast">[↑ ↓] Group Chunein · [Enter] ya [B / Z / N / E] se Stock Kholein · [Esc] Dashboard</span>
+                <span>4 Stock Groups</span>
+            </div>
+        `;
+        sec.dataset.ssInitialized = '1';
+    };
+
+    const ssHighlightRow = (idx) => {
+        const rows = Array.from(document.querySelectorAll('#stock-summary-section .ss-row'));
+        if (!rows.length) return;
+        ssActiveIdx = ((idx % rows.length) + rows.length) % rows.length;
+        rows.forEach((r, i) => r.classList.toggle('active', i === ssActiveIdx));
+    };
+
+    window.ssOpenStockGroup = function (idx) {
+        ssHighlightRow(idx);
+        window.__slReturnToStockSummary = true;
+        const sec = document.getElementById('stock-summary-section');
+        if (sec) sec.style.display = 'none';
+
+        if (idx === 0 && typeof window.openBanaModule === 'function') window.openBanaModule();
+        else if (idx === 1 && typeof window.openZariModule === 'function') window.openZariModule();
+        else if (idx === 2 && typeof window.openSanchaModule === 'function') window.openSanchaModule();
+        else if (idx === 3 && typeof window.openSareeModule === 'function') window.openSareeModule();
+    };
+
+    window.openStockSummaryModule = function () {
+        ensureStockSummaryDOM();
+        document.querySelectorAll('.module-section').forEach((s) => s.style.display = 'none');
+        const dView = document.getElementById('dashboard-view');
+        if (dView) dView.style.display = 'none';
+        const sec = document.getElementById('stock-summary-section');
+        if (sec) sec.style.display = 'block';
+
+        const kSel = document.getElementById('app-karkhana-select');
+        const badgeEl = document.getElementById('ss-godown-badge');
+        if (kSel && badgeEl && kSel.selectedIndex >= 0) {
+            badgeEl.textContent = kSel.options[kSel.selectedIndex].textContent.replace(/^[\s🌐🏢🏭]+/, '').trim() || 'Sabhi Karkhane';
+        }
+
+        ssHighlightRow(ssActiveIdx);
+        window.slSyncDashboardCharts();
+    };
+
+    /* ========================================================================
+       4. TALLY MASTER CREATE & ALTER MODULE (SELF-INJECTED HTML + ENGINE)
     ======================================================================== */
     let tmMode = 'create'; // 'create' | 'alter-list' | 'alter-edit'
     let tmSelectedGroup = 'kariger';
@@ -799,7 +958,7 @@
     };
 
     /* ========================================================================
-       4. GLOBAL KEYBOARD SHORTCUTS (TALLY CREATE/ALTER + GATEWAY)
+       5. GLOBAL KEYBOARD SHORTCUTS (STOCK SUMMARY + CREATE/ALTER + GATEWAY)
     ======================================================================== */
     document.addEventListener('keydown', (e) => {
         const desk = document.getElementById('desktop-screen');
@@ -807,6 +966,39 @@
 
         const anyModalOpen = Array.from(document.querySelectorAll('.modal-overlay')).some((m) => m.style.display && m.style.display !== 'none');
         if (anyModalOpen) return;
+
+        // 0. Inside Stock Summary Hub screen
+        const ssSec = document.getElementById('stock-summary-section');
+        if (ssSec && ssSec.style.display !== 'none') {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                window.backToDashboard();
+                return;
+            }
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                ssHighlightRow(ssActiveIdx + 1);
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                ssHighlightRow(ssActiveIdx - 1);
+                return;
+            }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                window.ssOpenStockGroup(ssActiveIdx);
+                return;
+            }
+            if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
+                const k = e.key.toLowerCase();
+                if (k === 'b') { e.preventDefault(); window.ssOpenStockGroup(0); return; }
+                if (k === 'z') { e.preventDefault(); window.ssOpenStockGroup(1); return; }
+                if (k === 'n') { e.preventDefault(); window.ssOpenStockGroup(2); return; }
+                if (k === 'e') { e.preventDefault(); window.ssOpenStockGroup(3); return; }
+            }
+            return;
+        }
 
         // 1. Inside Tally Create / Alter screen
         const tmSec = document.getElementById('tally-master-section');
@@ -915,12 +1107,18 @@
             if (targetBtn) {
                 e.preventDefault();
                 targetBtn.click();
+                return;
             }
+            // Direct background stock shortcuts (B/Z/N/E) remain active for power speed
+            if (k === 'b' && typeof window.openBanaModule === 'function') { e.preventDefault(); window.__slReturnToStockSummary = false; window.openBanaModule(); }
+            else if (k === 'z' && typeof window.openZariModule === 'function') { e.preventDefault(); window.__slReturnToStockSummary = false; window.openZariModule(); }
+            else if (k === 'n' && typeof window.openSanchaModule === 'function') { e.preventDefault(); window.__slReturnToStockSummary = false; window.openSanchaModule(); }
+            else if (k === 'e' && typeof window.openSareeModule === 'function') { e.preventDefault(); window.__slReturnToStockSummary = false; window.openSareeModule(); }
         }
     });
 
     /* ========================================================================
-       5. NAVBAR KARKHANA DROPDOWN & GLOBAL MODULE NAVIGATION
+       6. NAVBAR KARKHANA DROPDOWN & GLOBAL MODULE NAVIGATION
     ======================================================================== */
     window.populateNavbarKarkhanaDropdown = function () {
         const sel = document.getElementById('app-karkhana-select');
@@ -982,6 +1180,7 @@
     };
 
     window.backToDashboard = function () {
+        window.__slReturnToStockSummary = false;
         document.querySelectorAll('.module-section').forEach((s) => s.style.display = 'none');
         const dView = document.getElementById('dashboard-view');
         if (dView) dView.style.display = window.innerWidth <= 860 ? 'block' : 'flex';
@@ -992,7 +1191,7 @@
     };
 
     /* ========================================================================
-       6. PWA SERVICE WORKER & APP BOOTSTRAP
+       7. PWA SERVICE WORKER & APP BOOTSTRAP
     ======================================================================== */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -1004,6 +1203,7 @@
 
     const initAppShell = () => {
         ensureTallyMasterDOM();
+        ensureStockSummaryDOM();
         window.populateNavbarKarkhanaDropdown();
         slInitBadgeObserver();
         if (typeof window.checkAutoLogin === 'function') {
