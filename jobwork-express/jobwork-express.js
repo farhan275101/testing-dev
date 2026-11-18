@@ -3,10 +3,10 @@
    Folder: jobwork-express / File: jobwork-express.js
    Developed for: Farhan Jawed
    Features:
+   - True TallyPrime Voucher Anatomy:
+     Top Split (Form Left + Full-Height Picker Right) + Full-Width Batch Grid Bottom
    - Clean Profile-Creation Style Single-Field-Per-Row Alignment (Zero Clipping)
-   - TallyPrime White & Gold 2-Column Guided Drill-Down Voucher
    - Right-Pane Pickers: Process -> Len-Den -> Stock Source -> Worker -> Maker
-   - Always-Visible Clean Gatthi / Batch Table in Right Pane
    - Tally "End of List" (Empty Maker + Enter) & "Accept? (Yes / No)" Strip
    - Process Switch Zero-Mix Guard, Focus Tab Trap & Instant A6 Challan Print
 ============================================================================ */
@@ -293,7 +293,7 @@
     };
 
     /* ========================================================================
-       3. SCOPED TALLYPRIME WHITE & GOLD STYLES (ZERO OVERFLOW / CLIPPING)
+       3. SCOPED TALLYPRIME WHITE & GOLD STYLES (FULL-WIDTH BATCH GRID)
        ------------------------------------------------------------------------
     ======================================================================== */
     const ensureTallyJobWorkStyles = () => {
@@ -309,7 +309,7 @@
                 backdrop-filter: blur(2px);
                 z-index: 999999;
                 display: flex; align-items: center; justify-content: center;
-                padding: 16px; box-sizing: border-box;
+                padding: 14px; box-sizing: border-box;
                 font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             }
             .jw-card {
@@ -327,7 +327,7 @@
             .jw-header {
                 background: #fdf6e2;
                 border-bottom: 1.5px solid #e5d5a7;
-                padding: 10px 20px;
+                padding: 9px 20px;
                 display: flex; justify-content: space-between; align-items: center;
                 gap: 10px; flex-wrap: wrap;
                 box-sizing: border-box;
@@ -348,38 +348,45 @@
                 border-color: #d9a425; font-weight: 800;
             }
             .jw-body {
-                display: grid;
-                grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-                gap: 20px;
-                padding: 16px 22px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                padding: 14px 20px;
                 overflow-y: auto;
                 overflow-x: hidden;
                 flex: 1;
                 background: #ffffff;
                 box-sizing: border-box;
             }
+            .jw-top-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+                gap: 18px;
+                align-items: stretch;
+                min-width: 0;
+            }
             @media (max-width: 840px) {
-                .jw-body { grid-template-columns: minmax(0, 1fr); }
+                .jw-top-grid { grid-template-columns: minmax(0, 1fr); }
             }
             .jw-left-col, .jw-right-col {
                 min-width: 0;
                 box-sizing: border-box;
             }
             .jw-right-col {
-                display: flex; flex-direction: column; gap: 10px;
+                display: flex; flex-direction: column;
             }
             .jw-sec-title {
                 font-size: 11px; font-weight: 800; color: #92400e;
                 text-transform: uppercase; letter-spacing: 0.6px;
                 border-bottom: 1px solid #eadab0;
-                padding-bottom: 4px; margin: 12px 0 8px 0;
+                padding-bottom: 3px; margin: 10px 0 7px 0;
             }
             .jw-row {
                 display: grid;
                 grid-template-columns: 145px minmax(0, 1fr);
                 align-items: center;
                 gap: 10px;
-                margin-bottom: 7px;
+                margin-bottom: 6px;
                 min-width: 0;
             }
             .jw-row > * { min-width: 0; }
@@ -405,7 +412,7 @@
             .jw-right-panel {
                 border: 1px solid #e5d5a7; border-radius: 6px;
                 background: #ffffff; display: flex; flex-direction: column;
-                overflow: hidden; min-width: 0;
+                overflow: hidden; min-width: 0; flex: 1;
             }
             .jw-right-head {
                 background: #fdf6e2; border-bottom: 1px solid #e5d5a7;
@@ -413,7 +420,7 @@
                 display: flex; justify-content: space-between; align-items: center;
             }
             .jw-picker-list {
-                overflow-y: auto; max-height: 185px; min-height: 130px;
+                overflow-y: auto; flex: 1; min-height: 210px; max-height: 295px;
             }
             .jw-picker-item {
                 padding: 7px 12px; font-size: 12.5px; font-weight: 600; color: #1f2937;
@@ -428,17 +435,22 @@
                 font-size: 11px; color: #6b7280; font-weight: 600;
             }
             .jw-picker-item.active .jw-picker-sub { color: #374151; }
+            .jw-batch-panel {
+                border: 1px solid #e5d5a7; border-radius: 6px;
+                background: #ffffff; overflow: hidden; width: 100%;
+                box-sizing: border-box;
+            }
             .jw-batch-table {
-                width: 100%; border-collapse: collapse; font-size: 12px;
+                width: 100%; border-collapse: collapse; font-size: 12.5px;
             }
             .jw-batch-table th {
                 background: #fdf6e2; color: #1f2937; font-weight: 800;
-                padding: 6px 8px; text-align: left;
-                border-bottom: 1px solid #e5d5a7; font-size: 11px;
+                padding: 6px 10px; text-align: left;
+                border-bottom: 1px solid #e5d5a7; font-size: 11.5px;
                 position: sticky; top: 0;
             }
             .jw-batch-table td {
-                padding: 5px 8px; border-bottom: 1px solid #f3f4f6; color: #1f2937;
+                padding: 6px 10px; border-bottom: 1px solid #f3f4f6; color: #1f2937;
             }
             .jw-footer {
                 background: #fdf6e2; border-top: 1px solid #e5d5a7;
@@ -462,7 +474,7 @@
             .jw-btn-sec:hover { border-color: #d9a425; background: #fef9ea; }
             .jw-accept-bar {
                 background: #fdf6e2; border: 1.5px solid #d9a425; border-radius: 5px;
-                padding: 8px 12px; margin-top: 10px;
+                padding: 8px 14px;
                 display: flex; justify-content: space-between; align-items: center; gap: 10px;
             }
         `;
@@ -470,7 +482,7 @@
     };
 
     /* ========================================================================
-       4. OPEN JOBWORK EXPRESS MODAL (PROFILE-CREATION CLEAN ALIGNMENT)
+       4. OPEN JOBWORK EXPRESS MODAL (TOP SPLIT + FULL-WIDTH BATCH BOTTOM)
        ------------------------------------------------------------------------
     ======================================================================== */
     window.openJobWorkExpressModal = () => {
@@ -498,7 +510,7 @@
         <div id="master-jobwork-express-modal" class="jw-overlay">
             <div class="jw-card">
 
-                <!-- Clean Minimal Cream Header (Like Profile Creation) -->
+                <!-- Clean Minimal Cream Header -->
                 <div class="jw-header">
                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                         <h3 class="jw-title">JobWork Voucher</h3>
@@ -514,137 +526,141 @@
                     </div>
                 </div>
 
-                <!-- 2-Column Split Body -->
+                <!-- BODY: TOP SPLIT + BOTTOM FULL-WIDTH BATCH TABLE -->
                 <div class="jw-body">
 
-                    <!-- LEFT PANE: 1 FIELD PER ROW (ZERO CRAMPING / CLIPPING) -->
-                    <div class="jw-left-col">
-                        <div class="jw-sec-title" style="margin-top:0;">1. Process, Len-Den &amp; Worker</div>
+                    <!-- TOP 2-COLUMN SPLIT -->
+                    <div class="jw-top-grid">
 
-                        <div class="jw-row">
-                            <label class="jw-lbl">Process [F1-F4] :</label>
-                            <input type="text" id="jw-exp-cat-input" value="1. Cutting" readonly class="jw-inp" style="border-color:#d9a425; cursor:pointer;">
-                        </div>
+                        <!-- LEFT PANE: 1 FIELD PER ROW -->
+                        <div class="jw-left-col">
+                            <div class="jw-sec-title" style="margin-top:0;">1. Process, Len-Den &amp; Worker</div>
 
-                        <div class="jw-row" id="jw-exp-movement-row">
-                            <label class="jw-lbl">Len-Den [F5] :</label>
-                            <input type="text" id="jw-exp-movement-input" value="Saree Gayi (Bheja)" readonly class="jw-inp" style="cursor:pointer;">
-                        </div>
-
-                        <div id="jw-exp-source-container" class="jw-row">
-                            <label class="jw-lbl">Stock Source [F6] :</label>
-                            <div>
-                                <input type="text" id="jw-exp-source-input" value="Fresh Godown Stock" readonly class="jw-inp" style="display:none; cursor:pointer;">
-                                <select id="jw-exp-source-select" tabindex="-1" onchange="onExpressSourceDropdownChange(this.value)" style="display:none;"></select>
-                                <span id="jw-exp-source-locked" style="display:block; width:100%; box-sizing:border-box; padding:6px 10px; background:#fdfcf7; border:1px solid #eadab0; border-radius:4px; font-size:12.5px; font-weight:700; color:#6b7280;">Fresh Godown Stock [Locked]</span>
-                            </div>
-                        </div>
-
-                        <div class="jw-row">
-                            <label id="jw-exp-lbl-worker" class="jw-lbl">Cutting Kariger :</label>
-                            <div>
-                                <input type="text" id="jw-exp-worker-input" placeholder="Select Worker..." autocomplete="off" class="jw-inp" style="border-color:#d9a425;">
-                                <select id="jw-exp-worker" tabindex="-1" style="display:none;"></select>
-                            </div>
-                        </div>
-
-                        <div class="jw-row">
-                            <label class="jw-lbl">Date :</label>
-                            <input type="date" id="jw-exp-date" value="${today}" class="jw-inp">
-                        </div>
-
-                        <!-- SECTION 2: BATCH ENTRY -->
-                        <div class="jw-sec-title" style="display:flex; justify-content:space-between; align-items:center;">
-                            <span>2. Batch Entry (Bunne Wale Ka Naam)</span>
-                            <span id="jw-exp-live-stock-hint" style="color:#b47d00; font-size:11px; text-transform:none;"></span>
-                        </div>
-
-                        <div class="jw-row">
-                            <label class="jw-lbl">Maker (Bunne Wala) :</label>
-                            <div>
-                                <input type="text" id="jw-exp-maker-input" placeholder="Maker naam likhein ya &uarr;&darr; chunein..." autocomplete="off" class="jw-inp" style="border-color:#d9a425;">
-                                <datalist id="jw-exp-maker-dl"></datalist>
-                            </div>
-                        </div>
-
-                        <div class="jw-row">
-                            <label class="jw-lbl">Saree Qty (Pcs) :</label>
-                            <div style="display:flex; gap:8px; align-items:center; min-width:0;">
-                                <div id="jw-exp-naap-container" style="display:none; width:88px; flex-shrink:0;">
-                                    <input type="text" id="jw-exp-naap-input" value="${lastEnteredNaap}" placeholder="Naap" title="Embroidery Naap" class="jw-inp jw-inp-num">
-                                </div>
-                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="jw-exp-qty-input" placeholder="0 Pcs" class="jw-inp jw-inp-num" style="flex:1; min-width:60px; border-color:#d9a425;">
-                                <button type="button" tabindex="-1" id="jw-exp-add-row-btn" class="jw-btn-save" style="padding:6px 12px; font-size:12px;" onclick="addExpressBatchRow()">+ Jodein</button>
-                            </div>
-                        </div>
-
-                        <!-- SECTION 3: DAMAGE (HIDDEN IN DUKAN) -->
-                        <div id="jw-exp-damage-row">
-                            <div class="jw-sec-title">3. Damage / Kaat (Optional)</div>
                             <div class="jw-row">
-                                <label class="jw-lbl">Damage &amp; Fine :</label>
-                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; min-width:0;">
-                                    <input type="text" inputmode="numeric" id="jw-exp-damage-pcs" placeholder="Damage Pcs (0)" class="jw-inp jw-inp-num">
-                                    <input type="text" inputmode="decimal" id="jw-exp-damage-amt" placeholder="Fine ₹ (0.00)" class="jw-inp jw-inp-num">
+                                <label class="jw-lbl">Process [F1-F4] :</label>
+                                <input type="text" id="jw-exp-cat-input" value="1. Cutting" readonly class="jw-inp" style="border-color:#d9a425; cursor:pointer;">
+                            </div>
+
+                            <div class="jw-row" id="jw-exp-movement-row">
+                                <label class="jw-lbl">Len-Den [F5] :</label>
+                                <input type="text" id="jw-exp-movement-input" value="Saree Gayi (Bheja)" readonly class="jw-inp" style="cursor:pointer;">
+                            </div>
+
+                            <div id="jw-exp-source-container" class="jw-row">
+                                <label class="jw-lbl">Stock Source [F6] :</label>
+                                <div>
+                                    <input type="text" id="jw-exp-source-input" value="Fresh Godown Stock" readonly class="jw-inp" style="display:none; cursor:pointer;">
+                                    <select id="jw-exp-source-select" tabindex="-1" onchange="onExpressSourceDropdownChange(this.value)" style="display:none;"></select>
+                                    <span id="jw-exp-source-locked" style="display:block; width:100%; box-sizing:border-box; padding:6px 10px; background:#fdfcf7; border:1px solid #eadab0; border-radius:4px; font-size:12.5px; font-weight:700; color:#6b7280;">Fresh Godown Stock [Locked]</span>
+                                </div>
+                            </div>
+
+                            <div class="jw-row">
+                                <label id="jw-exp-lbl-worker" class="jw-lbl">Cutting Kariger :</label>
+                                <div>
+                                    <input type="text" id="jw-exp-worker-input" placeholder="Select Worker..." autocomplete="off" class="jw-inp" style="border-color:#d9a425;">
+                                    <select id="jw-exp-worker" tabindex="-1" style="display:none;"></select>
+                                </div>
+                            </div>
+
+                            <div class="jw-row">
+                                <label class="jw-lbl">Date :</label>
+                                <input type="date" id="jw-exp-date" value="${today}" class="jw-inp">
+                            </div>
+
+                            <!-- SECTION 2: BATCH ENTRY -->
+                            <div class="jw-sec-title" style="display:flex; justify-content:space-between; align-items:center;">
+                                <span>2. Batch Entry (Bunne Wale Ka Naam)</span>
+                                <span id="jw-exp-live-stock-hint" style="color:#b47d00; font-size:11px; text-transform:none;"></span>
+                            </div>
+
+                            <div class="jw-row">
+                                <label class="jw-lbl">Maker (Bunne Wala) :</label>
+                                <div>
+                                    <input type="text" id="jw-exp-maker-input" placeholder="Maker naam likhein ya &uarr;&darr; chunein..." autocomplete="off" class="jw-inp" style="border-color:#d9a425;">
+                                    <datalist id="jw-exp-maker-dl"></datalist>
+                                </div>
+                            </div>
+
+                            <div class="jw-row">
+                                <label class="jw-lbl">Saree Qty (Pcs) :</label>
+                                <div style="display:flex; gap:8px; align-items:center; min-width:0;">
+                                    <div id="jw-exp-naap-container" style="display:none; width:88px; flex-shrink:0;">
+                                        <input type="text" id="jw-exp-naap-input" value="${lastEnteredNaap}" placeholder="Naap" title="Embroidery Naap" class="jw-inp jw-inp-num">
+                                    </div>
+                                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="jw-exp-qty-input" placeholder="0 Pcs" class="jw-inp jw-inp-num" style="flex:1; min-width:60px; border-color:#d9a425;">
+                                    <button type="button" tabindex="-1" id="jw-exp-add-row-btn" class="jw-btn-save" style="padding:6px 12px; font-size:12px;" onclick="addExpressBatchRow()">+ Jodein</button>
+                                </div>
+                            </div>
+
+                            <!-- SECTION 3: DAMAGE (HIDDEN IN DUKAN) -->
+                            <div id="jw-exp-damage-row">
+                                <div class="jw-sec-title">3. Damage / Kaat (Optional)</div>
+                                <div class="jw-row">
+                                    <label class="jw-lbl">Damage &amp; Fine :</label>
+                                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; min-width:0;">
+                                        <input type="text" inputmode="numeric" id="jw-exp-damage-pcs" placeholder="Damage Pcs (0)" class="jw-inp jw-inp-num">
+                                        <input type="text" inputmode="decimal" id="jw-exp-damage-amt" placeholder="Fine ₹ (0.00)" class="jw-inp jw-inp-num">
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Tally Accept? (Yes / No) Confirmation Bar -->
-                        <div id="jw-exp-accept-strip" class="jw-accept-bar" style="display:none;">
-                            <span style="font-size:13px; font-weight:800; color:#1f2937;">Accept? Batch Save &amp; Challan Print Karein?</span>
-                            <div style="display:flex; gap:8px;">
-                                <button type="button" id="jw-exp-accept-yes" class="jw-btn-save" style="padding:5px 14px;" onclick="submitMasterJobWorkExpress(true)">Yes [Y / Enter]</button>
-                                <button type="button" id="jw-exp-accept-no" class="jw-btn-sec" style="padding:5px 14px;" onclick="window.__jwCancelAccept()">No [N / Esc]</button>
+                        <!-- RIGHT PANE: FULL-HEIGHT TALLY PICKER -->
+                        <div class="jw-right-col">
+                            <div class="jw-right-panel">
+                                <div class="jw-right-head">
+                                    <span id="jw-right-title">List of Processes</span>
+                                    <span id="jw-right-hint" style="font-size:11px; color:#6b7280; font-weight:600;">&uarr;&darr; + Enter</span>
+                                </div>
+                                <div id="jw-right-picker" class="jw-picker-list"></div>
                             </div>
                         </div>
 
-                        <!-- Bottom Voucher Action Strip -->
-                        <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid #eadab0;">
-                            <button type="button" tabindex="-1" id="jw-exp-print-btn" class="jw-btn-sec" onclick="printLastSavedJobWorkChallan()">A6 Challan [Alt+P]</button>
-                            <button type="button" id="jw-exp-submit-btn" class="jw-btn-save" onclick="submitMasterJobWorkExpress(true)">Save &amp; Challan [Ctrl+Enter]</button>
+                    </div>
+
+                    <!-- FULL-WIDTH GATTHI / BATCH LIST TABLE (BOTTOM) -->
+                    <div class="jw-batch-panel">
+                        <div class="jw-right-head">
+                            <span>Gatthi / Batch List</span>
+                            <div style="display:flex; align-items:center; gap:14px;">
+                                <span id="jw-exp-batch-count-badge" style="color:#6b7280; font-weight:700;">0 Items</span>
+                                <span style="font-size:12.5px; font-weight:800; color:#1f2937;">Total: <strong id="jw-exp-live-batch-total" style="color:#b47d00; font-size:14px;">0 Pcs</strong></span>
+                            </div>
+                        </div>
+                        <div style="overflow-y:auto; max-height:145px;">
+                            <table class="jw-batch-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:45px;">#</th>
+                                        <th>Maker (Bunne Wala)</th>
+                                        <th>Saree Design</th>
+                                        <th style="width:90px; text-align:center;">Naap</th>
+                                        <th style="width:100px; text-align:right;">Qty (Pcs)</th>
+                                        <th style="width:65px; text-align:center;">Del</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="jw-exp-table-body"></tbody>
+                            </table>
                         </div>
                     </div>
 
-                    <!-- RIGHT PANE: TOP DYNAMIC PICKER + BOTTOM LIVE BATCH LIST -->
-                    <div class="jw-right-col">
-
-                        <!-- Top: Tally Picker -->
-                        <div class="jw-right-panel">
-                            <div class="jw-right-head">
-                                <span id="jw-right-title">List of Processes</span>
-                                <span id="jw-right-hint" style="font-size:11px; color:#6b7280; font-weight:600;">&uarr;&darr; + Enter</span>
-                            </div>
-                            <div id="jw-right-picker" class="jw-picker-list"></div>
+                    <!-- Tally Accept? (Yes / No) Confirmation Bar -->
+                    <div id="jw-exp-accept-strip" class="jw-accept-bar" style="display:none;">
+                        <span style="font-size:13px; font-weight:800; color:#1f2937;">Accept? Batch Save &amp; Challan Print Karein?</span>
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" id="jw-exp-accept-yes" class="jw-btn-save" style="padding:5px 14px;" onclick="submitMasterJobWorkExpress(true)">Yes [Y / Enter]</button>
+                            <button type="button" id="jw-exp-accept-no" class="jw-btn-sec" style="padding:5px 14px;" onclick="window.__jwCancelAccept()">No [N / Esc]</button>
                         </div>
+                    </div>
 
-                        <!-- Bottom: Always-Visible Gatthi / Batch Table -->
-                        <div class="jw-right-panel" style="flex:1;">
-                            <div class="jw-right-head">
-                                <span>Gatthi / Batch List</span>
-                                <span id="jw-exp-batch-count-badge" style="color:#b47d00; font-weight:800;">0 Items</span>
-                            </div>
-                            <div style="flex:1; overflow-y:auto; max-height:175px;">
-                                <table class="jw-batch-table">
-                                    <thead>
-                                        <tr>
-                                            <th>#</th>
-                                            <th>Maker</th>
-                                            <th>Saree</th>
-                                            <th style="text-align:center;">Naap</th>
-                                            <th style="text-align:right;">Qty</th>
-                                            <th style="text-align:center;">Del</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="jw-exp-table-body"></tbody>
-                                </table>
-                            </div>
-                            <div style="background:#fdfcf7; border-top:1px solid #eadab0; padding:7px 12px; display:flex; justify-content:space-between; align-items:center;">
-                                <span id="jw-exp-live-batch-summary" style="font-size:11.5px; color:#6b7280; font-weight:600;">Batch khali hai</span>
-                                <span style="font-size:13px; font-weight:800; color:#1f2937;">Total: <strong id="jw-exp-live-batch-total" style="color:#b47d00; font-size:15px;">0 Pcs</strong></span>
-                            </div>
+                    <!-- Full-Width Action Bar -->
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <span id="jw-exp-live-batch-summary" style="font-size:12px; color:#6b7280; font-weight:600;">Batch khali hai</span>
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" tabindex="-1" id="jw-exp-print-btn" class="jw-btn-sec" onclick="printLastSavedJobWorkChallan()">A6 Challan [Alt+P]</button>
+                            <button type="button" id="jw-exp-submit-btn" class="jw-btn-save" onclick="submitMasterJobWorkExpress(true)">Save &amp; Challan [Ctrl+Enter]</button>
                         </div>
-
                     </div>
 
                 </div>
@@ -761,11 +777,19 @@
             const wText = document.getElementById('jw-exp-worker-input')?.value || '-';
             const srcTxt = getSourceDisplayName(stockSource);
             pickerEl.innerHTML = `
-                <div style="padding:10px 12px; font-size:12px; line-height:1.6;">
-                    <div><span style="color:#6b7280;">Process:</span> <strong>${esc(getCategoryDisplayName(activeCategory))}</strong></div>
-                    <div><span style="color:#6b7280;">Len-Den:</span> <strong>${movementType === 'gayi' ? 'Saree Gayi (Bheja)' : 'Wapas Aayi (Tayyar)'}</strong></div>
-                    <div><span style="color:#6b7280;">Source:</span> <strong>${esc(srcTxt)}</strong></div>
-                    <div><span style="color:#6b7280;">Worker:</span> <strong style="color:#b47d00;">${esc(wText)}</strong></div>
+                <div style="padding:12px 14px; font-size:12.5px; line-height:1.7;">
+                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid #f3f4f6; padding-bottom:5px; margin-bottom:5px;">
+                        <span style="color:#6b7280;">Process:</span> <strong>${esc(getCategoryDisplayName(activeCategory))}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid #f3f4f6; padding-bottom:5px; margin-bottom:5px;">
+                        <span style="color:#6b7280;">Len-Den:</span> <strong>${movementType === 'gayi' ? 'Saree Gayi (Bheja)' : 'Wapas Aayi (Tayyar)'}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid #f3f4f6; padding-bottom:5px; margin-bottom:5px;">
+                        <span style="color:#6b7280;">Source:</span> <strong>${esc(srcTxt)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#6b7280;">Worker:</span> <strong style="color:#b47d00;">${esc(wText)}</strong>
+                    </div>
                 </div>`;
             return;
         }
@@ -778,7 +802,7 @@
         if (!pickerEl) return;
 
         if (!jwPickerItems.length) {
-            pickerEl.innerHTML = `<div style="padding:16px 12px; text-align:center; color:#6b7280; font-size:12px;">Koi matching record nahi mila.</div>`;
+            pickerEl.innerHTML = `<div style="padding:18px 12px; text-align:center; color:#6b7280; font-size:12px;">Koi matching record nahi mila.</div>`;
             return;
         }
 
@@ -1507,7 +1531,7 @@
         let html = '';
 
         if (!expressBatchItems.length) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:16px; color:#6b7280;">Gatthi khali hai. Maker chunein aur Qty daalein.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:16px; color:#6b7280;">Gatthi khali hai. Upar Maker chunein aur Qty daalein.</td></tr>';
             if (totalDisp) totalDisp.textContent = '0 Pcs';
             if (summaryDisp) summaryDisp.textContent = 'Batch khali hai';
             if (badge) badge.textContent = '0 Items';
@@ -1523,7 +1547,7 @@
                 <td style="text-align:center; color:#b47d00; font-weight:700;">${it.naap ? esc(it.naap) : '-'}</td>
                 <td style="text-align:right; font-weight:800;">${it.qty} Pcs</td>
                 <td style="text-align:center;">
-                    <button type="button" tabindex="-1" onclick="removeExpressBatchItem(${idx})" style="background:#ffffff; color:#374151; border:1px solid #d1d5db; border-radius:3px; padding:1px 6px; cursor:pointer; font-weight:700;">&times;</button>
+                    <button type="button" tabindex="-1" onclick="removeExpressBatchItem(${idx})" style="background:#ffffff; color:#374151; border:1px solid #d1d5db; border-radius:3px; padding:1px 7px; cursor:pointer; font-weight:700;">&times;</button>
                 </td>
             </tr>`;
         });
