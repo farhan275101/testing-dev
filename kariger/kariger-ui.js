@@ -3,9 +3,10 @@
    File: kariger/kariger-ui.js • Developed by Farhan Jawed
    Layout:
    - Left Full-Height: Rozana Line Entry Voucher
-   - Right Top: Tani Khata Register (Zero Internal Scroll)
+   - Right Top: Tani Khata Register (Fits Screen, Zero Scrollbars)
    - Right Bottom: 3 Aligned Cards (Mazdoori | Bana | Zari)
-   - Zero Native Dropdowns / Spinners + Strict Enter Flow + Clean Hisab Print
+   - Strict Manual Entry (ArrowUp/Down & Wheel Number Stepping Disabled)
+   - Top Thin Strip Shows Pichla Bana, Pichla Zari & Pichla Bani + Auto Carry-Forward
 ============================================================================ */
 
 (() => {
@@ -130,7 +131,7 @@
     };
 
     /* ========================================================================
-       0. SCOPED TALLYPRIME WHITE & GOLD STYLES (SKETCH-ALIGNED, ZERO SCROLLBARS)
+       0. SCOPED TALLYPRIME WHITE & GOLD STYLES (ZERO OVERFLOW, ZERO SCROLLBARS)
     ======================================================================== */
     const ensureKarigerTallyStyles = () => {
         const old = document.getElementById('kariger-tally-styles');
@@ -139,13 +140,20 @@
         const style = document.createElement('style');
         style.id = 'kariger-tally-styles';
         style.textContent = `
-            /* --- SHARED WHITE & GOLD SHELL --- */
+            /* --- SHARED WHITE & GOLD SHELL (STRICT FIT WITHIN VIEWPORT) --- */
             #kariger-section,
             #kariger-sheet-section {
                 padding: 0 !important;
-                overflow: visible !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+                overflow-x: hidden !important;
                 background: #ffffff !important;
                 font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            }
+            #kariger-section *,
+            #kariger-sheet-section * {
+                box-sizing: border-box;
             }
             #kariger-section input[type="number"]::-webkit-outer-spin-button,
             #kariger-section input[type="number"]::-webkit-inner-spin-button,
@@ -162,18 +170,19 @@
             #kariger-sheet-section .module-header {
                 background: #fdf6e2 !important;
                 border-bottom: 1.5px solid #e5d5a7 !important;
-                padding: 10px 18px !important;
+                padding: 9px 14px !important;
                 margin-bottom: 0 !important;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                gap: 10px;
+                gap: 8px;
                 flex-wrap: wrap;
+                width: 100%;
             }
             #kariger-section .module-header h2,
             #kariger-sheet-section .module-header h2 {
                 color: #1f2937 !important;
-                font-size: 16px !important;
+                font-size: 15.5px !important;
                 font-weight: 800 !important;
                 margin: 0 !important;
             }
@@ -184,8 +193,8 @@
                 color: #374151 !important;
                 border: 1px solid #d1d5db !important;
                 border-radius: 5px !important;
-                padding: 6px 12px !important;
-                font-size: 12px !important;
+                padding: 5px 10px !important;
+                font-size: 11.5px !important;
                 font-weight: 700 !important;
                 cursor: pointer;
                 white-space: nowrap;
@@ -204,8 +213,8 @@
                 color: #1f2937 !important;
                 border: 1px solid #d9a425 !important;
                 border-radius: 5px !important;
-                padding: 6px 13px !important;
-                font-size: 12px !important;
+                padding: 5px 11px !important;
+                font-size: 11.5px !important;
                 font-weight: 800 !important;
                 cursor: pointer;
                 white-space: nowrap;
@@ -221,8 +230,8 @@
                 color: #1f2937 !important;
                 border: 1px solid #d1d5db !important;
                 border-radius: 5px !important;
-                padding: 6px 11px !important;
-                font-size: 12px !important;
+                padding: 5px 9px !important;
+                font-size: 11.5px !important;
                 font-weight: 700 !important;
             }
             #kariger-sheet-section .module-header .sheet-btn:hover,
@@ -230,12 +239,18 @@
                 border-color: #d9a425 !important;
                 background: #fef9ea !important;
             }
+            #kariger-sheet-section .module-header > div {
+                display: flex;
+                gap: 6px !important;
+                flex-wrap: wrap;
+                align-items: center;
+            }
 
             /* --- TABS --- */
             #kariger-karkhana-tabs-bar,
             #sheet-tabs-container {
-                padding: 10px 18px 0 18px !important;
-                margin-bottom: 10px !important;
+                padding: 9px 14px 0 14px !important;
+                margin-bottom: 8px !important;
                 display: flex;
                 gap: 6px;
                 flex-wrap: wrap;
@@ -247,7 +262,7 @@
                 color: #374151 !important;
                 border: 1px solid #d1d5db !important;
                 border-radius: 5px !important;
-                padding: 5px 12px !important;
+                padding: 4px 11px !important;
                 font-size: 12px !important;
                 font-weight: 700 !important;
                 cursor: pointer;
@@ -267,7 +282,7 @@
 
             /* --- KARIGER DIRECTORY --- */
             #kariger-section .filter-panel {
-                padding: 0 18px 10px 18px !important;
+                padding: 0 14px 10px 14px !important;
                 display: flex;
                 gap: 8px;
                 align-items: center;
@@ -311,15 +326,14 @@
                 font-weight: 800;
             }
             #kariger-section #add-kariger-form {
-                margin: 0 18px 12px 18px !important;
+                margin: 0 14px 12px 14px !important;
                 background: #fdfcf7 !important;
                 border: 1.5px solid #d9b86c !important;
                 border-radius: 8px !important;
-                padding: 14px 16px !important;
+                padding: 12px 14px !important;
             }
             #kariger-section .table-responsive {
-                padding: 0 18px !important;
-                box-sizing: border-box;
+                padding: 0 14px !important;
                 overflow: visible !important;
             }
             #kariger-section table,
@@ -336,18 +350,18 @@
             }
             #kariger-section table th,
             #kariger-sheet-section .kar-khata-table th {
-                padding: 8px 8px !important;
-                font-size: 11px !important;
+                padding: 7px 6px !important;
+                font-size: 10.5px !important;
                 font-weight: 800 !important;
                 color: #1f2937 !important;
                 border-bottom: 1.5px solid #e5d5a7 !important;
                 text-align: left;
-                white-space: nowrap;
+                line-height: 1.2;
             }
             #kariger-section table td,
             #kariger-sheet-section .kar-khata-table td {
-                padding: 7px 8px !important;
-                font-size: 12.5px !important;
+                padding: 7px 6px !important;
+                font-size: 12px !important;
                 color: #1f2937 !important;
                 border-bottom: 1px solid #f3f4f6 !important;
                 font-variant-numeric: tabular-nums;
@@ -368,7 +382,7 @@
                 color: #1f2937 !important;
             }
             #kariger-pagination-bar {
-                padding: 10px 18px;
+                padding: 10px 14px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
@@ -379,7 +393,7 @@
             .kar-status-strip {
                 background: #fdf6e2;
                 border-top: 1px solid #e5d5a7;
-                padding: 9px 18px;
+                padding: 8px 14px;
                 margin-top: 10px;
                 display: flex;
                 justify-content: space-between;
@@ -391,16 +405,18 @@
                 font-weight: 600;
             }
 
-            /* --- TANI KHATA SHEET: TOP SETUP BAR [F9] (ZERO SCROLLBARS) --- */
+            /* --- TANI KHATA SHEET: TOP THIN LINE + COLLAPSIBLE SETUP [F9] --- */
             .kar-setup-wrap {
-                margin: 0 18px 12px 18px;
+                margin: 0 14px 10px 14px;
                 border: 1px solid #e5d5a7;
                 border-radius: 6px;
                 background: #fdfcf7;
+                width: calc(100% - 28px);
+                max-width: 100%;
                 overflow: visible;
             }
             .kar-setup-strip {
-                padding: 7px 14px;
+                padding: 7px 12px;
                 background: #fdf6e2;
                 display: flex;
                 justify-content: space-between;
@@ -412,24 +428,27 @@
             }
             .kar-setup-summary {
                 font-size: 12px;
-                font-weight: 700;
+                font-weight: 800;
                 color: #92400e;
+                line-height: 1.35;
             }
             .kar-setup-body {
-                padding: 12px 14px;
+                padding: 10px 12px;
                 border-top: 1px solid #e5d5a7;
                 background: #ffffff;
+                width: 100%;
                 overflow: visible !important;
             }
             #kariger-sheet-section .tani-closing-grid {
                 display: grid !important;
                 grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-                gap: 10px !important;
+                gap: 8px !important;
                 margin-bottom: 10px !important;
-                padding: 10px !important;
+                padding: 9px !important;
                 background: #fdfcf7 !important;
                 border: 1px solid #e5d5a7 !important;
                 border-radius: 6px !important;
+                width: 100% !important;
                 overflow: visible !important;
                 max-height: none !important;
             }
@@ -437,7 +456,7 @@
                 display: flex;
                 flex-direction: column;
                 gap: 3px;
-                min-width: 0;
+                min-width: 0 !important;
             }
             #kariger-sheet-section .tani-closing-grid label {
                 font-size: 11px !important;
@@ -448,48 +467,48 @@
                 text-overflow: ellipsis;
             }
             #kariger-sheet-section .tani-closing-grid input {
-                width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
-                padding: 6px 8px;
-                border: 1px solid #d1d5db;
-                border-radius: 4px;
-                font-size: 12.5px;
-                font-weight: 700;
-                color: #111827;
-                background: #ffffff;
+                width: 100% !important;
+                min-width: 0 !important;
+                padding: 6px 8px !important;
+                border: 1px solid #d1d5db !important;
+                border-radius: 4px !important;
+                font-size: 12.5px !important;
+                font-weight: 700 !important;
+                color: #111827 !important;
+                background: #ffffff !important;
             }
             #kariger-sheet-section .tani-closing-grid input:focus {
-                border-color: #d9a425;
+                border-color: #d9a425 !important;
                 outline: none;
-                background: #fffdf5;
+                background: #fffdf5 !important;
             }
             .kar-setup-item-box {
                 background: #ffffff !important;
                 border: 1px solid #e5d5a7 !important;
                 border-radius: 6px !important;
-                padding: 10px 12px !important;
+                padding: 9px 10px !important;
                 margin-bottom: 0 !important;
+                width: 100%;
                 overflow: visible !important;
             }
             .kar-setup-item-box .form-row-4 {
                 display: grid !important;
                 grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-                gap: 10px !important;
+                gap: 8px !important;
                 background: #fdfcf7 !important;
                 border: 1px solid #e5d5a7 !important;
-                padding: 8px 10px !important;
+                padding: 8px 9px !important;
                 border-radius: 6px !important;
+                width: 100% !important;
                 overflow: visible !important;
             }
             .kar-setup-item-box .input-group {
-                min-width: 0;
+                min-width: 0 !important;
                 margin: 0 !important;
             }
             .kar-setup-item-box .input-group input {
-                width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
+                width: 100% !important;
+                min-width: 0 !important;
             }
             .kar-setup-item-box label {
                 color: #374151 !important;
@@ -512,11 +531,12 @@
             /* --- SKETCH-EXACT 2-COLUMN WORKSPACE: LEFT ENTRY | RIGHT (TABLE + 3 CARDS) --- */
             .kar-sheet-split {
                 display: grid;
-                grid-template-columns: 330px minmax(0, 1fr);
-                gap: 14px;
-                padding: 0 18px 14px 18px;
+                grid-template-columns: 295px minmax(0, 1fr);
+                gap: 12px;
+                padding: 0 14px 12px 14px;
                 align-items: start;
-                box-sizing: border-box;
+                width: 100%;
+                max-width: 100%;
             }
             .kar-left-entry-card {
                 background: #ffffff;
@@ -528,8 +548,9 @@
             .kar-right-main-col {
                 display: flex;
                 flex-direction: column;
-                gap: 14px;
+                gap: 12px;
                 min-width: 0;
+                max-width: 100%;
             }
             .kar-table-card {
                 background: #ffffff;
@@ -537,23 +558,24 @@
                 border-radius: 8px;
                 overflow: hidden;
                 min-width: 0;
+                max-width: 100%;
             }
             .kar-pane-head {
                 background: #fdf6e2;
                 border-bottom: 1.5px solid #e5d5a7;
-                padding: 9px 14px;
+                padding: 8px 12px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 gap: 8px;
             }
             .kar-pane-head strong {
-                font-size: 13.5px;
+                font-size: 13px;
                 font-weight: 800;
                 color: #1f2937;
             }
             .kar-pane-head small {
-                font-size: 11.5px;
+                font-size: 11px;
                 font-weight: 700;
                 color: #92400e;
             }
@@ -561,6 +583,7 @@
                 padding: 0 !important;
                 overflow: visible !important;
                 max-height: none !important;
+                width: 100%;
             }
             .kar-table-card .kar-khata-table {
                 border: none !important;
@@ -571,8 +594,8 @@
                 border-top: 1.5px solid #d9b86c !important;
             }
             .kar-khata-table tfoot th {
-                padding: 8px 6px !important;
-                font-size: 11.5px !important;
+                padding: 7px 5px !important;
+                font-size: 11px !important;
                 font-weight: 800 !important;
                 color: #1f2937 !important;
             }
@@ -587,11 +610,11 @@
                 border: 1px solid #d1d5db;
                 color: #374151;
                 border-radius: 4px;
-                padding: 2px 6px;
-                font-size: 10.5px;
+                padding: 2px 5px;
+                font-size: 10px;
                 font-weight: 700;
                 cursor: pointer;
-                margin-left: 2px;
+                margin-left: 1px;
             }
             .kar-row-act-btn:hover {
                 border-color: #d9a425;
@@ -600,37 +623,37 @@
 
             /* --- LEFT SIDE VOUCHER ENTRY PANEL (CLEAN, ZERO SCROLL) --- */
             .kar-voucher-body {
-                padding: 12px 13px;
+                padding: 10px 11px;
                 background: #ffffff;
             }
             .kar-v-sec {
-                font-size: 10.5px;
+                font-size: 10px;
                 font-weight: 800;
                 text-transform: uppercase;
                 letter-spacing: 0.45px;
                 color: #92400e;
                 border-top: 1px solid #efe4c4;
-                padding-top: 8px;
-                margin: 9px 0 6px 0;
+                padding-top: 7px;
+                margin: 8px 0 5px 0;
             }
             .kar-v-grid-2 {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-                gap: 8px;
-                margin-bottom: 6px;
+                gap: 7px;
+                margin-bottom: 5px;
             }
             .kar-v-row-1 {
                 display: grid;
-                grid-template-columns: 102px minmax(0, 1fr);
+                grid-template-columns: 88px minmax(0, 1fr);
                 align-items: center;
-                gap: 8px;
-                margin-bottom: 6px;
+                gap: 7px;
+                margin-bottom: 5px;
                 min-width: 0;
             }
             .kar-v-row-1 label,
             .kar-v-grid-2 .input-group label,
             .kar-voucher-body .input-group label {
-                font-size: 11.5px !important;
+                font-size: 11px !important;
                 font-weight: 700 !important;
                 color: #374151 !important;
                 margin: 0 0 2px 0 !important;
@@ -644,11 +667,10 @@
             .kar-voucher-body input {
                 width: 100% !important;
                 min-width: 0 !important;
-                box-sizing: border-box !important;
                 padding: 6px 8px !important;
                 border: 1px solid #d1d5db !important;
                 border-radius: 4px !important;
-                font-size: 13px !important;
+                font-size: 12.5px !important;
                 font-weight: 700 !important;
                 color: #111827 !important;
                 background: #ffffff !important;
@@ -662,25 +684,25 @@
             .kar-voucher-body small {
                 display: block;
                 margin-top: 2px;
-                font-size: 11px !important;
+                font-size: 10.5px !important;
                 font-weight: 700 !important;
                 color: #b47d00 !important;
             }
             .kar-voucher-actions {
                 display: flex;
-                gap: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
+                gap: 7px;
+                margin-top: 9px;
+                padding-top: 9px;
                 border-top: 1px solid #efe4c4;
             }
             .kar-voucher-actions #row-submit-btn {
                 flex: 1;
-                padding: 9px 12px !important;
-                font-size: 12.5px !important;
+                padding: 8px 10px !important;
+                font-size: 12px !important;
                 font-weight: 800 !important;
             }
 
-            /* --- INLINE TALLY SUGGESTION LIST (REPLACES UGLY BROWSER DATALIST) --- */
+            /* --- INLINE TALLY SUGGESTION LIST --- */
             .kar-suggest-pop {
                 position: absolute;
                 left: 0;
@@ -691,12 +713,12 @@
                 border: 1.5px solid #d9b86c;
                 border-radius: 5px;
                 box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-                max-height: 180px;
+                max-height: 170px;
                 overflow-y: auto;
                 display: none;
             }
             .kar-suggest-opt {
-                padding: 6px 9px;
+                padding: 6px 8px;
                 font-size: 12px;
                 font-weight: 700;
                 color: #1f2937;
@@ -715,17 +737,16 @@
             .kar-summary-3col {
                 display: grid !important;
                 grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-                gap: 12px !important;
+                gap: 10px !important;
                 padding: 0 !important;
                 margin: 0 !important;
-                box-sizing: border-box;
                 width: 100%;
             }
             .kar-summary-3col > div {
                 background: #ffffff !important;
                 border: 1.5px solid #e5d5a7 !important;
                 border-radius: 8px !important;
-                padding: 12px 14px !important;
+                padding: 11px 12px !important;
                 box-shadow: none !important;
                 display: flex;
                 flex-direction: column;
@@ -734,11 +755,11 @@
             }
             .kar-summary-3col > div > div:first-child {
                 color: #1f2937 !important;
-                font-size: 13.5px !important;
+                font-size: 13px !important;
                 font-weight: 800 !important;
                 border-bottom: 1.5px solid #fdf6e2;
                 padding-bottom: 6px;
-                margin-bottom: 8px !important;
+                margin-bottom: 7px !important;
             }
             .kar-summary-3col > div > div {
                 font-size: 12px !important;
@@ -749,23 +770,23 @@
                 background: #fdf6e2 !important;
                 border-left: 4px solid #f2b71d !important;
                 border-radius: 5px !important;
-                padding: 7px 10px !important;
-                margin-top: 8px !important;
+                padding: 7px 9px !important;
+                margin-top: 7px !important;
                 margin-bottom: 0 !important;
             }
             .kar-summary-3col > div > div:last-child span {
                 color: #92400e !important;
-                font-size: 11.5px !important;
+                font-size: 11px !important;
                 font-weight: 800 !important;
             }
             .kar-summary-3col > div > div:last-child strong {
                 color: #b47d00 !important;
-                font-size: 15px !important;
+                font-size: 14.5px !important;
                 font-weight: 900 !important;
             }
 
             /* --- RESPONSIVE FALLBACK --- */
-            @media (max-width: 1020px) {
+            @media (max-width: 980px) {
                 .kar-sheet-split {
                     grid-template-columns: 1fr;
                 }
@@ -781,7 +802,7 @@
                 }
             }
 
-            /* --- CLEAN BROWSER PRINT: ONLY HISAB KITAB (HIDE ENTRY PANEL & CHROME) --- */
+            /* --- CLEAN BROWSER PRINT: ONLY HISAB KITAB --- */
             @media print {
                 .navbar,
                 #kariger-sheet-section .module-header,
@@ -839,29 +860,68 @@
         }
     };
 
-    const bindKarigerFormEnterFlow = () => {
-        const order = ['kar-date', 'kar-karkhana', 'kar-name', 'kar-saree', 'kar-mobile', 'kar-mohalla'];
+    const bindFieldListTraversal = (order, onComplete, allowUpDownMove = true) => {
         order.forEach((fid, idx) => {
             const el = document.getElementById(fid);
-            if (!el || el.dataset.karFormEnter) return;
-            el.dataset.karFormEnter = 'true';
+            if (!el || el.dataset.karListBound === '1') return;
+            el.dataset.karListBound = '1';
+
             el.addEventListener('keydown', (e) => {
+                // Skip if inline suggestion popup is open on this input
+                const pop = el.parentElement?.querySelector('.kar-suggest-pop');
+                if (pop && pop.style.display === 'block' && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                    return;
+                }
+
+                if (e.key === 'Enter' && e.ctrlKey && typeof onComplete === 'function') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onComplete();
+                    return;
+                }
+
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     e.stopPropagation();
                     if (e.shiftKey) {
-                        if (idx > 0) document.getElementById(order[idx - 1])?.focus();
+                        if (idx > 0) {
+                            const prev = document.getElementById(order[idx - 1]);
+                            if (prev) { prev.focus(); if (prev.select) prev.select(); }
+                        }
                         return;
                     }
                     if (idx < order.length - 1) {
                         const nxt = document.getElementById(order[idx + 1]);
                         if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
-                    } else {
-                        saveKariger();
+                    } else if (typeof onComplete === 'function') {
+                        onComplete();
+                    }
+                    return;
+                }
+
+                // Kill HTML5 number increment/decrement on ArrowUp/ArrowDown and move smoothly between fields
+                if (allowUpDownMove && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                    // For <select> keep normal only if Alt is held, otherwise step cleanly
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.key === 'ArrowDown' && idx < order.length - 1) {
+                        const nxt = document.getElementById(order[idx + 1]);
+                        if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
+                    } else if (e.key === 'ArrowUp' && idx > 0) {
+                        const prev = document.getElementById(order[idx - 1]);
+                        if (prev) { prev.focus(); if (prev.select) prev.select(); }
                     }
                 }
             });
         });
+    };
+
+    const bindKarigerFormEnterFlow = () => {
+        bindFieldListTraversal(
+            ['kar-date', 'kar-karkhana', 'kar-name', 'kar-saree', 'kar-mobile', 'kar-mohalla'],
+            () => saveKariger(),
+            true
+        );
     };
 
     const ensureKarigerDirectoryChrome = () => {
@@ -874,7 +934,6 @@
         const backBtn = kSec.querySelector('.module-header .back-btn');
         if (backBtn) backBtn.textContent = '← [Esc] Dashboard';
 
-        // Replace ugly native <select id="kariger-absent-filter"> UI with clean pills (while keeping hidden select synced!)
         const absSel = document.getElementById('kariger-absent-filter');
         if (absSel && !document.getElementById('kariger-absent-pills')) {
             absSel.style.display = 'none';
@@ -1329,7 +1388,6 @@
     const attachTallyInlineSuggest = (inputId, nextFocusId) => {
         const inp = document.getElementById(inputId);
         if (!inp) return;
-        // Remove native <datalist> dropdown completely as requested ("Sare drop-down hata do")
         inp.removeAttribute('list');
         inp.setAttribute('autocomplete', 'off');
 
@@ -1415,7 +1473,6 @@
     };
 
     const populateSheetDatalists = () => {
-        // Keep lists clean & remove ugly browser datalist popups
         attachTallyInlineSuggest('line-bana-name', 'row-cone');
         attachTallyInlineSuggest('line-zari-name', 'row-zariqty');
         attachTallyInlineSuggest('sheet-tani-item', 'sheet-tani-sancha');
@@ -1477,11 +1534,13 @@
         if (!sh) return;
         const rateBani = (sh.rateBani !== undefined) ? sh.rateBani : 240;
         const tPcs = (sh.taniPcs !== undefined) ? sh.taniPcs : 72;
+        const pBana = safeNum(sh.pichlaBana);
+        const pZari = safeNum(sh.pichlaZari);
         const pBani = safeNum(sh.pichlaBani);
         const sanchaTxt = sh.taniSancha ? sh.taniSancha : '-';
         setText(
             'kar-sheet-setup-summary',
-            `Bani Rate: ₹${rateBani}/Pc · Target: ${tPcs} Pcs · Pichla Bani: ₹${pBani.toFixed(0)} · Sancha: ${sanchaTxt}`
+            `Bani Rate: ₹${rateBani}/Pc · Target: ${tPcs} Pcs · Pichla: Bana ${pBana.toFixed(2)} Kg | Zari ${pZari.toFixed(2)} Kg | Bani ₹${pBani.toFixed(0)} · Sancha: ${sanchaTxt}`
         );
     };
 
@@ -1506,89 +1565,72 @@
     };
 
     const bindLineEntryEnterFlow = () => {
-        const order = [
-            'row-date', 'row-saree', 'row-lott', 'row-retbana', 'row-retzari',
-            'line-bana-name', 'row-cone', 'row-lesstp',
-            'line-zari-name', 'row-zariqty', 'row-topi', 'row-paid'
-        ];
-        order.forEach((fid, idx) => {
-            const el = document.getElementById(fid);
-            if (!el || el.dataset.karEnterBound) return;
-            el.dataset.karEnterBound = 'true';
+        bindFieldListTraversal(
+            [
+                'row-date', 'row-saree', 'row-lott', 'row-retbana', 'row-retzari',
+                'line-bana-name', 'row-cone', 'row-lesstp',
+                'line-zari-name', 'row-zariqty', 'row-topi', 'row-paid'
+            ],
+            () => saveTaniRow(),
+            true
+        );
 
-            // Prevent mouse-wheel from accidentally changing numbers
-            if (el.type === 'number') {
-                el.addEventListener('wheel', (we) => { we.preventDefault(); }, { passive: false });
+        bindFieldListTraversal(
+            [
+                'rate-bana-input', 'rate-zari-input', 'rate-bani-input', 'pichla-bana-input',
+                'pichla-zari-input', 'pichla-bani-input', 'waste-bana-input', 'waste-zari-input',
+                'sheet-tani-item', 'sheet-tani-sancha', 'sheet-tani-wazan', 'sheet-tani-pcs',
+                'sheet-chukka-item', 'sheet-chukka-sancha', 'sheet-chukka-wazan', 'sheet-chukka-pcs',
+                'sheet-color-1', 'sheet-color-2', 'sheet-color-3', 'sheet-color-4',
+                'sheet-color-5', 'sheet-color-6', 'sheet-color-7', 'sheet-color-8'
+            ],
+            () => {
+                saveCurrentSheetConfig();
+                toggleSheetSetupDrawer(false);
+                document.getElementById('row-saree')?.focus();
+            },
+            true
+        );
+    };
+
+    // Global capture guard: NEVER let browser step/scroll <input type="number"> values on ArrowUp/ArrowDown or Wheel
+    const bindStrictManualNumberGuard = () => {
+        if (window.__karManualNumGuardBound) return;
+        window.__karManualNumGuardBound = true;
+
+        document.addEventListener('wheel', (e) => {
+            const target = e.target;
+            if (target && target.tagName === 'INPUT' && target.type === 'number') {
+                if (target.closest('#kariger-section, #kariger-sheet-section')) {
+                    e.preventDefault();
+                }
             }
+        }, { passive: false });
 
-            el.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && e.ctrlKey) {
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+            const target = e.target;
+            if (target && target.tagName === 'INPUT' && target.type === 'number') {
+                if (target.closest('#kariger-section, #kariger-sheet-section')) {
                     e.preventDefault();
-                    e.stopPropagation();
-                    saveTaniRow();
-                    return;
                 }
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (e.shiftKey) {
-                        if (idx > 0) {
-                            const prev = document.getElementById(order[idx - 1]);
-                            if (prev) { prev.focus(); if (prev.select) prev.select(); }
-                        }
-                        return;
-                    }
-                    if (idx < order.length - 1) {
-                        const nxt = document.getElementById(order[idx + 1]);
-                        if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
-                    } else {
-                        saveTaniRow();
-                    }
-                }
-            });
-        });
-
-        // Also Enter-to-next inside Setup Drawer (Rates, Sancha, 8 Colors)
-        const setupOrder = [
-            'rate-bana-input', 'rate-zari-input', 'rate-bani-input', 'pichla-bana-input',
-            'pichla-zari-input', 'pichla-bani-input', 'waste-bana-input', 'waste-zari-input',
-            'sheet-tani-item', 'sheet-tani-sancha', 'sheet-tani-wazan', 'sheet-tani-pcs',
-            'sheet-chukka-item', 'sheet-chukka-sancha', 'sheet-chukka-wazan', 'sheet-chukka-pcs',
-            'sheet-color-1', 'sheet-color-2', 'sheet-color-3', 'sheet-color-4',
-            'sheet-color-5', 'sheet-color-6', 'sheet-color-7', 'sheet-color-8'
-        ];
-        setupOrder.forEach((fid, idx) => {
-            const el = document.getElementById(fid);
-            if (!el || el.dataset.karSetupEnter) return;
-            el.dataset.karSetupEnter = 'true';
-            if (el.type === 'number') {
-                el.addEventListener('wheel', (we) => { we.preventDefault(); }, { passive: false });
             }
-            el.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    saveCurrentSheetConfig();
-                    if (idx < setupOrder.length - 1) {
-                        const nxt = document.getElementById(setupOrder[idx + 1]);
-                        if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
-                    } else {
-                        toggleSheetSetupDrawer(false);
-                        document.getElementById('row-saree')?.focus();
-                    }
-                }
-            });
-        });
+        }, true);
     };
 
     const setupKarigerSheetTallyLayout = () => {
         ensureKarigerTallyStyles();
+        bindStrictManualNumberGuard();
         const shSec = document.getElementById('kariger-sheet-section');
         if (!shSec || shSec.dataset.tallyLayoutBuilt === '1') return;
         shSec.dataset.tallyLayoutBuilt = '1';
 
         const backBtn = shSec.querySelector('.module-header .back-btn');
         if (backBtn) backBtn.textContent = '← [Esc] Kariger List';
+        const nayiTaniBtn = shSec.querySelector('.module-header button[onclick*="addNewTaniSheet"]');
+        if (nayiTaniBtn) nayiTaniBtn.textContent = '+ Nayi Tani [Alt+N]';
+        const waHeaderBtn = shSec.querySelector('.module-header button[onclick*="sendKarigerWhatsAppParchi"]');
+        if (waHeaderBtn) waHeaderBtn.textContent = 'WhatsApp';
 
         const tabsBar = document.getElementById('sheet-tabs-container');
         const closingGrid = shSec.querySelector('.tani-closing-grid');
@@ -1603,7 +1645,13 @@
         const summaryWrap = document.getElementById('calc-remaining-amt')?.parentElement?.parentElement?.parentElement;
 
         const tbl = tableWrap?.querySelector('table');
-        if (tbl) tbl.classList.add('kar-khata-table');
+        if (tbl) {
+            tbl.classList.add('kar-khata-table');
+            // Compact column header text so 9 columns fit inside laptop screen without clipping
+            const ths = tbl.querySelectorAll('thead th');
+            const compactHeads = ['DATE', 'BANA', 'ZARI', 'SAREE', 'LOTT', 'PAID', 'RET.B', 'RET.Z', 'ACT'];
+            ths.forEach((th, i) => { if (compactHeads[i]) th.textContent = compactHeads[i]; });
+        }
         const theadRow = tbl?.querySelector('thead tr');
         if (theadRow) theadRow.removeAttribute('style');
         const tfoot = tbl?.querySelector('tfoot');
@@ -1615,7 +1663,7 @@
         setupWrap.className = 'kar-setup-wrap';
         setupWrap.innerHTML = `
             <div class="kar-setup-strip" onclick="window.__karToggleSetupDrawer()">
-                <span class="kar-setup-summary" id="kar-sheet-setup-summary">Bani Rate: ₹240/Pc · Target: 72 Pcs</span>
+                <span class="kar-setup-summary" id="kar-sheet-setup-summary">Bani Rate: ₹240/Pc · Target: 72 Pcs · Pichla: Bana 0.00 Kg | Zari 0.00 Kg | Bani ₹0</span>
                 <button type="button" id="kar-sheet-setup-toggle-btn" class="kar-btn-plain" onclick="event.stopPropagation(); window.__karToggleSetupDrawer()">Rates, Sancha &amp; 8 Colors [F9]</button>
             </div>
             <div class="kar-setup-body" id="kar-sheet-setup-body" style="display:none;"></div>
@@ -1650,7 +1698,7 @@
         leftEntryCard.innerHTML = `
             <div class="kar-pane-head">
                 <strong>Rozana Line Entry</strong>
-                <small>[Enter] Next / Save</small>
+                <small>[Enter / ↓] Next · Save</small>
             </div>
             <div class="kar-voucher-body" id="kar-voucher-entry-body"></div>
         `;
@@ -1772,7 +1820,7 @@
             strip.id = 'kar-sheet-status-strip';
             strip.className = 'kar-status-strip';
             strip.innerHTML = `
-                <span id="kar-sheet-toast-msg" style="color:#92400e; font-weight:700;">[Enter] Next / Save Line · [F9] Rates, Sancha &amp; 8 Colors · [Alt+N] Nayi Tani · [Ctrl+P / Alt+P] A6 Print · [Esc] Kariger List</span>
+                <span id="kar-sheet-toast-msg" style="color:#92400e; font-weight:700;">[Enter / ↓] Next Field &amp; Save · [F9] Rates, Sancha &amp; 8 Colors · [Alt+N] Nayi Tani · [Ctrl+P / Alt+P] A6 Print · [Esc] Back</span>
                 <span>TallyPrime Sheet Workspace</span>
             `;
             shSec.appendChild(strip);
@@ -1800,6 +1848,7 @@
         }
 
         ensureKarigerTallyStyles();
+        bindStrictManualNumberGuard();
         document.querySelectorAll('.module-section').forEach((s) => { s.style.display = 'none'; });
         const dView = document.getElementById('dashboard-view');
         if (dView) dView.style.display = 'none';
@@ -1820,7 +1869,7 @@
             printBtn.id = 'btn-print-kariger-sheet';
             printBtn.type = 'button';
             printBtn.className = 'sheet-btn';
-            printBtn.innerHTML = 'A6 Print Khata [Ctrl+P]';
+            printBtn.innerHTML = 'Print [Ctrl+P]';
             printBtn.onclick = () => openKarigerPrintModal();
             waBtn.parentElement.insertBefore(printBtn, waBtn.nextSibling);
         }
@@ -1869,7 +1918,7 @@
         loadCurrentSheetData();
     };
 
-    // ⭐ STRICT GATEKEEPER + INSTANT ORDER MINUS
+    // ⭐ STRICT GATEKEEPER + INSTANT ORDER MINUS + AUTO CARRY-FORWARD FROM LATEST SHEET
     const addNewTaniSheet = () => {
         const kariger = sanitizeKarigerList().find((x) => String(x.id) === String(window.activeKarigerId));
         const kName = kariger ? String(kariger.name || '').trim().toUpperCase() : '';
@@ -1888,8 +1937,12 @@
             return alert(`⚠️ تانی ابھی تیار نہیں ہے!\n\nکاریگر [${kariger?.name || 'Kariger'}] کا نیا تانہ ابھی رنگائی سے تیار ہو کر نہیں آیا ہے (Status: 'Ready' نہیں ہے)۔\n\nپہلے Tani Order & Rangai ماڈیول میں جا کر تانے کو 'Ready' مارک کریں، تبھی نئی شیٹ کھلے گی!`);
         }
 
+        // Persist any unsaved edits on current active sheet before carrying forward
+        saveCurrentSheetConfig();
+
         const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(window.activeKarigerId) : [];
-        const cur = sheets[window.activeSheetIndex] || sheets[sheets.length - 1];
+        // Always carry forward from the LATEST Tani Sheet
+        const cur = sheets.length ? sheets[sheets.length - 1] : null;
         const calc = (cur && typeof window.calculateSheetTotals === 'function')
             ? window.calculateSheetTotals(cur)
             : { remainingBana: 0, remainingZari: 0, remainingAmt: 0 };
@@ -1929,12 +1982,16 @@
             }
         }
 
+        const carryBana = safeNum(calc.remainingBana);
+        const carryZari = safeNum(calc.remainingZari);
+        const carryBani = safeNum(calc.remainingAmt);
+
         sheets.push({
             id: `tani_${nextNum}`,
             title: `Tani ${nextNum}`,
-            pichlaBana: safeNum(calc.remainingBana),
-            pichlaZari: safeNum(calc.remainingZari),
-            pichlaBani: safeNum(calc.remainingAmt),
+            pichlaBana: carryBana,
+            pichlaZari: carryZari,
+            pichlaBani: carryBani,
             banaWaste: 0,
             zariWaste: 0,
             rateBana: cur ? safeNum(cur.rateBana, 0.311) : 0.311,
@@ -1943,7 +2000,8 @@
             taniPcs: safeNum(readyTani.pcs, 72),
             chukkaPcs: cur ? safeNum(cur.chukkaPcs, 72) : 72,
             taniSancha: sanchaRangiCombined,
-            banaItem: readyTani.bana || '',
+            banaItem: readyTani.bana || (cur ? (cur.banaItem || '') : ''),
+            zariItem: cur ? (cur.zariItem || '') : '',
             colors: newColors,
             linkedTaniOrderId: readyTani.id,
             linkedTaniOrderNo: readyTani.orderNo,
@@ -1957,7 +2015,7 @@
         loadCurrentSheetData();
         notifyGlobalSync();
 
-        alert(`✅ Tani #${readyTani.orderNo} safalta-poorvak load ho gayi aur Tani Order list se minus ho gayi!\n• Saancha: ${readyTani.sancha || '-'}\n• Rangi: ${readyTani.rangi || '-'}\n• Bana: ${readyTani.bana || '-'}`);
+        alert(`✅ Tani #${readyTani.orderNo} load ho gayi aur pichli Tani ka balance automatic aa gaya!\n• Pichla Bana: ${carryBana.toFixed(2)} Kg\n• Pichla Zari: ${carryZari.toFixed(2)} Kg\n• Pichli Bani: ₹ ${carryBani.toFixed(2)}\n• Saancha: ${readyTani.sancha || '-'}`);
     };
 
     const revertSanchaStock = (itemName, category, wazan) => {
@@ -2392,6 +2450,7 @@
         const isLastSheet = (window.activeSheetIndex === sheets.length - 1);
         const savedSheetIndex = window.activeSheetIndex;
 
+        updateSheetSetupSummaryLine(sh);
         renderSheetRows(sh);
         updateLiveStockDisplay();
         notifyGlobalSync();
@@ -2459,6 +2518,7 @@
         if (typeof window.saveKarigerSheets === 'function') window.saveKarigerSheets(window.activeKarigerId, sheets);
 
         if (window.editingRowIndex === idx) cancelEditTaniRow();
+        updateSheetSetupSummaryLine(sh);
         renderSheetRows(sh);
         updateLiveStockDisplay();
         notifyGlobalSync();
@@ -2640,7 +2700,6 @@
 
         // 3. Inside Kariger Directory
         if (isDirOpen) {
-            // Prevent the Dashboard Gateway Enter keypress from leaking straight into the first Kariger's sheet!
             if (e.key === 'Enter' && (performance.now() - karigerDirOpenedAt) < 180) {
                 return;
             }
@@ -3348,7 +3407,7 @@
             sBtn.id = 'btn-sheet-kariger-pin';
             sBtn.type = 'button';
             sBtn.className = 'sheet-btn';
-            sBtn.textContent = 'App PIN & Link';
+            sBtn.textContent = 'App PIN';
             sBtn.onclick = () => openKarigerPortalLoginModal(window.activeKarigerId || null);
             waBtn.parentElement.insertBefore(sBtn, waBtn.nextSibling);
         }
