@@ -42,7 +42,7 @@
     };
 
     /* ========================================================================
-       2. SAFE DOM & DATA SANITIZATION UTILITIES
+       2. SAFE DOM, DATE & DATA SANITIZATION UTILITIES
        ======================================================================== */
     const esc = (s) => {
         if (typeof window.sanitizeHTML === 'function') return window.sanitizeHTML(s);
@@ -91,18 +91,48 @@
         }
     };
 
-    const getToday = () => {
-        return (typeof window.getTodayDate === 'function')
+    // Always normalize DD-MM-YYYY / YYYY-MM-DD to YYYY-MM-DD for <input type="date"> & filtering
+    const toIsoDate = (val) => {
+        if (!val) return '';
+        const s = String(val).trim();
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+        const parts = s.split(/[-/]/);
+        if (parts.length === 3 && parts[0].length === 2 && parts[2].length === 4) {
+            return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+        return s;
+    };
+
+    const getTodayIso = () => {
+        const raw = (typeof window.getTodayDate === 'function')
             ? window.getTodayDate()
             : new Date().toISOString().split('T')[0];
+        const iso = toIsoDate(raw);
+        return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : new Date().toISOString().split('T')[0];
     };
 
     const isAnyExpressOverlayOpen = () => {
         return Boolean(
             document.getElementById('kariger-express-modal') ||
             document.getElementById('master-stock-express-modal') ||
-            document.getElementById('master-jobwork-express-modal')
+            document.getElementById('master-jobwork-express-modal') ||
+            document.getElementById('tani-express-modal')
         );
+    };
+
+    const showPaymentToast = (msg) => {
+        const targetId = (paymentViewMode === 'ledger')
+            ? 'pay-ledger-toast-msg'
+            : 'payment-main-toast-msg';
+        const el = document.getElementById(targetId);
+        if (!el) return;
+        const orig = el.dataset.origText || el.textContent;
+        if (!el.dataset.origText) el.dataset.origText = orig;
+        el.textContent = msg;
+        clearTimeout(el.__toastTimer);
+        el.__toastTimer = setTimeout(() => {
+            el.textContent = el.dataset.origText || orig;
+        }, 4000);
     };
 
     /* ========================================================================
@@ -115,7 +145,7 @@
         style.textContent = `
             #payment-section {
                 padding: 0 !important;
-                overflow: hidden;
+                overflow-x: hidden;
                 font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
             }
             #payment-section .module-header {
@@ -182,6 +212,7 @@
                 justify-content: space-between;
                 align-items: center;
                 gap: 14px !important;
+                flex-wrap: wrap;
             }
             #payment-section .pay-summary-strip > div {
                 background: transparent !important;
@@ -228,6 +259,7 @@
             #payment-section .table-responsive {
                 padding: 0 20px;
                 box-sizing: border-box;
+                overflow-x: auto;
             }
             #payment-section table {
                 width: 100%;
@@ -246,16 +278,26 @@
                 color: #1f2937 !important;
                 border-bottom: 1.5px solid #e5d5a7 !important;
                 text-align: left;
+                white-space: nowrap;
             }
             #payment-section table td {
                 padding: 9px 12px !important;
                 font-size: 13px !important;
                 color: #1f2937 !important;
                 border-bottom: 1px solid #f3f4f6 !important;
+                font-variant-numeric: tabular-nums;
             }
             #payment-section .pay-main-tbl th:nth-child(8),
             #payment-section .pay-main-tbl td:nth-child(8) {
                 display: none !important;
+            }
+            #payment-section .pay-main-tbl th:nth-child(5),
+            #payment-section .pay-main-tbl th:nth-child(6),
+            #payment-section .pay-main-tbl th:nth-child(7),
+            #payment-section .pay-main-tbl td:nth-child(5),
+            #payment-section .pay-main-tbl td:nth-child(6),
+            #payment-section .pay-main-tbl td:nth-child(7) {
+                text-align: right !important;
             }
             #payment-section .pay-main-tbl th:nth-child(9) {
                 text-align: right !important;
@@ -331,7 +373,7 @@
             }
             .pay-modal-card {
                 background: #ffffff;
-                width: 100%; max-width: 470px;
+                width: 100%; max-width: 490px;
                 border: 1.5px solid #d9b86c;
                 border-radius: 8px;
                 box-shadow: 0 18px 42px rgba(0, 0, 0, 0.16);
@@ -347,8 +389,22 @@
             .pay-modal-head h3 {
                 margin: 0; font-size: 15px; font-weight: 800; color: #1f2937;
             }
+            .pay-modal-form-row {
+                display: grid;
+                grid-template-columns: 145px minmax(0, 1fr);
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 9px;
+                min-width: 0;
+            }
+            .pay-modal-form-row label {
+                font-size: 12.5px;
+                font-weight: 700;
+                color: #374151;
+                white-space: nowrap;
+            }
             .pay-modal-inp {
-                width: 100%; box-sizing: border-box;
+                width: 100%; min-width: 0; box-sizing: border-box;
                 padding: 7px 10px;
                 border: 1px solid #d1d5db; border-radius: 4px;
                 font-size: 13px; font-weight: 700; color: #111827;
@@ -367,6 +423,17 @@
                 margin-top: 10px;
                 display: flex; justify-content: space-between; align-items: center; gap: 10px;
             }
+            .pay-vch-pill {
+                display: inline-block;
+                padding: 2px 7px;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 800;
+                background: #fdf6e2;
+                border: 1px solid #e5d5a7;
+                color: #92400e;
+                white-space: nowrap;
+            }
         `;
         document.head.appendChild(style);
     };
@@ -374,10 +441,26 @@
     /* ========================================================================
        4. VIEW CONTROLLER: PARTY LIST vs INLINE PARTY LEDGER
        ======================================================================== */
+    const ensureHeaderBackCapture = () => {
+        const header = document.querySelector('#payment-section .module-header');
+        if (!header || header.dataset.payBackBound) return;
+        header.dataset.payBackBound = 'true';
+        header.addEventListener('click', (e) => {
+            const btn = e.target.closest('.back-btn');
+            if (btn && paymentViewMode === 'ledger') {
+                e.preventDefault();
+                e.stopPropagation();
+                handlePaymentBackStep();
+            }
+        }, true);
+    };
+
     const setPaymentViewMode = (mode) => {
         paymentViewMode = mode; // 'list' | 'ledger'
         const sec = document.getElementById('payment-section');
         if (!sec) return;
+
+        ensureHeaderBackCapture();
 
         const kTabsBar = document.getElementById('payment-karkhana-tabs-bar');
         const paidEl = document.getElementById('total-paid-display');
@@ -405,7 +488,7 @@
         if (headerTitle) {
             headerTitle.textContent = isList
                 ? 'Payments & Party Ledgers'
-                : `Party Ledger: ${window.activePaymentKarigerName || 'Kariger'}`;
+                : `Ledger: ${window.activePaymentKarigerName || 'Kariger'}`;
         }
         if (headerBackBtn) {
             headerBackBtn.textContent = isList ? '← [Esc] Dashboard' : '← [Esc] Party List';
@@ -428,6 +511,8 @@
        ======================================================================== */
     const openPaymentModule = () => {
         ensurePaymentTallyStyles();
+        invalidatePaymentCache();
+        document.querySelectorAll('.module-section').forEach((s) => { s.style.display = 'none'; });
         const dView = document.getElementById('dashboard-view');
         if (dView) dView.style.display = 'none';
 
@@ -530,13 +615,13 @@
     };
 
     /* ========================================================================
-       6. MEMOIZED WEAVER BAKAYA RESOLVER (INCLUDES PICHLA BANI FIX)
+       6. WEAVER BAKAYA RESOLVER (ALWAYS FRESH + INCLUDES PICHLA BANI)
        ======================================================================== */
-    const getWeaverWageMetrics = (kId) => {
+    const getWeaverWageMetrics = (kId, useCache = true) => {
         if (!kId) return { mazdoori: 0, diya: 0, baki: 0 };
         const cleanId = String(kId).trim();
 
-        if (WEAVER_BAKAYA_CACHE.has(cleanId)) {
+        if (useCache && WEAVER_BAKAYA_CACHE.has(cleanId)) {
             return WEAVER_BAKAYA_CACHE.get(cleanId);
         }
 
@@ -551,7 +636,6 @@
 
         if (curSheet && typeof window.calculateSheetTotals === 'function') {
             const calc = window.calculateSheetTotals(curSheet);
-            // Fix: Include carried-forward pichlaBani so total due (Mazdoori) never shows ₹ 0.00 when pichlaBani exists
             mazdoori = roundCurrency(safeNum(curSheet.pichlaBani) + safeNum(calc.grossBani));
             diya = roundCurrency(calc.totPaid);
             baki = roundCurrency(calc.remainingAmt);
@@ -581,6 +665,8 @@
     const renderPaymentTable = () => {
         ensurePaymentTallyStyles();
         bindPaymentSearchInput();
+        // Always refresh from live stores so Kariger Master / Express edits show immediately
+        invalidatePaymentCache();
 
         const tbody = document.getElementById('payment-table-body');
         if (!tbody) return;
@@ -635,7 +721,7 @@
         const rowsData = [];
 
         karigers.forEach((k) => {
-            const metrics = getWeaverWageMetrics(k.id);
+            const metrics = getWeaverWageMetrics(k.id, false);
 
             grandTotalPaid += metrics.diya;
             grandTotalBaki += metrics.baki;
@@ -691,7 +777,7 @@
             strip.id = 'payment-main-status-strip';
             strip.className = 'pay-status-strip';
             strip.innerHTML = `
-                <span style="color:#92400e; font-weight:700;">[↑ ↓] Party Chunein · [Enter / Click] Open Ledger · [F5] Payment · [F4] Cash Transfer · [F2] Godam · [/] Search · [Esc] Back</span>
+                <span id="payment-main-toast-msg" style="color:#92400e; font-weight:700;">[↑ ↓] Party Chunein · [Enter / Click] Open Ledger · [F5] Payment · [F4] Cash Transfer · [F2] Godam · [/] Search · [Esc] Back</span>
                 <span id="payment-main-count-lbl">0 Parties</span>
             `;
             sec.appendChild(strip);
@@ -758,7 +844,7 @@
         if (paymentViewMode === 'ledger' && window.activePaymentKarigerId) {
             const kList = safeGetStore('kariger_list');
             const k = kList.find(x => String(x.id) === String(window.activePaymentKarigerId));
-            const metrics = getWeaverWageMetrics(window.activePaymentKarigerId);
+            const metrics = getWeaverWageMetrics(window.activePaymentKarigerId, false);
             openQuickPayModal(
                 window.activePaymentKarigerId,
                 escJsAttr(window.activePaymentKarigerName || k?.name || 'Kariger'),
@@ -781,7 +867,7 @@
     };
 
     /* ========================================================================
-       8. TALLY PAYMENT VOUCHER MODAL (F5 — WHITE & GOLD + ACCEPT? Y/N)
+       8. TALLY PAYMENT VOUCHER MODAL (F5 — 1-FIELD-PER-ROW + ACCEPT? Y/N)
        ======================================================================== */
     const showQuickPayAcceptStrip = (show) => {
         const bar = document.getElementById('qp-accept-strip');
@@ -801,7 +887,7 @@
         const existingModal = document.getElementById('quick-pay-modal');
         if (existingModal) existingModal.remove();
 
-        const today = getToday();
+        const todayIso = getTodayIso();
         const godamName = (typeof window.getKarkhanaNameById === 'function')
             ? window.getKarkhanaNameById(karkhanaId)
             : 'Main Godown';
@@ -814,8 +900,8 @@
                         <button type="button" class="pay-tally-btn" onclick="closeQuickPayModal()">&larr; [Esc] Close</button>
                     </div>
                     <div style="padding:16px;">
-                        <div style="background:#fdf6e2; border:1px solid #e5d5a7; border-radius:6px; padding:10px 12px; margin-bottom:12px; font-size:12.5px;">
-                            <div style="display:flex; justify-content:space-between;">
+                        <div style="background:#fdf6e2; border:1px solid #e5d5a7; border-radius:6px; padding:10px 12px; margin-bottom:14px; font-size:12.5px;">
+                            <div style="display:flex; justify-content:space-between; gap:8px;">
                                 <span><strong>Account :</strong> Cash (${esc(godamName)})</span>
                                 <span><strong>Vch :</strong> Payment</span>
                             </div>
@@ -823,18 +909,16 @@
                             <div style="color:#b47d00; font-weight:800; font-size:13.5px; margin-top:4px;">Cur Bal (Baki): ₹ ${roundCurrency(bakiAmt).toFixed(2)}</div>
                         </div>
 
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-                            <div>
-                                <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Amount (₹) :</label>
-                                <input type="number" step="0.01" id="quick-pay-amount" placeholder="0.00" class="pay-modal-inp" style="text-align:right; font-size:15px;">
-                            </div>
-                            <div>
-                                <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Date :</label>
-                                <input type="date" id="quick-pay-date" value="${today}" class="pay-modal-inp">
-                            </div>
+                        <div class="pay-modal-form-row">
+                            <label for="quick-pay-amount">Amount (₹) :</label>
+                            <input type="number" step="0.01" id="quick-pay-amount" placeholder="0.00" class="pay-modal-inp" style="text-align:right; font-size:15px;">
                         </div>
-                        <div style="margin-bottom:10px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Narration / Note (Optional) :</label>
+                        <div class="pay-modal-form-row">
+                            <label for="quick-pay-date">Date :</label>
+                            <input type="date" id="quick-pay-date" value="${todayIso}" class="pay-modal-inp">
+                        </div>
+                        <div class="pay-modal-form-row">
+                            <label for="quick-pay-note">Narration / Note :</label>
                             <input type="text" id="quick-pay-note" placeholder="e.g. Weekly Hafta payment" class="pay-modal-inp">
                         </div>
 
@@ -919,7 +1003,8 @@
         const karkhanaId = decodeURIComponent(safeKid || '');
 
         const amt = roundCurrency(document.getElementById('quick-pay-amount')?.value);
-        const payDate = document.getElementById('quick-pay-date')?.value || getToday();
+        const rawDate = document.getElementById('quick-pay-date')?.value || '';
+        const payDate = toIsoDate(rawDate) || getTodayIso();
         const note = String(document.getElementById('quick-pay-note')?.value || '').trim();
 
         if (amt <= 0) {
@@ -1015,11 +1100,10 @@
             closeQuickPayModal();
 
             if (paymentViewMode === 'ledger' && String(window.activePaymentKarigerId) === String(karigerId)) {
-                applyPaymentPassbookFilters();
+                applyPaymentPassbookFilters(true);
             }
             renderPaymentTable();
-
-            alert(`✅ ₹ ${amt.toFixed(2)} safalta-poorvak ${karigerName} ki sheet aur Payments Table me darj ho gaya!`);
+            showPaymentToast(`✅ ₹ ${amt.toFixed(2)} — ${karigerName} ki sheet aur Payments Table me save ho gaya!`);
         } catch (err) {
             console.error('[PaymentEngine] Quick pay execution failure:', err);
             alert('Payment process karne me takleef aayi.');
@@ -1027,7 +1111,7 @@
     };
 
     /* ========================================================================
-       9. CONTRA / CASH TRANSFER MODAL (F4 — WHITE & GOLD + ACCEPT? Y/N)
+       9. CONTRA / CASH TRANSFER MODAL (F4 — 1-FIELD-PER-ROW + ACCEPT? Y/N)
        ======================================================================== */
     const showCashTransferAcceptStrip = (show) => {
         const bar = document.getElementById('ct-accept-strip');
@@ -1049,8 +1133,11 @@
         } else {
             karkhanas = safeGetStore('karkhana_list');
         }
+        if (!karkhanas.length) {
+            karkhanas = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
+        }
 
-        const today = getToday();
+        const todayIso = getTodayIso();
         let fromOptions = '';
         let toOptions = '';
 
@@ -1068,28 +1155,24 @@
                         <button type="button" class="pay-tally-btn" onclick="closeCashTransferModal()">&larr; [Esc] Close</button>
                     </div>
                     <div style="padding:16px;">
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-                            <div>
-                                <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">From (Source) :</label>
-                                <select id="cash-from-godam" class="pay-modal-inp">${fromOptions}</select>
-                            </div>
-                            <div>
-                                <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">To (Destination) :</label>
-                                <select id="cash-to-godam" class="pay-modal-inp">${toOptions}</select>
-                            </div>
+                        <div class="pay-modal-form-row">
+                            <label for="cash-from-godam">From (Source) :</label>
+                            <select id="cash-from-godam" class="pay-modal-inp">${fromOptions}</select>
                         </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-                            <div>
-                                <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Amount (₹) :</label>
-                                <input type="number" step="0.01" id="cash-transfer-amt" placeholder="0.00" class="pay-modal-inp" style="text-align:right; font-size:15px;">
-                            </div>
-                            <div>
-                                <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Date :</label>
-                                <input type="date" id="cash-transfer-date" value="${today}" class="pay-modal-inp">
-                            </div>
+                        <div class="pay-modal-form-row">
+                            <label for="cash-to-godam">To (Destination) :</label>
+                            <select id="cash-to-godam" class="pay-modal-inp">${toOptions}</select>
                         </div>
-                        <div style="margin-bottom:10px;">
-                            <label style="font-size:12px; font-weight:700; color:#374151; display:block; margin-bottom:4px;">Narration / Note :</label>
+                        <div class="pay-modal-form-row">
+                            <label for="cash-transfer-amt">Amount (₹) :</label>
+                            <input type="number" step="0.01" id="cash-transfer-amt" placeholder="0.00" class="pay-modal-inp" style="text-align:right; font-size:15px;">
+                        </div>
+                        <div class="pay-modal-form-row">
+                            <label for="cash-transfer-date">Date :</label>
+                            <input type="date" id="cash-transfer-date" value="${todayIso}" class="pay-modal-inp">
+                        </div>
+                        <div class="pay-modal-form-row">
+                            <label for="cash-transfer-note">Narration / Note :</label>
                             <input type="text" id="cash-transfer-note" placeholder="e.g. Weekly Mazdoori ke liye bheja" class="pay-modal-inp">
                         </div>
 
@@ -1173,7 +1256,8 @@
         const fromKid = document.getElementById('cash-from-godam')?.value;
         const toKid = document.getElementById('cash-to-godam')?.value;
         const amt = roundCurrency(document.getElementById('cash-transfer-amt')?.value);
-        const date = document.getElementById('cash-transfer-date')?.value || getToday();
+        const rawDate = document.getElementById('cash-transfer-date')?.value || '';
+        const date = toIsoDate(rawDate) || getTodayIso();
         const note = String(document.getElementById('cash-transfer-note')?.value || '').trim();
 
         if (String(fromKid) === String(toKid)) {
@@ -1244,9 +1328,12 @@
             if (typeof window.updateDashboardBadgeTotals === 'function') {
                 window.updateDashboardBadgeTotals();
             }
+            if (typeof window.slSyncDashboardCharts === 'function') {
+                window.slSyncDashboardCharts();
+            }
 
             closeCashTransferModal();
-            alert(`✅ ₹ ${amt.toFixed(2)} safalta-poorvak transfer ho gaya aur Payments Table sync ho gayi!`);
+            showPaymentToast(`✅ ₹ ${amt.toFixed(2)} (${fromName} ➔ ${toName}) transfer save & sync ho gaya!`);
         } catch (err) {
             console.error('[PaymentEngine] Cash transfer failure:', err);
             alert('Cash transfer execute karne me takleef aayi.');
@@ -1254,7 +1341,7 @@
     };
 
     /* ========================================================================
-       10. INLINE PARTY LEDGER (WITH F5 PAY & F8 OPEN KARIGER TANI SHEET!)
+       10. INLINE PARTY LEDGER (DEBIT / CREDIT / RUNNING BALANCE + F5 + F4 + F8)
        ======================================================================== */
     const ensureInlinePaymentLedgerContainer = () => {
         const sec = document.getElementById('payment-section');
@@ -1275,6 +1362,7 @@
                 </div>
                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
                     <button type="button" class="pay-tally-btn-gold" onclick="window.__payTriggerFromLedger()">Pay Voucher [F5]</button>
+                    <button type="button" class="pay-tally-btn" onclick="openCashTransferModal()">Contra [F4]</button>
                     <button type="button" class="pay-tally-btn" onclick="window.__payOpenKarigerSheet()">Open Tani Sheet [S / F8]</button>
                     <button type="button" class="pay-tally-btn" onclick="window.__payPrintSingleSelected()">Voucher Slip [P]</button>
                     <button type="button" class="pay-tally-btn" onclick="printPaymentPassbookFiltered()">A6 Print [Alt+P]</button>
@@ -1292,7 +1380,7 @@
                 </div>
                 <div style="flex:1; min-width:180px;">
                     <label style="font-size:11px; font-weight:700; color:#6b7280; display:block; margin-bottom:2px;">Search [/]:</label>
-                    <input type="text" id="pay-pass-search-input" class="search-box" placeholder="Search Date, Sheet, Amount..." oninput="debouncedPassbookSearch()">
+                    <input type="text" id="pay-pass-search-input" class="search-box" placeholder="Search Date, Tani, Vch Type, Amount..." oninput="debouncedPassbookSearch()">
                 </div>
                 <button type="button" class="pay-tally-btn" onclick="resetPaymentPassbookFilters()">Reset [R]</button>
             </div>
@@ -1304,9 +1392,11 @@
                             <th>Tarikh</th>
                             <th>Khata / Tani</th>
                             <th>Vch Type</th>
-                            <th style="text-align:right;">Saree (Pcs)</th>
-                            <th style="text-align:right;">Paid (Diya ₹)</th>
-                            <th>Narration / Note</th>
+                            <th style="text-align:right;">Saree (Net)</th>
+                            <th style="text-align:right;">Jama / Bani (+ ₹)</th>
+                            <th style="text-align:right;">Diya / Paid (- ₹)</th>
+                            <th style="text-align:right;">Closing Bal (₹)</th>
+                            <th>Narration</th>
                         </tr>
                     </thead>
                     <tbody id="payment-passbook-table-body"></tbody>
@@ -1316,7 +1406,7 @@
             <div id="payment-passbook-pagination-controls" style="display:flex; justify-content:space-between; align-items:center; margin:10px 20px 0 20px; padding:8px 0; border-top:1px solid #eadab0; flex-wrap:wrap; gap:8px;"></div>
 
             <div class="pay-status-strip">
-                <span style="color:#92400e; font-weight:700;">[↑ ↓] Entry · [F5] Pay Voucher · [S / F8] Open Tani Sheet · [Enter / P] Single Slip · [Alt+P] Statement · [Esc] Party List</span>
+                <span id="pay-ledger-toast-msg" style="color:#92400e; font-weight:700;">[↑ ↓] Entry · [F5] Pay Voucher · [F4] Contra · [S / F8] Tani Sheet · [Enter / P] Slip · [Alt+P] Statement · [Esc] Party List</span>
                 <span id="pay-ledger-count-lbl">0 Entries</span>
             </div>
         `;
@@ -1374,11 +1464,13 @@
         const pageRows = filteredPaymentPassbookCache.slice(startIndex, startIndex + PAYMENT_PASSBOOK_PAGE_SIZE);
         const row = pageRows[paymentLedgerActiveIdx];
         if (!row) return alert('Print karne ke liye koi entry chunein!');
-        printSinglePaymentEntry(row.date, row.sheetTitle, row.saree, row.paid, row.note);
+        printSinglePaymentEntry(row.date, row.sheetTitle, row.saree, row.debit, row.note, row.credit, row.runningBal);
     };
 
     const openPaymentPassbook = (karigerId, karigerName) => {
         ensurePaymentTallyStyles();
+        invalidatePaymentCache(karigerId);
+        document.querySelectorAll('.module-section').forEach((s) => { s.style.display = 'none'; });
         const dView = document.getElementById('dashboard-view');
         if (dView) dView.style.display = 'none';
         setDisplay('payment-section', 'block');
@@ -1391,7 +1483,7 @@
         ensureInlinePaymentLedgerContainer();
         setPaymentViewMode('ledger');
         bindPaymentKeyboardEngine();
-        applyPaymentPassbookFilters();
+        applyPaymentPassbookFilters(true);
     };
 
     const resetPaymentPassbookFilters = () => {
@@ -1403,7 +1495,7 @@
         if (sInp) sInp.value = '';
         paymentPassbookCurrentPage = 1;
         paymentLedgerActiveIdx = 0;
-        applyPaymentPassbookFilters();
+        applyPaymentPassbookFilters(true);
     };
 
     const debouncedPassbookSearch = () => {
@@ -1411,56 +1503,158 @@
         passbookSearchDebounceTimer = setTimeout(() => {
             paymentPassbookCurrentPage = 1;
             paymentLedgerActiveIdx = 0;
-            applyPaymentPassbookFilters();
+            applyPaymentPassbookFilters(false);
         }, 150);
     };
 
-    const applyPaymentPassbookFilters = () => {
-        if (!window.activePaymentKarigerId) return;
-
+    // Build chronological Party Ledger with exact Credit (Bani Earned), Debit (Paid) & Running Balance
+    const buildKarigerLedgerEntries = (karigerId) => {
         const sheets = (typeof window.getKarigerSheets === 'function')
-            ? window.getKarigerSheets(window.activePaymentKarigerId)
+            ? window.getKarigerSheets(karigerId)
             : [];
 
-        let allRows = [];
-        sheets.forEach((sh) => {
-            const rows = window.safeArray ? window.safeArray(sh?.rows) : (Array.isArray(sh?.rows) ? sh.rows : []);
-            rows.forEach((r) => {
-                const paidVal = safeNum(r?.paid);
-                const sareeVal = safeNum(r?.saree);
-                if (paidVal > 0 || sareeVal > 0) {
-                    allRows.push({
-                        date: r?.date || '-',
-                        sheetTitle: sh?.title || 'Tani Khata',
-                        saree: sareeVal,
-                        paid: paidVal,
-                        vchType: paidVal > 0 ? 'Payment' : 'Saree Jama',
-                        note: r?.note || (paidVal > 0 ? 'Payment Diya' : 'Saree Jama')
+        const entries = [];
+        let runningBal = 0;
+
+        sheets.forEach((sh, sIdx) => {
+            if (!sh) return;
+            const shTitle = sh.title || `Tani ${sIdx + 1}`;
+            const rateBani = (sh.rateBani !== undefined && sh.rateBani !== null) ? safeNum(sh.rateBani, 240) : 240;
+            const rows = window.safeArray ? window.safeArray(sh.rows) : (Array.isArray(sh.rows) ? sh.rows : []);
+            const firstRowIso = rows.length && rows[0]?.date ? toIsoDate(rows[0].date) : '-';
+
+            if (sIdx === 0) {
+                const opening = roundCurrency(safeNum(sh.pichlaBani));
+                if (opening !== 0) {
+                    runningBal = roundCurrency(runningBal + opening);
+                    entries.push({
+                        date: firstRowIso,
+                        isoDate: firstRowIso === '-' ? '' : firstRowIso,
+                        sheetTitle: shTitle,
+                        vchType: 'Opening Bal',
+                        saree: 0,
+                        lott: 0,
+                        netSaree: 0,
+                        credit: opening > 0 ? opening : 0,
+                        debit: opening < 0 ? Math.abs(opening) : 0,
+                        runningBal,
+                        note: 'Pichla Baki Opening Balance'
                     });
                 }
+            } else {
+                const diff = roundCurrency(safeNum(sh.pichlaBani) - runningBal);
+                if (Math.abs(diff) >= 0.01) {
+                    runningBal = roundCurrency(runningBal + diff);
+                    entries.push({
+                        date: firstRowIso,
+                        isoDate: firstRowIso === '-' ? '' : firstRowIso,
+                        sheetTitle: shTitle,
+                        vchType: 'Carry Adj',
+                        saree: 0,
+                        lott: 0,
+                        netSaree: 0,
+                        credit: diff > 0 ? diff : 0,
+                        debit: diff < 0 ? Math.abs(diff) : 0,
+                        runningBal,
+                        note: `${shTitle} Pichla Bani Adjustment`
+                    });
+                }
+            }
+
+            rows.forEach((r) => {
+                if (!r) return;
+                const sareeVal = safeNum(r.saree);
+                const lottVal = safeNum(r.lott);
+                const netPcs = sareeVal - lottVal;
+                const earned = roundCurrency(netPcs * rateBani);
+                const paidVal = roundCurrency(safeNum(r.paid));
+
+                if (sareeVal === 0 && lottVal === 0 && paidVal === 0) return;
+
+                const credit = earned > 0 ? earned : 0;
+                const debit = roundCurrency(paidVal + (earned < 0 ? Math.abs(earned) : 0));
+                runningBal = roundCurrency(runningBal + credit - debit);
+
+                let vchType = 'Payment';
+                if (sareeVal > 0 && paidVal > 0) vchType = 'Saree + Pay';
+                else if (sareeVal > 0 || lottVal > 0) vchType = 'Saree Jama';
+
+                const rawD = r.date || '-';
+                const isoD = rawD !== '-' ? toIsoDate(rawD) : '';
+                const defaultNote = (sareeVal > 0)
+                    ? `${sareeVal} Saree${lottVal > 0 ? ` (-${lottVal} Lott)` : ''} @ ₹${rateBani}${paidVal > 0 ? ` · Paid ₹${paidVal.toFixed(0)}` : ''}`
+                    : 'Mazdoori Payment';
+
+                entries.push({
+                    date: isoD || rawD,
+                    isoDate: isoD,
+                    sheetTitle: shTitle,
+                    vchType,
+                    saree: sareeVal,
+                    lott: lottVal,
+                    netSaree: netPcs,
+                    credit,
+                    debit,
+                    runningBal,
+                    note: r.note ? String(r.note) : defaultNote
+                });
             });
+
+            // Reconcile sheet closing with calculateSheetTotals (handles edge case where totLott > totSaree clamp occurs)
+            if (typeof window.calculateSheetTotals === 'function') {
+                const calcSh = window.calculateSheetTotals(sh);
+                const shDiff = roundCurrency(safeNum(calcSh.remainingAmt) - runningBal);
+                if (Math.abs(shDiff) >= 0.01) {
+                    runningBal = roundCurrency(runningBal + shDiff);
+                    entries.push({
+                        date: firstRowIso,
+                        isoDate: firstRowIso === '-' ? '' : firstRowIso,
+                        sheetTitle: shTitle,
+                        vchType: 'Sheet Adj',
+                        saree: 0,
+                        lott: 0,
+                        netSaree: 0,
+                        credit: shDiff > 0 ? shDiff : 0,
+                        debit: shDiff < 0 ? Math.abs(shDiff) : 0,
+                        runningBal,
+                        note: `${shTitle} Net Bani Reconciliation`
+                    });
+                }
+            }
         });
 
-        const fDate = document.getElementById('pay-pass-from-date')?.value || '';
-        const tDate = document.getElementById('pay-pass-to-date')?.value || '';
+        return entries;
+    };
+
+    const applyPaymentPassbookFilters = (jumpToLatestPage = false) => {
+        if (!window.activePaymentKarigerId) return;
+
+        let allRows = buildKarigerLedgerEntries(window.activePaymentKarigerId);
+
+        const fDate = toIsoDate(document.getElementById('pay-pass-from-date')?.value || '');
+        const tDate = toIsoDate(document.getElementById('pay-pass-to-date')?.value || '');
         const sTxt = (document.getElementById('pay-pass-search-input')?.value || '').toLowerCase().trim();
 
-        if (fDate) allRows = allRows.filter((x) => x.date >= fDate);
-        if (tDate) allRows = allRows.filter((x) => x.date <= tDate);
+        if (fDate) allRows = allRows.filter((x) => !x.isoDate || x.isoDate >= fDate);
+        if (tDate) allRows = allRows.filter((x) => !x.isoDate || x.isoDate <= tDate);
 
         if (sTxt) {
             allRows = allRows.filter((x) => {
-                const full = `${x.date} ${x.sheetTitle} ${x.saree} ${x.paid} ${x.note}`.toLowerCase();
+                const full = `${x.date} ${x.sheetTitle} ${x.vchType} ${x.netSaree} ${x.credit} ${x.debit} ${x.runningBal} ${x.note}`.toLowerCase();
                 return full.includes(sTxt);
             });
         }
 
-        // Show newest first
-        allRows = allRows.slice().reverse();
-
         filteredPaymentPassbookCache = allRows;
 
-        const metrics = getWeaverWageMetrics(window.activePaymentKarigerId);
+        const totalPages = Math.ceil(allRows.length / PAYMENT_PASSBOOK_PAGE_SIZE) || 1;
+        if (jumpToLatestPage) {
+            paymentPassbookCurrentPage = totalPages;
+            const lastPageCount = allRows.length - (totalPages - 1) * PAYMENT_PASSBOOK_PAGE_SIZE;
+            paymentLedgerActiveIdx = Math.max(0, lastPageCount - 1);
+        }
+
+        const metrics = getWeaverWageMetrics(window.activePaymentKarigerId, false);
         const kList = safeGetStore('kariger_list');
         const kObj = kList.find(x => String(x.id) === String(window.activePaymentKarigerId));
         const godamName = kObj?.karkhanaName || ((typeof window.getKarkhanaNameById === 'function') ? window.getKarkhanaNameById(kObj?.karkhanaId) : 'Main Godown');
@@ -1469,7 +1663,7 @@
         const totEl = document.getElementById('pay-ledger-summary-totals');
         if (titleEl) titleEl.textContent = `${window.activePaymentKarigerName} (${godamName}${kObj?.saree ? ` · ${kObj.saree}` : ''})`;
         if (totEl) {
-            totEl.textContent = `Kul Dena: ₹ ${metrics.mazdoori.toFixed(2)} · Diya: ₹ ${metrics.diya.toFixed(2)} · Closing Baki: ₹ ${metrics.baki.toFixed(2)}`;
+            totEl.textContent = `Kul Mazdoori: ₹ ${metrics.mazdoori.toFixed(2)} · Diya: ₹ ${metrics.diya.toFixed(2)} · Closing Baki: ₹ ${metrics.baki.toFixed(2)}`;
         }
 
         renderPaymentPassbookRows();
@@ -1494,7 +1688,7 @@
         if (cntEl) cntEl.textContent = `${totalEntries} Entries`;
 
         if (!totalEntries) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; color:#6b7280;">Koi payment ya saree entry nahi mili. [F5] se Payment kaat sakte hain ya [S] se Tani Sheet kholein.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:18px; color:#6b7280;">Koi ledger entry nahi mili. [F5] se Payment kaat sakte hain ya [S] se Tani Sheet kholein.</td></tr>';
             if (pager) pager.innerHTML = '';
             return;
         }
@@ -1505,18 +1699,24 @@
 
         const startIndex = (paymentPassbookCurrentPage - 1) * PAYMENT_PASSBOOK_PAGE_SIZE;
         const pageRows = filteredPaymentPassbookCache.slice(startIndex, startIndex + PAYMENT_PASSBOOK_PAGE_SIZE);
-        if (paymentLedgerActiveIdx >= pageRows.length) paymentLedgerActiveIdx = 0;
+        if (paymentLedgerActiveIdx >= pageRows.length) paymentLedgerActiveIdx = Math.max(0, pageRows.length - 1);
         if (paymentLedgerActiveIdx < 0) paymentLedgerActiveIdx = 0;
 
         let html = '';
         pageRows.forEach((row, idx) => {
             const activeCls = (idx === paymentLedgerActiveIdx) ? ' active' : '';
+            const sareeCell = row.saree > 0 || row.lott > 0
+                ? `${row.netSaree} Pcs${row.lott > 0 ? ` <small style="color:#6b7280;">(${row.saree}-${row.lott})</small>` : ''}`
+                : '-';
+
             html += `<tr class="pay-pass-row${activeCls}" data-plidx="${idx}" onclick="window.__paySelectLedgerRow(${idx})">
                 <td>${esc(row.date)}</td>
                 <td><strong>${esc(row.sheetTitle)}</strong></td>
-                <td><span style="font-size:11.5px; font-weight:700; color:${row.paid > 0 ? '#b47d00' : '#6b7280'};">${esc(row.vchType)}</span></td>
-                <td style="text-align:right;">${row.saree ? `${row.saree} Pcs` : '-'}</td>
-                <td style="text-align:right; font-weight:800; color:#b47d00;">${row.paid ? `₹ ${row.paid.toFixed(2)}` : '-'}</td>
+                <td><span class="pay-vch-pill">${esc(row.vchType)}</span></td>
+                <td style="text-align:right;">${sareeCell}</td>
+                <td style="text-align:right; font-weight:700; color:#374151;">${row.credit > 0 ? `+ ₹ ${row.credit.toFixed(2)}` : '-'}</td>
+                <td style="text-align:right; font-weight:800; color:#b47d00;">${row.debit > 0 ? `- ₹ ${row.debit.toFixed(2)}` : '-'}</td>
+                <td style="text-align:right; font-weight:800; color:${row.runningBal > 0 ? '#92400e' : '#6b7280'};">₹ ${row.runningBal.toFixed(2)}</td>
                 <td style="color:#6b7280; font-size:12px;">${esc(row.note)}</td>
             </tr>`;
         });
@@ -1696,7 +1896,7 @@
     };
 
     /* ========================================================================
-       12. A6 PAPER & THERMAL PRINTER PRINT ENGINES (UNCHANGED)
+       12. A6 PAPER & THERMAL PRINTER PRINT ENGINES
        ======================================================================== */
     const getPaymentKarkhanaPrintName = (kId) => {
         if (!kId || kId === 'all') return 'Sabhi Godam (All Units)';
@@ -1807,7 +2007,7 @@
     const printPaymentPassbookFiltered = () => {
         const rows = filteredPaymentPassbookCache;
         if (!rows || !rows.length) {
-            return alert('Print karne ke liye koi passbook entry nahi mili!');
+            return alert('Print karne ke liye koi ledger entry nahi mili!');
         }
 
         const karigerName = window.activePaymentKarigerName || 'Kariger';
@@ -1815,23 +2015,24 @@
         const tDate = document.getElementById('pay-pass-to-date')?.value || '';
         const dateRangeTxt = (fDate && tDate) ? `${fDate} se ${tDate}` : (fDate ? `${fDate} ke baad` : (tDate ? `${tDate} tak` : 'Sabhi Tarikh'));
 
-        let totalSaree = 0;
-        let totalPaid = 0;
+        let totalCredit = 0;
+        let totalDebit = 0;
+        let lastBal = rows.length ? safeNum(rows[rows.length - 1].runningBal) : 0;
 
         let rowsHtml = '';
         rows.forEach((r) => {
-            const sVal = safeNum(r.saree);
-            const pVal = safeNum(r.paid);
-
-            totalSaree += sVal;
-            totalPaid += pVal;
+            const cr = safeNum(r.credit);
+            const dr = safeNum(r.debit);
+            totalCredit += cr;
+            totalDebit += dr;
 
             rowsHtml += `
                 <tr style="border-bottom:1px dashed #ccc;">
                     <td style="padding:3px 2px;">${esc(r.date)}</td>
-                    <td style="padding:3px 2px; font-weight:600;">${esc(r.sheetTitle)}</td>
-                    <td style="padding:3px 2px; text-align:right;">${sVal > 0 ? `${sVal} Pcs` : '-'}</td>
-                    <td style="padding:3px 2px; text-align:right; font-weight:bold;">${pVal > 0 ? `₹${pVal.toFixed(2)}` : '-'}</td>
+                    <td style="padding:3px 2px; font-weight:600;">${esc(r.sheetTitle)}<br><small>${esc(r.vchType)}</small></td>
+                    <td style="padding:3px 2px; text-align:right;">${cr > 0 ? `+₹${cr.toFixed(0)}` : '-'}</td>
+                    <td style="padding:3px 2px; text-align:right; font-weight:bold;">${dr > 0 ? `-₹${dr.toFixed(0)}` : '-'}</td>
+                    <td style="padding:3px 2px; text-align:right; font-weight:bold;">₹${safeNum(r.runningBal).toFixed(0)}</td>
                 </tr>`;
         });
 
@@ -1841,7 +2042,7 @@
         printWindow.document.write(`
             <html>
             <head>
-                <title>Kariger Payment Passbook - A6</title>
+                <title>Kariger Party Ledger - A6</title>
                 <style>
                     @page { size: A6 portrait; margin: 4mm; }
                     body { font-family: monospace, sans-serif; font-size: 11px; margin: 0; padding: 4mm; color: #000; }
@@ -1850,7 +2051,7 @@
                     .header h2 { margin: 0; font-size: 15px; text-transform: uppercase; }
                     .header p { margin: 2px 0 0; font-size: 10px; }
                     .meta { font-size: 10px; margin-bottom: 6px; border-bottom: 1px dashed #666; padding-bottom: 4px; }
-                    table { width: 100%; border-collapse: collapse; font-size: 10px; }
+                    table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
                     th { border-top: 1px solid #000; border-bottom: 1px solid #000; text-align: left; padding: 3px 2px; }
                     .total-box { margin-top: 8px; border-top: 2px dashed #000; padding-top: 4px; font-size: 11px; font-weight: bold; }
                     .footer { text-align: center; margin-top: 20px; font-size: 10px; border-top: 1px dashed #aaa; padding-top: 6px; }
@@ -1860,7 +2061,7 @@
                 <div class="ticket">
                     <div class="header">
                         <h2>SIMPLICITY ERP</h2>
-                        <p><strong>KARIGER PAYMENT PASSBOOK</strong></p>
+                        <p><strong>KARIGER PARTY LEDGER (KHATA)</strong></p>
                     </div>
                     <div class="meta">
                         <div><strong>Kariger:</strong> ${esc(karigerName)}</div>
@@ -1870,17 +2071,20 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>TARIKH</th><th>KHATA / TANI</th><th style="text-align:right;">SAREE</th><th style="text-align:right;">PAID (₹)</th>
+                                <th>TARIKH</th><th>KHATA</th><th style="text-align:right;">JAMA</th><th style="text-align:right;">DIYA</th><th style="text-align:right;">BAL</th>
                             </tr>
                         </thead>
                         <tbody>${rowsHtml}</tbody>
                     </table>
                     <div class="total-box">
                         <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
-                            <span>Kul Saree Jama:</span> <span>${totalSaree} Pcs</span>
+                            <span>Kul Jama (Bani):</span> <span>+ ₹ ${totalCredit.toFixed(2)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                            <span>Kul Diya (Paid):</span> <span>- ₹ ${totalDebit.toFixed(2)}</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; font-size:12px; border-top:1px dashed #000; padding-top:3px;">
-                            <span>KUL DIYA (PAID):</span> <span>₹ ${totalPaid.toFixed(2)}</span>
+                            <span>CLOSING BAKI:</span> <span>₹ ${lastBal.toFixed(2)}</span>
                         </div>
                     </div>
                     <div class="footer">
@@ -1900,9 +2104,10 @@
         printWindow.document.close();
     };
 
-    const printSinglePaymentEntry = (date, sheetTitle, saree, paid, note) => {
+    const printSinglePaymentEntry = (date, sheetTitle, saree, paid, note, credit = 0, runningBal = null) => {
         const karigerName = window.activePaymentKarigerName || 'Kariger';
         const paidAmt = safeNum(paid);
+        const crAmt = safeNum(credit);
 
         const printWindow = window.open('', '', 'width=420,height=550');
         if (!printWindow) return alert('Popup block hai! Kripya browser me popup allow karein.');
@@ -1927,16 +2132,18 @@
                 <div class="ticket">
                     <div class="header">
                         <h2>SIMPLICITY ERP</h2>
-                        <p>MAZDOORI BHUGTAN PARCHI</p>
+                        <p>KARIGER HISAB / BHUGTAN PARCHI</p>
                     </div>
                     <div class="row"><span><strong>Tarikh:</strong></span><span>${esc(date)}</span></div>
                     <div class="row"><span><strong>Kariger:</strong></span><span>${esc(karigerName)}</span></div>
                     <div class="row"><span><strong>Khata / Tani:</strong></span><span>${esc(sheetTitle)}</span></div>
                     ${saree > 0 ? `<div class="row"><span><strong>Saree Jama:</strong></span><span>${saree} Pcs</span></div>` : ''}
+                    ${crAmt > 0 ? `<div class="row"><span><strong>Bani Jama:</strong></span><span>+ ₹ ${crAmt.toFixed(2)}</span></div>` : ''}
                     <div class="row"><span><strong>Vivran:</strong></span><span>${esc(note || 'Mazdoori Payment')}</span></div>
                     <div class="total-highlight">
-                        PAID: ₹ ${paidAmt.toFixed(2)}
+                        ${paidAmt > 0 ? `PAID: ₹ ${paidAmt.toFixed(2)}` : `JAMA: ₹ ${crAmt.toFixed(2)}`}
                     </div>
+                    ${runningBal !== null ? `<div class="row"><span><strong>Closing Baki:</strong></span><span><strong>₹ ${safeNum(runningBal).toFixed(2)}</strong></span></div>` : ''}
                     <div class="signs">
                         <div>हस्ताक्षर मुंशी<br><br>________</div>
                         <div>हस्ताक्षर कारीगर<br><br>________</div>
