@@ -1,14 +1,14 @@
 /* ============================================================================
-   SIMPLICITY ERP - ⚡ MASTER STOCK EXPRESS ENGINE (BADA COUNTER & ZERO-MOUSE)
+   SIMPLICITY ERP - STOCK EXPRESS VOUCHER (TALLYPRIME WHITE & GOLD EDITION)
    Folder: stock-express / File: stock-express.js
    Developed for: Farhan Jawed
    Features:
-   - Bada Wide Screen (880px Counter Layout like Kariger Express)
-   - Strict Keyboard Capture (F1/F2/F3/F4 no conflict with Kariger Express)
-   - Bana, Zari & Sancha (Tani/Chukka) Inward Engine
-   - Purana vs Naya Mode with Datalist Auto-Complete
-   - Live Godown Stock Display & Instant A6 Print
-   - [FIXED: YYYY-MM-DD Date Format Warning for <input type="date">]
+   - TallyPrime White & Gold 2-Column Guided Drill-Down Voucher
+   - Step-by-Step Right-Pane Pickers:
+     Category (Bana/Zari/Sancha) -> [Tani/Chukka] -> Mode (Purana/Naya) -> Stock List
+   - Tally-Style "Accept? (Yes / No)" Confirmation Bar at End
+   - Zero-Mouse Enter Chaining, Shift+Enter Back & Instant A6 Print
+   - [YYYY-MM-DD Date Format Safe for <input type="date">]
 ============================================================================ */
 
 (() => {
@@ -19,9 +19,22 @@
     let sanchaCat = 'tani';       // 'tani' | 'chukka'
     let lastSavedStockEntry = null;
 
+    // Right-Pane Tally Picker State
+    let stkPickerMode = 'category'; // 'category' | 'sancha_type' | 'mode' | 'item_purana' | 'item_naya' | 'preview'
+    let stkPickerItems = [];
+    let stkPickerActiveIdx = 0;
+
+    const toArray = (v) => {
+        if (Array.isArray(v)) return v;
+        if (typeof window.safeArray === 'function') return window.safeArray(v);
+        return [];
+    };
+
     const esc = (s) => {
         if (typeof window.sanitizeHTML === 'function') return window.sanitizeHTML(s);
-        return String(s || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        return String(s || '').replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
     };
 
     const safeNum = (val, fallback = 0) => {
@@ -29,25 +42,28 @@
         return isNaN(n) || !isFinite(n) ? fallback : n;
     };
 
-    // ⭐ FIXED: Always return valid YYYY-MM-DD format for HTML date inputs
     const getToday = () => {
-        let rawDate = (typeof window.getTodayDate === 'function') 
-            ? window.getTodayDate() 
+        let rawDate = (typeof window.getTodayDate === 'function')
+            ? window.getTodayDate()
             : new Date().toISOString().split('T')[0];
 
-        // Agar date DD-MM-YYYY form me ho (jaise 11-11-2026), to use YYYY-MM-DD banayein
         if (typeof rawDate === 'string' && rawDate.includes('-')) {
             const parts = rawDate.split('-');
             if (parts.length === 3 && parts[0].length === 2 && parts[2].length === 4) {
-                return `${parts[2]}-${parts[1]}-${parts[0]}`; // Convert to YYYY-MM-DD
+                return `${parts[2]}-${parts[1]}-${parts[0]}`;
             }
         }
         return rawDate || new Date().toISOString().split('T')[0];
     };
 
-    // Datalists Builder
+    const getActiveTargetGodown = () => {
+        return (typeof window.getActiveKarkhanaId === 'function')
+            ? window.getActiveKarkhanaId()
+            : (window.currentDashboardKarkhanaFilter || 'k_main');
+    };
+
     const getStockExpressDatalists = () => {
-        const rawBana = window.safeArray ? window.safeArray(window.getStore('bana_stock')) : [];
+        const rawBana = toArray(window.getStore ? window.getStore('bana_stock') : []);
         const uB = [];
         let banaOpts = '';
         rawBana.forEach((b) => {
@@ -58,7 +74,7 @@
             }
         });
 
-        const rawZari = window.safeArray ? window.safeArray(window.getStore('zari_stock')) : [];
+        const rawZari = toArray(window.getStore ? window.getStore('zari_stock') : []);
         const uZ = [];
         let zariOpts = '';
         rawZari.forEach((z) => {
@@ -69,7 +85,7 @@
             }
         });
 
-        const rawSancha = window.safeArray ? window.safeArray(window.getStore('sancha_items')) : [];
+        const rawSancha = toArray(window.getStore ? window.getStore('sancha_items') : []);
         const uS = [];
         let sanchaOpts = '';
         rawSancha.forEach((s) => {
@@ -83,8 +99,214 @@
         return { banaOpts, zariOpts, sanchaOpts };
     };
 
-    // 1. OPEN STOCK EXPRESS MODAL (BADA COUNTER)
+    const getCategoryStockItems = (cat, subSanchaCat, targetKid, queryText = '') => {
+        const q = String(queryText || '').trim().toLowerCase();
+        const seen = new Set();
+        const items = [];
+
+        if (cat === 'bana') {
+            const raw = toArray(window.getStore ? window.getStore('bana_stock') : []);
+            raw.forEach((x) => {
+                const nm = x?.name ? x.name.trim() : '';
+                if (!nm) return;
+                const matchKid = (!x.karkhanaId && targetKid === 'k_main') || String(x.karkhanaId) === String(targetKid);
+                if (!matchKid) return;
+                const key = nm.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                if (q && !key.includes(q)) return;
+
+                const bacha = (typeof window.getBanaItemStats === 'function')
+                    ? safeNum(window.getBanaItemStats(nm, targetKid).bacha)
+                    : safeNum(x.bacha);
+                items.push({ name: nm, bacha });
+            });
+        } else if (cat === 'zari') {
+            const raw = toArray(window.getStore ? window.getStore('zari_stock') : []);
+            raw.forEach((x) => {
+                const nm = x?.name ? x.name.trim() : '';
+                if (!nm) return;
+                const matchKid = (!x.karkhanaId && targetKid === 'k_main') || String(x.karkhanaId) === String(targetKid);
+                if (!matchKid) return;
+                const key = nm.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                if (q && !key.includes(q)) return;
+
+                const bacha = (typeof window.getZariItemStats === 'function')
+                    ? safeNum(window.getZariItemStats(nm, targetKid).bacha)
+                    : safeNum(x.bacha);
+                items.push({ name: nm, bacha });
+            });
+        } else if (cat === 'sancha') {
+            const raw = toArray(window.getStore ? window.getStore('sancha_items') : []);
+            raw.forEach((x) => {
+                const nm = x?.name ? x.name.trim() : '';
+                if (!nm) return;
+                const itemCat = String(x.category || 'tani').toLowerCase();
+                if (itemCat !== String(subSanchaCat || 'tani').toLowerCase()) return;
+                const matchKid = (!x.karkhanaId && targetKid === 'k_main') || String(x.karkhanaId) === String(targetKid);
+                if (!matchKid) return;
+                const key = nm.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                if (q && !key.includes(q)) return;
+
+                const bacha = (typeof window.getSanchaItemStats === 'function')
+                    ? safeNum(window.getSanchaItemStats(null, nm, subSanchaCat, targetKid).bacha)
+                    : safeNum(x.bacha);
+                items.push({ name: nm, bacha });
+            });
+        }
+
+        return items;
+    };
+
+    /* ========================================================================
+       1. SCOPED TALLYPRIME WHITE & GOLD STYLES
+       ------------------------------------------------------------------------
+    ======================================================================== */
+    const ensureTallyStockStyles = () => {
+        if (document.getElementById('stk-tally-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'stk-tally-styles';
+        style.textContent = `
+            .stk-overlay {
+                position: fixed; inset: 0;
+                background: rgba(31, 41, 55, 0.38);
+                backdrop-filter: blur(2px);
+                z-index: 999999;
+                display: flex; align-items: center; justify-content: center;
+                padding: 14px; box-sizing: border-box;
+                font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            }
+            .stk-card {
+                background: #ffffff;
+                width: 100%; max-width: 940px;
+                border: 1.5px solid #d9b86c;
+                border-radius: 8px;
+                box-shadow: 0 18px 42px rgba(0, 0, 0, 0.14);
+                overflow: hidden;
+                max-height: 95vh;
+                display: flex; flex-direction: column;
+                color: #1f2937;
+            }
+            .stk-header {
+                background: #fdf6e2;
+                border-bottom: 1.5px solid #e5d5a7;
+                padding: 10px 18px;
+                display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+            }
+            .stk-title {
+                margin: 0; font-size: 15px; font-weight: 800; color: #1f2937;
+            }
+            .stk-pill-btn {
+                background: #ffffff; color: #374151;
+                border: 1px solid #d1d5db; border-radius: 5px;
+                padding: 5px 11px; font-size: 12px; font-weight: 700;
+                cursor: pointer; transition: all 0.12s ease;
+            }
+            .stk-pill-btn:hover { border-color: #d9a425; background: #fef9ea; color: #1f2937; }
+            .stk-pill-btn.active {
+                background: #f2b71d; color: #1f2937;
+                border-color: #d9a425; font-weight: 800;
+            }
+            .stk-body {
+                display: grid; grid-template-columns: 1.45fr 1fr;
+                gap: 16px; padding: 14px 18px;
+                overflow-y: auto; flex: 1; background: #ffffff;
+            }
+            @media (max-width: 820px) {
+                .stk-body { grid-template-columns: 1fr; }
+            }
+            .stk-sec-title {
+                font-size: 11px; font-weight: 800; color: #92400e;
+                text-transform: uppercase; letter-spacing: 0.6px;
+                border-bottom: 1px solid #eadab0;
+                padding-bottom: 4px; margin: 12px 0 8px 0;
+            }
+            .stk-row {
+                display: grid; grid-template-columns: 155px 1fr;
+                align-items: center; gap: 10px; margin-bottom: 8px;
+            }
+            .stk-lbl {
+                font-size: 12.5px; font-weight: 600; color: #374151;
+            }
+            .stk-inp {
+                width: 100%; box-sizing: border-box;
+                padding: 6px 10px;
+                border: 1px solid #d1d5db; border-radius: 4px;
+                font-size: 13px; font-weight: 700; color: #111827;
+                background: #ffffff; outline: none;
+                transition: border-color 0.12s, background 0.12s;
+            }
+            .stk-inp:focus {
+                border-color: #d9a425 !important;
+                background: #fffdf5 !important;
+                box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.22);
+            }
+            .stk-inp-num { text-align: right; font-variant-numeric: tabular-nums; }
+            .stk-right-panel {
+                border: 1px solid #e5d5a7; border-radius: 6px;
+                background: #ffffff; display: flex; flex-direction: column;
+                overflow: hidden; min-height: 360px;
+            }
+            .stk-right-head {
+                background: #fdf6e2; border-bottom: 1px solid #e5d5a7;
+                padding: 8px 12px; font-size: 12.5px; font-weight: 800; color: #1f2937;
+                display: flex; justify-content: space-between; align-items: center;
+            }
+            .stk-picker-list {
+                flex: 1; overflow-y: auto; max-height: 380px;
+            }
+            .stk-picker-item {
+                padding: 8px 12px; font-size: 12.5px; font-weight: 600; color: #1f2937;
+                border-bottom: 1px solid #f3f4f6; cursor: pointer;
+                display: flex; justify-content: space-between; align-items: center; gap: 8px;
+            }
+            .stk-picker-item:hover { background: #fef9ea; }
+            .stk-picker-item.active {
+                background: #f2b71d; color: #1f2937; font-weight: 800;
+            }
+            .stk-picker-sub {
+                font-size: 11px; color: #6b7280; font-weight: 600;
+            }
+            .stk-picker-item.active .stk-picker-sub { color: #374151; }
+            .stk-footer {
+                background: #fdf6e2; border-top: 1px solid #e5d5a7;
+                padding: 8px 18px;
+                display: flex; justify-content: space-between; align-items: center;
+                flex-wrap: wrap; gap: 8px; font-size: 11.5px; color: #6b7280;
+            }
+            .stk-btn-save {
+                background: #f2b71d; color: #1f2937;
+                border: 1px solid #d9a425; border-radius: 5px;
+                padding: 7px 20px; font-size: 13px; font-weight: 800;
+                cursor: pointer;
+            }
+            .stk-btn-save:hover { background: #e5aa12; }
+            .stk-btn-sec {
+                background: #ffffff; color: #1f2937;
+                border: 1px solid #d1d5db; border-radius: 5px;
+                padding: 7px 14px; font-size: 12.5px; font-weight: 700;
+                cursor: pointer;
+            }
+            .stk-btn-sec:hover { border-color: #d9a425; background: #fef9ea; }
+            .stk-accept-bar {
+                background: #fdf6e2; border: 1.5px solid #d9a425; border-radius: 5px;
+                padding: 8px 12px; margin-top: 10px;
+                display: flex; justify-content: space-between; align-items: center; gap: 10px;
+            }
+        `;
+        document.head.appendChild(style);
+    };
+
+    /* ========================================================================
+       2. OPEN STOCK EXPRESS MODAL (TALLY WHITE & GOLD GUIDED FLOW)
+       ------------------------------------------------------------------------
+    ======================================================================== */
     window.openStockExpressModal = () => {
+        ensureTallyStockStyles();
         const existing = document.getElementById('master-stock-express-modal');
         if (existing) existing.remove();
 
@@ -92,155 +314,146 @@
         stockMode = 'purana';
         sanchaCat = 'tani';
         lastSavedStockEntry = null;
+        stkPickerMode = 'category';
+        stkPickerItems = [];
+        stkPickerActiveIdx = 0;
 
         const today = getToday();
         const { banaOpts } = getStockExpressDatalists();
-
-        const activeKid = (typeof window.getActiveKarkhanaId === 'function') 
-            ? window.getActiveKarkhanaId() 
-            : (window.currentDashboardKarkhanaFilter || 'k_main');
-        const godamName = (typeof window.getKarkhanaNameById === 'function') 
-            ? window.getKarkhanaNameById(activeKid) 
+        const activeKid = getActiveTargetGodown();
+        const godamName = (typeof window.getKarkhanaNameById === 'function')
+            ? window.getKarkhanaNameById(activeKid)
             : 'Main Godown';
 
         const modalHtml = `
-        <div id="master-stock-express-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.85); z-index:999999; display:flex; align-items:center; justify-content:center; padding:12px; box-sizing:border-box;">
-            <div style="background:#ffffff; width:100%; max-width:880px; border-radius:12px; box-shadow:0 25px 40px -5px rgba(0,0,0,0.5); overflow:hidden; font-family:sans-serif; max-height:96vh; display:flex; flex-direction:column;">
-                
-                <!-- Header -->
-                <div style="background:#0f172a; color:#fff; padding:12px 18px; display:flex; justify-content:space-between; align-items:center;">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span style="font-size:22px;">⚡</span>
-                        <h3 style="margin:0; font-size:16px; letter-spacing:0.5px;">STOCK EXPRESS • कच्चा माल आवक व स्टॉक काउन्टर</h3>
+        <div id="master-stock-express-modal" class="stk-overlay">
+            <div class="stk-card">
+
+                <!-- Top Cream Header -->
+                <div class="stk-header">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <h3 class="stk-title">Stock Inward Voucher</h3>
+                        <span style="font-size:11.5px; background:#ffffff; border:1px solid #d9b86c; padding:3px 9px; border-radius:4px; font-weight:700; color:#92400e;">Godown: ${esc(godamName)}</span>
+                        <div style="display:flex; gap:5px; margin-left:4px;">
+                            <button type="button" id="stk-cat-bana" class="stk-pill-btn active" onclick="switchStockCategory('bana', true)">Bana [F1]</button>
+                            <button type="button" id="stk-cat-zari" class="stk-pill-btn" onclick="switchStockCategory('zari', true)">Zari [F2]</button>
+                            <button type="button" id="stk-cat-sancha" class="stk-pill-btn" onclick="switchStockCategory('sancha', true)">Sancha [F3]</button>
+                        </div>
                     </div>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span style="font-size:11px; background:#1e293b; color:#38bdf8; padding:3px 8px; border-radius:4px; font-weight:bold;">[F1/F2/F3] Category | [F4] Purana/Naya | [Esc] Close</span>
-                        <button type="button" onclick="closeStockExpressModal()" style="background:transparent; border:none; color:#fff; font-size:24px; cursor:pointer; line-height:1;">&times;</button>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <button type="button" id="stk-mode-purana" class="stk-pill-btn active" onclick="setStockExpressMode('purana', true)">Purana [F4]</button>
+                        <button type="button" id="stk-mode-naya" class="stk-pill-btn" onclick="setStockExpressMode('naya', true)">+ Naya</button>
+                        <button type="button" class="stk-pill-btn" onclick="closeStockExpressModal()">&larr; [Esc] Back</button>
                     </div>
                 </div>
 
-                <!-- Body -->
-                <div style="padding:16px; overflow-y:auto; flex:1;">
-                    
-                    <!-- 3 BADE CATEGORY TABS -->
-                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:14px;">
-                        <button type="button" id="stk-cat-bana" onclick="switchStockCategory('bana')" style="background:#059669; color:#fff; border:none; padding:12px 8px; border-radius:8px; font-weight:900; font-size:14px; cursor:pointer; display:flex; justify-content:center; align-items:center; gap:6px; box-shadow:0 2px 4px rgba(0,0,0,0.1);">
-                            🧶 1. BANA [F1 / Alt+1]
-                        </button>
-                        <button type="button" id="stk-cat-zari" onclick="switchStockCategory('zari')" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:12px 8px; border-radius:8px; font-weight:900; font-size:14px; cursor:pointer; display:flex; justify-content:center; align-items:center; gap:6px;">
-                            ✨ 2. ZARI [F2 / Alt+2]
-                        </button>
-                        <button type="button" id="stk-cat-sancha" onclick="switchStockCategory('sancha')" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:12px 8px; border-radius:8px; font-weight:900; font-size:14px; cursor:pointer; display:flex; justify-content:center; align-items:center; gap:6px;">
-                            ⚙️ 3. SANCHA [F3 / Alt+3]
-                        </button>
-                    </div>
+                <!-- 2-Column Split Body -->
+                <div class="stk-body">
 
-                    <!-- Godown & Sub-Mode Switch Bar -->
-                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                        <div style="font-size:13px; color:#1e293b;">
-                            🏢 <strong>जमा गोदाम:</strong> <span style="color:#0284c7; font-weight:bold;">${esc(godamName)}</span>
+                    <!-- LEFT PANE: CLEAN TALLY VOUCHER ROWS -->
+                    <div>
+                        <div class="stk-sec-title" id="stk-col1-title" style="margin-top:0;">1. Stock Selection &amp; Mode</div>
+
+                        <div class="stk-row">
+                            <label class="stk-lbl">Date [Alt+D] :</label>
+                            <input type="date" id="stk-date" value="${today}" class="stk-inp">
                         </div>
-                        <div style="display:flex; gap:6px;">
-                            <button type="button" id="stk-mode-purana" onclick="setStockExpressMode('purana')" style="background:#1e3a8a; color:#fff; border:none; padding:6px 14px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">
-                                🔵 Purana Item [F4]
-                            </button>
-                            <button type="button" id="stk-mode-naya" onclick="setStockExpressMode('naya')" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:6px 14px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">
-                                🟢 + Naya Item
-                            </button>
+
+                        <div class="stk-row">
+                            <label class="stk-lbl">Stock Category :</label>
+                            <input type="text" id="stk-cat-input" value="Bana" readonly class="stk-inp" style="border-color:#d9a425; cursor:pointer;">
                         </div>
-                    </div>
 
-                    <!-- 2-Column Bada Layout -->
-                    <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:14px;">
-                        
-                        <!-- COLUMN 1: ITEM SELECTION & DETAILS -->
-                        <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:10px; padding:14px;">
-                            <h4 id="stk-col1-title" style="margin:0 0 10px 0; color:#059669; font-size:13px; border-bottom:1.5px solid #cbd5e1; padding-bottom:5px;">
-                                📦 Item Ki Jankari
-                            </h4>
-
-                            <!-- Date Input -->
-                            <div style="margin-bottom:10px;">
-                                <label style="font-size:11px; font-weight:bold; color:#475569;">तारीख (Date):</label>
-                                <input type="date" id="stk-date" value="${today}" data-next="stk-item-name" style="width:100%; padding:8px; border:1.5px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:bold; box-sizing:border-box;">
+                        <!-- Sancha Specific Fields (Shown only when Sancha selected) -->
+                        <div id="stk-box-sancha" style="display:none;">
+                            <div class="stk-row">
+                                <label class="stk-lbl">Sancha Type :</label>
+                                <input type="text" id="stk-sancha-type-input" value="Tani (Taana)" readonly class="stk-inp" style="cursor:pointer;">
+                                <div style="display:none;">
+                                    <input type="radio" name="stk_sancha_type" value="tani" checked onchange="setSanchaCategory('tani')">
+                                    <input type="radio" name="stk_sancha_type" value="chukka" onchange="setSanchaCategory('chukka')">
+                                </div>
                             </div>
+                            <div class="stk-row">
+                                <label class="stk-lbl">From / Rangrej :</label>
+                                <input type="text" id="stk-sancha-person" placeholder="Jaise: Guddu Rangrej / Store" class="stk-inp">
+                            </div>
+                        </div>
 
-                            <!-- Purana Item (Datalist Auto-Complete) -->
-                            <div id="stk-box-purana" style="margin-bottom:10px;">
-                                <label id="stk-lbl-purana" style="font-size:11px; font-weight:bold; color:#1e3a8a;">बाना का नाम (1-2 अक्षर लिखें):</label>
-                                <input type="text" id="stk-item-name" list="stk-items-dl" data-next="stk-qty" placeholder="Type 1-2 letters..." autocomplete="off" style="width:100%; padding:9px 12px; border:2px solid #059669; border-radius:6px; font-size:15px; font-weight:bold; box-sizing:border-box; background:#ffffff;">
+                        <div class="stk-row">
+                            <label class="stk-lbl">Entry Mode [F4] :</label>
+                            <input type="text" id="stk-mode-input" value="Purana Item" readonly class="stk-inp" style="cursor:pointer;">
+                        </div>
+
+                        <div class="stk-sec-title">2. Item &amp; Inward Weight</div>
+
+                        <!-- Purana Item Input -->
+                        <div id="stk-box-purana" class="stk-row">
+                            <label id="stk-lbl-purana" class="stk-lbl">Bana Item Name :</label>
+                            <div>
+                                <input type="text" id="stk-item-name" placeholder="Type to filter or &uarr;&darr;..." autocomplete="off" class="stk-inp" style="border-color:#d9a425;">
                                 <datalist id="stk-items-dl">${banaOpts}</datalist>
                             </div>
+                        </div>
 
-                            <!-- Naya Item Input -->
-                            <div id="stk-box-naya" style="display:none; margin-bottom:10px;">
-                                <label id="stk-lbl-naya" style="font-size:11px; font-weight:bold; color:#059669;">नए आइटम का पूरा नाम:</label>
-                                <input type="text" id="stk-new-name" data-next="stk-qty" placeholder="Naya naam likhein..." autocomplete="off" style="width:100%; padding:9px 12px; border:2px solid #10b981; border-radius:6px; font-size:15px; font-weight:bold; box-sizing:border-box; background:#ecfdf5;">
-                            </div>
+                        <!-- Naya Item Input -->
+                        <div id="stk-box-naya" class="stk-row" style="display:none;">
+                            <label id="stk-lbl-naya" class="stk-lbl">New Bana Name :</label>
+                            <input type="text" id="stk-new-name" placeholder="Naye item ka poora naam likhein..." autocomplete="off" class="stk-inp" style="border-color:#d9a425;">
+                        </div>
 
-                            <!-- Sancha Specific Fields (Tani vs Chukka) -->
-                            <div id="stk-box-sancha" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; padding:10px; border-radius:8px; margin-bottom:10px;">
-                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-                                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:bold; cursor:pointer;">
-                                        <input type="radio" name="stk_sancha_type" value="tani" checked onchange="setSanchaCategory('tani')"> 🧵 Tani (ताना)
-                                    </label>
-                                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:bold; cursor:pointer;">
-                                        <input type="radio" name="stk_sancha_type" value="chukka" onchange="setSanchaCategory('chukka')"> ⚙️ Chukka (चुक्का)
-                                    </label>
-                                </div>
-                                <div>
-                                    <label style="font-size:11px; font-weight:bold; color:#0284c7;">Kahan Se Aayi / Rangrej (Optional):</label>
-                                    <input type="text" id="stk-sancha-person" placeholder="jaise: Guddu Rangrej / Store" style="width:100%; padding:7px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; box-sizing:border-box;">
-                                </div>
+                        <div class="stk-row">
+                            <label class="stk-lbl">Inward Qty (Kg) :</label>
+                            <input type="number" step="0.01" id="stk-qty" placeholder="0.00" oninput="window.__stkUpdateLivePreview()" class="stk-inp stk-inp-num" style="border-color:#d9a425; font-size:15px;">
+                        </div>
+
+                        <div class="stk-row">
+                            <label class="stk-lbl">Supplier / Bill / Note :</label>
+                            <input type="text" id="stk-note" placeholder="Jaise: Bill No 120 / Mandi Se" oninput="window.__stkUpdateLivePreview()" class="stk-inp">
+                        </div>
+
+                        <!-- Live Stock Strip -->
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:#fdfcf7; border:1px solid #eadab0; border-radius:4px; padding:7px 10px; margin-top:8px; font-size:12px;">
+                            <span>Current Stock: <strong id="stk-live-bacha-display" style="color:#1f2937;">0.00 Kg</strong></span>
+                            <span id="stk-live-hint" style="color:#6b7280; font-size:11px;">Godown balance</span>
+                        </div>
+
+                        <!-- Tally Accept? (Yes / No) Confirmation Bar -->
+                        <div id="stk-accept-strip" class="stk-accept-bar" style="display:none;">
+                            <span style="font-size:13px; font-weight:800; color:#1f2937;">Accept? Stock Jama Karein?</span>
+                            <div style="display:flex; gap:8px;">
+                                <button type="button" id="stk-accept-yes" class="stk-btn-save" style="padding:5px 14px;" onclick="submitMasterStockExpress()">Yes [Y / Enter]</button>
+                                <button type="button" id="stk-accept-no" class="stk-btn-sec" style="padding:5px 14px;" onclick="window.__stkCancelAccept()">No [N / Esc]</button>
                             </div>
                         </div>
 
-                        <!-- COLUMN 2: WAZAN & LIVE STOCK CARD -->
-                        <div style="background:#ffffff; border:1.5px solid #cbd5e1; border-radius:10px; padding:14px; display:flex; flex-direction:column; justify-content:space-between;">
-                            <div>
-                                <h4 style="margin:0 0 10px 0; color:#1e3a8a; font-size:13px; border-bottom:1.5px solid #cbd5e1; padding-bottom:5px;">
-                                    ⚖️ वज़न व आवक हिसाब
-                                </h4>
-
-                                <!-- Wazan (Qty) -->
-                                <div style="margin-bottom:12px;">
-                                    <label style="font-size:11px; font-weight:bold; color:#374151;">कितना वज़न आया (Wazan Kg me):</label>
-                                    <input type="number" step="0.01" id="stk-qty" placeholder="0.00 Kg" style="width:100%; padding:10px 12px; border:2px solid #059669; border-radius:6px; font-size:20px; font-weight:900; color:#059669; box-sizing:border-box;">
-                                </div>
-
-                                <!-- Note / Party -->
-                                <div style="margin-bottom:14px;">
-                                    <label style="font-size:11px; font-weight:bold; color:#475569;">सप्लायर / बिल नंबर / नोट (Optional):</label>
-                                    <input type="text" id="stk-note" placeholder="jaise: Bill No 120 / Mandi Se" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; box-sizing:border-box;">
-                                </div>
-
-                                <!-- Live Stock Indicator Banner -->
-                                <div style="background:#f0fdf4; border:1.5px dashed #86efac; border-radius:8px; padding:12px; text-align:center;">
-                                    <div style="font-size:11px; color:#64748b; font-weight:bold;">गोदाम में मौजूदा बचा स्टॉक:</div>
-                                    <div id="stk-live-bacha-display" style="font-size:22px; font-weight:900; color:#059669; margin-top:2px;">
-                                        0.00 Kg
-                                    </div>
-                                    <div id="stk-live-hint" style="font-size:11px; color:#64748b; margin-top:3px;">
-                                        नाम चुनते ही स्टॉक यहाँ दिखेगा
-                                    </div>
-                                </div>
-                            </div>
+                        <!-- Bottom Voucher Action Strip -->
+                        <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid #eadab0;">
+                            <button type="button" id="stk-print-btn" class="stk-btn-sec" onclick="printLastSavedStockSlip()">A6 Parchi [Alt+P]</button>
+                            <button type="button" id="stk-submit-btn" class="stk-btn-save" onclick="submitMasterStockExpress()">Save Stock [Ctrl+Enter]</button>
                         </div>
-
                     </div>
+
+                    <!-- RIGHT PANE: DYNAMIC TALLY PICKER / LIVE PREVIEW -->
+                    <div class="stk-right-panel">
+                        <div class="stk-right-head">
+                            <span id="stk-right-title">List of Categories</span>
+                            <span id="stk-right-hint" style="font-size:11px; color:#6b7280; font-weight:600;">&uarr;&darr; + Enter</span>
+                        </div>
+
+                        <div id="stk-right-picker" class="stk-picker-list"></div>
+
+                        <div id="stk-right-preview" style="display:none; padding:12px; font-size:12.5px; line-height:1.5; flex:1; overflow-y:auto;"></div>
+                    </div>
+
                 </div>
 
-                <!-- Footer Action Bar -->
-                <div style="background:#f1f5f9; padding:12px 18px; border-top:1px solid #cbd5e1; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                    <div id="stk-status-msg" style="font-size:12px; font-weight:bold; color:#059669;"></div>
-                    <div style="display:flex; gap:8px;">
-                        <button type="button" id="stk-print-btn" onclick="printLastSavedStockSlip()" style="background:#1e3a8a; color:#ffffff; border:none; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-                            🖨️ A6 Parchi [Alt+P]
-                        </button>
-                        <button type="button" id="stk-submit-btn" onclick="submitMasterStockExpress()" style="background:#059669; color:#ffffff; border:none; padding:11px 26px; border-radius:8px; font-size:15px; font-weight:900; cursor:pointer; box-shadow:0 4px 6px rgba(5,150,105,0.3); display:inline-flex; align-items:center; gap:8px;">
-                            💾 स्टॉक जमा करें [ ENTER ]
-                        </button>
+                <!-- Bottom Status Bar -->
+                <div class="stk-footer">
+                    <div id="stk-status-msg" style="font-weight:700; color:#b47d00;">
+                        [&uarr;&darr; + Enter] Right List Select &bull; [Shift+Enter] Prev &bull; [F1/F2/F3] Cat &bull; [F4] Mode &bull; [Esc] Back
                     </div>
+                    <div style="font-weight:600;">TallyPrime White &amp; Gold Mode</div>
                 </div>
 
             </div>
@@ -248,111 +461,440 @@
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         bindStockExpressEvents();
+        showStkRightPicker('category', '');
     };
 
-    // 2. KEYBOARD LISTENERS & SHORTCUT FIX (CAPTURE PHASE + STOP PROPAGATION)
+    /* ========================================================================
+       3. RIGHT-PANE GUIDED TALLY PICKER CONTROLLER
+       ------------------------------------------------------------------------
+    ======================================================================== */
+    const getStepFieldOrder = () => {
+        const order = ['stk-date', 'stk-cat-input'];
+        if (activeCategory === 'sancha') {
+            order.push('stk-sancha-type-input');
+        }
+        order.push('stk-mode-input');
+        order.push(stockMode === 'purana' ? 'stk-item-name' : 'stk-new-name');
+        if (activeCategory === 'sancha') {
+            order.push('stk-sancha-person');
+        }
+        order.push('stk-qty', 'stk-note');
+        return order;
+    };
+
+    const moveStkField = (currentId, dir) => {
+        const order = getStepFieldOrder();
+        const idx = order.indexOf(currentId);
+        if (idx === -1) return;
+        const nextIdx = idx + dir;
+        if (nextIdx >= 0 && nextIdx < order.length) {
+            const el = document.getElementById(order[nextIdx]);
+            if (el) {
+                el.focus();
+                if (typeof el.select === 'function' && !el.readOnly) el.select();
+            }
+        }
+    };
+
+    const showStkRightPicker = (mode, queryText) => {
+        stkPickerMode = mode;
+        const pickerEl = document.getElementById('stk-right-picker');
+        const previewEl = document.getElementById('stk-right-preview');
+        const titleEl = document.getElementById('stk-right-title');
+        const hintEl = document.getElementById('stk-right-hint');
+        if (!pickerEl || !previewEl) return;
+
+        if (mode === 'preview') {
+            pickerEl.style.display = 'none';
+            previewEl.style.display = 'block';
+            if (titleEl) titleEl.textContent = 'Live Inward Preview';
+            if (hintEl) hintEl.textContent = 'Stock Summary';
+            window.__stkUpdateLivePreview();
+            return;
+        }
+
+        pickerEl.style.display = 'block';
+        previewEl.style.display = 'none';
+        stkPickerItems = [];
+
+        if (mode === 'category') {
+            if (titleEl) titleEl.textContent = 'List of Categories';
+            if (hintEl) hintEl.textContent = '↑↓ + Enter';
+            stkPickerItems = [
+                { label: 'Bana', sub: 'F1', data: 'bana' },
+                { label: 'Zari', sub: 'F2', data: 'zari' },
+                { label: 'Sancha', sub: 'F3 (Tani / Chukka)', data: 'sancha' }
+            ];
+            const curIdx = stkPickerItems.findIndex(i => i.data === activeCategory);
+            stkPickerActiveIdx = curIdx >= 0 ? curIdx : 0;
+        } else if (mode === 'sancha_type') {
+            if (titleEl) titleEl.textContent = 'List of Sancha Types';
+            if (hintEl) hintEl.textContent = '↑↓ + Enter';
+            stkPickerItems = [
+                { label: 'Tani (Taana)', sub: 'Warp', data: 'tani' },
+                { label: 'Chukka', sub: 'Chukka', data: 'chukka' }
+            ];
+            const curIdx = stkPickerItems.findIndex(i => i.data === sanchaCat);
+            stkPickerActiveIdx = curIdx >= 0 ? curIdx : 0;
+        } else if (mode === 'mode') {
+            if (titleEl) titleEl.textContent = 'Select Entry Mode';
+            if (hintEl) hintEl.textContent = '↑↓ + Enter';
+            stkPickerItems = [
+                { label: 'Purana Item (Existing Stock)', sub: 'Select from List', data: 'purana' },
+                { label: '+ Naya Item (Create New)', sub: 'New Item Entry', data: 'naya' }
+            ];
+            const curIdx = stkPickerItems.findIndex(i => i.data === stockMode);
+            stkPickerActiveIdx = curIdx >= 0 ? curIdx : 0;
+        } else if (mode === 'item_purana') {
+            const catLabel = activeCategory === 'bana'
+                ? 'Bana Stock'
+                : (activeCategory === 'zari'
+                    ? 'Zari Stock'
+                    : (sanchaCat === 'chukka' ? 'Sancha (Chukka) Stock' : 'Sancha (Tani) Stock'));
+            if (titleEl) titleEl.textContent = `List of ${catLabel}`;
+            if (hintEl) hintEl.textContent = '↑↓ + Enter';
+
+            const targetKid = getActiveTargetGodown();
+            const list = getCategoryStockItems(activeCategory, sanchaCat, targetKid, queryText);
+            stkPickerItems = list.map(it => ({
+                label: it.name,
+                sub: `${it.bacha.toFixed(2)} Kg`,
+                data: it.name
+            }));
+            if (stkPickerActiveIdx >= stkPickerItems.length) stkPickerActiveIdx = 0;
+            if (stkPickerActiveIdx < 0) stkPickerActiveIdx = 0;
+        } else if (mode === 'item_naya') {
+            if (titleEl) titleEl.textContent = 'Existing Items (Duplicate Check)';
+            if (hintEl) hintEl.textContent = 'Reference Only';
+
+            const targetKid = getActiveTargetGodown();
+            const list = getCategoryStockItems(activeCategory, sanchaCat, targetKid, queryText);
+            stkPickerItems = list.map(it => ({
+                label: it.name,
+                sub: `${it.bacha.toFixed(2)} Kg`,
+                data: it.name,
+                readOnly: true
+            }));
+        }
+
+        renderStkRightPickerList();
+    };
+
+    const renderStkRightPickerList = () => {
+        const pickerEl = document.getElementById('stk-right-picker');
+        if (!pickerEl) return;
+
+        if (!stkPickerItems.length) {
+            const msg = stkPickerMode === 'item_naya'
+                ? 'Koi matching purana item nahi mila (Naya naam safe hai).'
+                : 'Is Godown me koi stock item nahi mila. [F4] se Naya Item banayein.';
+            pickerEl.innerHTML = `<div style="padding:18px 12px; text-align:center; color:#6b7280; font-size:12px;">${msg}</div>`;
+            return;
+        }
+
+        let html = '';
+        stkPickerItems.forEach((item, idx) => {
+            const isActive = !item.readOnly && idx === stkPickerActiveIdx;
+            const cls = isActive ? 'stk-picker-item active' : 'stk-picker-item';
+            const attr = item.readOnly
+                ? ''
+                : `onmousedown="event.preventDefault(); window.__stkPickItem(${idx})"`;
+            html += `<div class="${cls}" ${attr}>
+                <span>${esc(item.label)}</span>
+                <span class="stk-picker-sub">${esc(item.sub)}</span>
+            </div>`;
+        });
+        pickerEl.innerHTML = html;
+
+        const activeEl = pickerEl.querySelector('.stk-picker-item.active');
+        if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+    };
+
+    window.__stkPickItem = (idx) => {
+        const item = stkPickerItems[idx];
+        if (!item || item.readOnly) return;
+
+        if (stkPickerMode === 'category') {
+            window.switchStockCategory(item.data, true);
+        } else if (stkPickerMode === 'sancha_type') {
+            window.setSanchaCategory(item.data, true);
+        } else if (stkPickerMode === 'mode') {
+            window.setStockExpressMode(item.data, true);
+        } else if (stkPickerMode === 'item_purana') {
+            const inp = document.getElementById('stk-item-name');
+            if (inp) inp.value = item.data;
+            updateStockExpressLiveStats();
+            moveStkField('stk-item-name', 1);
+        }
+    };
+
+    window.__stkUpdateLivePreview = () => {
+        const previewEl = document.getElementById('stk-right-preview');
+        if (!previewEl) return;
+
+        const targetKid = getActiveTargetGodown();
+        const godamName = (typeof window.getKarkhanaNameById === 'function')
+            ? window.getKarkhanaNameById(targetKid)
+            : 'Main Godown';
+
+        const isNew = (stockMode === 'naya');
+        const nameVal = String((isNew ? document.getElementById('stk-new-name') : document.getElementById('stk-item-name'))?.value || '').trim() || '-';
+        const qtyVal = safeNum(document.getElementById('stk-qty')?.value, 0);
+        const noteVal = String(document.getElementById('stk-note')?.value || '').trim() || '-';
+        const personVal = String(document.getElementById('stk-sancha-person')?.value || '').trim() || '-';
+        const dateVal = document.getElementById('stk-date')?.value || getToday();
+
+        let curBacha = 0;
+        if (!isNew && nameVal !== '-') {
+            if (activeCategory === 'bana' && typeof window.getBanaItemStats === 'function') {
+                curBacha = safeNum(window.getBanaItemStats(nameVal, targetKid).bacha);
+            } else if (activeCategory === 'zari' && typeof window.getZariItemStats === 'function') {
+                curBacha = safeNum(window.getZariItemStats(nameVal, targetKid).bacha);
+            } else if (activeCategory === 'sancha' && typeof window.getSanchaItemStats === 'function') {
+                curBacha = safeNum(window.getSanchaItemStats(null, nameVal, sanchaCat, targetKid).bacha);
+            }
+        }
+        const afterTotal = curBacha + qtyVal;
+
+        const catLabel = activeCategory === 'bana'
+            ? 'Bana'
+            : (activeCategory === 'zari'
+                ? 'Zari'
+                : `Sancha (${sanchaCat === 'chukka' ? 'Chukka' : 'Tani'})`);
+
+        previewEl.innerHTML = `
+            <div style="border-bottom:1px solid #eadab0; padding-bottom:8px; margin-bottom:8px;">
+                <div style="font-size:14px; font-weight:800; color:#1f2937;">${esc(nameVal)}</div>
+                <div style="font-size:11.5px; color:#6b7280;">${esc(catLabel)} &bull; ${isNew ? '+ Naya Item' : 'Purana Item'}</div>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Godown:</span><strong>${esc(godamName)}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Date:</span><strong>${esc(dateVal)}</strong>
+            </div>
+            ${activeCategory === 'sancha' ? `
+            <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">From / Rangrej:</span><strong>${esc(personVal)}</strong>
+            </div>` : ''}
+            <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Note / Supplier:</span><strong>${esc(noteVal)}</strong>
+            </div>
+            <div style="background:#fdf6e2; border:1px solid #e5d5a7; border-radius:4px; padding:9px 10px; margin-top:10px;">
+                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                    <span style="color:#6b7280;">Current Stock:</span><strong>${curBacha.toFixed(2)} Kg</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                    <span style="color:#6b7280;">+ Inward Qty:</span><strong style="color:#b47d00;">+${qtyVal.toFixed(2)} Kg</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:13.5px; border-top:1px dashed #d9b86c; padding-top:5px; margin-top:4px;">
+                    <span style="font-weight:700;">Closing Stock:</span><strong style="color:#b47d00;">${afterTotal.toFixed(2)} Kg</strong>
+                </div>
+            </div>
+        `;
+    };
+
+    const showStkAcceptPrompt = (show) => {
+        const bar = document.getElementById('stk-accept-strip');
+        if (!bar) return;
+        bar.style.display = show ? 'flex' : 'none';
+        if (show) {
+            const yesBtn = document.getElementById('stk-accept-yes');
+            if (yesBtn) yesBtn.focus();
+        }
+    };
+
+    /* ========================================================================
+       4. KEYBOARD LISTENERS & STEP NAVIGATION
+       ------------------------------------------------------------------------
+    ======================================================================== */
     const bindStockExpressEvents = () => {
         const modal = document.getElementById('master-stock-express-modal');
         if (!modal) return;
 
-        const nameInp = document.getElementById('stk-item-name');
-        const qtyInp = document.getElementById('stk-qty');
+        window.__stkCancelAccept = () => {
+            showStkAcceptPrompt(false);
+            document.getElementById('stk-note')?.focus();
+        };
 
-        setTimeout(() => { if (nameInp) nameInp.focus(); }, 120);
-
-        // Enter Chaining between Inputs
-        const allInputs = modal.querySelectorAll('input[data-next]');
-        allInputs.forEach((inp) => {
-            inp.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
+        const yesBtn = document.getElementById('stk-accept-yes');
+        if (yesBtn) {
+            yesBtn.addEventListener('keydown', (e) => {
+                if (e.key === 'y' || e.key === 'Y' || e.key === 'Enter') {
                     e.preventDefault();
-                    const nextId = inp.getAttribute('data-next');
-                    const nextEl = document.getElementById(nextId);
-                    if (nextEl) {
-                        nextEl.focus();
-                        if (typeof nextEl.select === 'function') nextEl.select();
+                    e.stopPropagation();
+                    submitMasterStockExpress();
+                } else if (e.key === 'n' || e.key === 'N' || e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.__stkCancelAccept();
+                }
+            });
+        }
+
+        const catInp = document.getElementById('stk-cat-input');
+        const sanchaTypeInp = document.getElementById('stk-sancha-type-input');
+        const modeInp = document.getElementById('stk-mode-input');
+        const itemInp = document.getElementById('stk-item-name');
+        const newNameInp = document.getElementById('stk-new-name');
+        const personInp = document.getElementById('stk-sancha-person');
+        const qtyInp = document.getElementById('stk-qty');
+        const noteInp = document.getElementById('stk-note');
+        const dateInp = document.getElementById('stk-date');
+
+        // Start directly on Category Selector
+        setTimeout(() => { if (catInp) catInp.focus(); }, 100);
+
+        const attachPickerInput = (el, modeName, isFilterable) => {
+            if (!el) return;
+            el.addEventListener('focus', () => {
+                showStkRightPicker(modeName, isFilterable ? el.value : '');
+            });
+            if (isFilterable) {
+                el.addEventListener('input', () => {
+                    stkPickerActiveIdx = 0;
+                    showStkRightPicker(modeName, el.value);
+                    if (modeName === 'item_purana') updateStockExpressLiveStats();
+                });
+            }
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    if (stkPickerItems.length && modeName !== 'item_naya') {
+                        e.preventDefault();
+                        if (e.key === 'ArrowDown') {
+                            stkPickerActiveIdx = (stkPickerActiveIdx + 1) % stkPickerItems.length;
+                        } else {
+                            stkPickerActiveIdx = (stkPickerActiveIdx - 1 + stkPickerItems.length) % stkPickerItems.length;
+                        }
+                        renderStkRightPickerList();
                     }
+                    return;
+                }
+                if (e.key === 'Enter' && !e.ctrlKey) {
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        moveStkField(el.id, -1);
+                        return;
+                    }
+                    if (modeName === 'item_naya') {
+                        moveStkField(el.id, 1);
+                        return;
+                    }
+                    if (stkPickerItems.length && stkPickerItems[stkPickerActiveIdx]) {
+                        window.__stkPickItem(stkPickerActiveIdx);
+                    } else if (modeName === 'item_purana') {
+                        moveStkField(el.id, 1);
+                    }
+                }
+            });
+        };
+
+        attachPickerInput(catInp, 'category', false);
+        attachPickerInput(sanchaTypeInp, 'sancha_type', false);
+        attachPickerInput(modeInp, 'mode', false);
+        attachPickerInput(itemInp, 'item_purana', true);
+        attachPickerInput(newNameInp, 'item_naya', true);
+
+        [dateInp, personInp, qtyInp, noteInp].forEach((el) => {
+            if (!el) return;
+            el.addEventListener('focus', () => {
+                if (el.id !== 'stk-date') {
+                    showStkRightPicker('preview', '');
+                }
+            });
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.ctrlKey) {
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        moveStkField(el.id, -1);
+                        return;
+                    }
+                    if (el.id === 'stk-note') {
+                        showStkAcceptPrompt(true);
+                        return;
+                    }
+                    moveStkField(el.id, 1);
                 }
             });
         });
 
-        // Enter on QTY saves immediately
-        if (qtyInp) {
-            qtyInp.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    submitMasterStockExpress();
-                }
-            });
-        }
-
-        // Live Stock Update on Input
-        if (nameInp) {
-            nameInp.addEventListener('input', updateStockExpressLiveStats);
-        }
-
-        // ⭐ CAPTURE PHASE (`true`) SE BIND KIYA HAI TAHO KARIGER EXPRESS CONFLICT NA HO
         window.removeEventListener('keydown', handleStockExpressGlobalKeydown, true);
         window.addEventListener('keydown', handleStockExpressGlobalKeydown, true);
     };
 
-    // 🔹 FIXED SHORTCUT HANDLER (STRICT CAPTURE + STOP PROPAGATION)
     const handleStockExpressGlobalKeydown = (e) => {
         const modal = document.getElementById('master-stock-express-modal');
         if (!modal || modal.style.display === 'none') return;
 
-        // Escape to Close
         if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
-            closeStockExpressModal();
+            const acceptBar = document.getElementById('stk-accept-strip');
+            if (acceptBar && acceptBar.style.display !== 'none') {
+                window.__stkCancelAccept();
+            } else {
+                closeStockExpressModal();
+            }
             return;
         }
 
-        // ⭐ F1 or Alt+1 -> Bana (Kariger Express ko 100% block kiya)
         if (e.key === 'F1' || (e.altKey && (e.key === '1' || e.code === 'Digit1' || e.code === 'Numpad1'))) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
-            switchStockCategory('bana');
+            switchStockCategory('bana', true);
             return;
         }
 
-        // ⭐ F2 or Alt+2 -> Zari
         if (e.key === 'F2' || (e.altKey && (e.key === '2' || e.code === 'Digit2' || e.code === 'Numpad2'))) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
-            switchStockCategory('zari');
+            switchStockCategory('zari', true);
             return;
         }
 
-        // ⭐ F3 or Alt+3 -> Sancha
         if (e.key === 'F3' || (e.altKey && (e.key === '3' || e.code === 'Digit3' || e.code === 'Numpad3'))) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
-            switchStockCategory('sancha');
+            switchStockCategory('sancha', true);
             return;
         }
 
-        // ⭐ F4 -> Toggle Purana / Naya
         if (e.key === 'F4') {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
-            setStockExpressMode(stockMode === 'purana' ? 'naya' : 'purana');
+            setStockExpressMode(stockMode === 'purana' ? 'naya' : 'purana', true);
             return;
         }
 
-        // Alt+P -> Print
+        if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            document.getElementById('stk-date')?.focus();
+            return;
+        }
+
         if (e.altKey && (e.key === 'p' || e.key === 'P')) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
             printLastSavedStockSlip();
             return;
+        }
+
+        if (e.ctrlKey && (e.key === 'Enter' || e.key === 'a' || e.key === 'A')) {
+            if (e.key === 'Enter' || (document.activeElement?.id !== 'stk-item-name' && document.activeElement?.id !== 'stk-new-name')) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                submitMasterStockExpress();
+                return;
+            }
         }
     };
 
@@ -362,96 +904,131 @@
         if (modal) modal.remove();
     };
 
-    // 3. CATEGORY & MODE SWITCHERS
-    window.switchStockCategory = (cat) => {
+    /* ========================================================================
+       5. CATEGORY, SANCHA TYPE & MODE SWITCHERS
+       ------------------------------------------------------------------------
+    ======================================================================== */
+    window.switchStockCategory = (cat, advanceFocus = false) => {
         activeCategory = cat;
         const btnB = document.getElementById('stk-cat-bana');
         const btnZ = document.getElementById('stk-cat-zari');
         const btnS = document.getElementById('stk-cat-sancha');
+        const catInp = document.getElementById('stk-cat-input');
         const boxSancha = document.getElementById('stk-box-sancha');
-        const submitBtn = document.getElementById('stk-submit-btn');
         const col1Title = document.getElementById('stk-col1-title');
         const dl = document.getElementById('stk-items-dl');
         const nameInp = document.getElementById('stk-item-name');
+        const newNameInp = document.getElementById('stk-new-name');
 
         const { banaOpts, zariOpts, sanchaOpts } = getStockExpressDatalists();
 
-        [btnB, btnZ, btnS].forEach(b => {
-            if (b) { b.style.background = '#f1f5f9'; b.style.color = '#475569'; b.style.border = '1px solid #cbd5e1'; }
-        });
+        [btnB, btnZ, btnS].forEach(b => { if (b) b.classList.remove('active'); });
 
         if (cat === 'bana') {
-            if (btnB) { btnB.style.background = '#059669'; btnB.style.color = '#fff'; btnB.style.border = 'none'; }
+            if (btnB) btnB.classList.add('active');
+            if (catInp) catInp.value = 'Bana';
             if (boxSancha) boxSancha.style.display = 'none';
-            if (submitBtn) submitBtn.style.background = '#059669';
-            if (col1Title) { col1Title.style.color = '#059669'; col1Title.textContent = '🧶 Bana Ki Jankari'; }
+            if (col1Title) col1Title.textContent = '1. Bana Stock Selection & Mode';
             if (dl) dl.innerHTML = banaOpts;
-            document.getElementById('stk-lbl-purana').textContent = 'बाना का नाम (1-2 अक्षर लिखें):';
-            document.getElementById('stk-lbl-naya').textContent = 'नए बाना का पूरा नाम:';
+            const lblP = document.getElementById('stk-lbl-purana');
+            const lblN = document.getElementById('stk-lbl-naya');
+            if (lblP) lblP.textContent = 'Bana Item Name :';
+            if (lblN) lblN.textContent = 'New Bana Name :';
         } else if (cat === 'zari') {
-            if (btnZ) { btnZ.style.background = '#ea580c'; btnZ.style.color = '#fff'; btnZ.style.border = 'none'; }
+            if (btnZ) btnZ.classList.add('active');
+            if (catInp) catInp.value = 'Zari';
             if (boxSancha) boxSancha.style.display = 'none';
-            if (submitBtn) submitBtn.style.background = '#ea580c';
-            if (col1Title) { col1Title.style.color = '#ea580c'; col1Title.textContent = '✨ Zari Ki Jankari'; }
+            if (col1Title) col1Title.textContent = '1. Zari Stock Selection & Mode';
             if (dl) dl.innerHTML = zariOpts;
-            document.getElementById('stk-lbl-purana').textContent = 'जरी का नाम (1-2 अक्षर लिखें):';
-            document.getElementById('stk-lbl-naya').textContent = 'नई जरी का पूरा नाम:';
+            const lblP = document.getElementById('stk-lbl-purana');
+            const lblN = document.getElementById('stk-lbl-naya');
+            if (lblP) lblP.textContent = 'Zari Item Name :';
+            if (lblN) lblN.textContent = 'New Zari Name :';
         } else if (cat === 'sancha') {
-            if (btnS) { btnS.style.background = '#0284c7'; btnS.style.color = '#fff'; btnS.style.border = 'none'; }
+            if (btnS) btnS.classList.add('active');
+            if (catInp) catInp.value = 'Sancha';
             if (boxSancha) boxSancha.style.display = 'block';
-            if (submitBtn) submitBtn.style.background = '#0284c7';
-            if (col1Title) { col1Title.style.color = '#0284c7'; col1Title.textContent = '⚙️ Sancha Ki Jankari'; }
+            if (col1Title) col1Title.textContent = '1. Sancha Stock Selection & Mode';
             if (dl) dl.innerHTML = sanchaOpts;
-            document.getElementById('stk-lbl-purana').textContent = 'साँचा/तानी का नाम (1-2 अक्षर लिखें):';
-            document.getElementById('stk-lbl-naya').textContent = 'नए साँचे का पूरा नाम:';
+            const lblP = document.getElementById('stk-lbl-purana');
+            const lblN = document.getElementById('stk-lbl-naya');
+            if (lblP) lblP.textContent = 'Sancha Item Name :';
+            if (lblN) lblN.textContent = 'New Sancha Name :';
         }
 
-        if (nameInp) {
-            nameInp.value = '';
-            nameInp.focus();
-        }
+        if (nameInp) nameInp.value = '';
+        if (newNameInp) newNameInp.value = '';
         updateStockExpressLiveStats();
+
+        if (advanceFocus) {
+            if (cat === 'sancha') {
+                document.getElementById('stk-sancha-type-input')?.focus();
+            } else {
+                document.getElementById('stk-mode-input')?.focus();
+            }
+        }
     };
 
-    window.setStockExpressMode = (mode) => {
+    window.setSanchaCategory = (cat, advanceFocus = false) => {
+        sanchaCat = cat;
+        const typeInp = document.getElementById('stk-sancha-type-input');
+        if (typeInp) typeInp.value = cat === 'chukka' ? 'Chukka' : 'Tani (Taana)';
+
+        const radios = document.querySelectorAll('input[name="stk_sancha_type"]');
+        radios.forEach((r) => { r.checked = (r.value === cat); });
+
+        updateStockExpressLiveStats();
+
+        if (advanceFocus) {
+            document.getElementById('stk-mode-input')?.focus();
+        }
+    };
+
+    window.setStockExpressMode = (mode, advanceFocus = false) => {
         stockMode = mode;
         const btnP = document.getElementById('stk-mode-purana');
         const btnN = document.getElementById('stk-mode-naya');
+        const modeInp = document.getElementById('stk-mode-input');
         const boxP = document.getElementById('stk-box-purana');
         const boxN = document.getElementById('stk-box-naya');
 
         if (mode === 'purana') {
-            if (btnP) { btnP.style.background = '#1e3a8a'; btnP.style.color = '#fff'; }
-            if (btnN) { btnN.style.background = '#f1f5f9'; btnN.style.color = '#475569'; }
-            if (boxP) boxP.style.display = 'block';
+            if (btnP) btnP.classList.add('active');
+            if (btnN) btnN.classList.remove('active');
+            if (modeInp) modeInp.value = 'Purana Item';
+            if (boxP) boxP.style.display = 'grid';
             if (boxN) boxN.style.display = 'none';
-            document.getElementById('stk-item-name')?.focus();
+            if (advanceFocus) document.getElementById('stk-item-name')?.focus();
         } else {
-            if (btnP) { btnP.style.background = '#f1f5f9'; btnP.style.color = '#475569'; }
-            if (btnN) { btnN.style.background = '#10b981'; btnN.style.color = '#fff'; }
+            if (btnP) btnP.classList.remove('active');
+            if (btnN) btnN.classList.add('active');
+            if (modeInp) modeInp.value = '+ Naya Item';
             if (boxP) boxP.style.display = 'none';
-            if (boxN) boxN.style.display = 'block';
-            document.getElementById('stk-new-name')?.focus();
+            if (boxN) boxN.style.display = 'grid';
+            if (advanceFocus) document.getElementById('stk-new-name')?.focus();
         }
-    };
-
-    window.setSanchaCategory = (cat) => {
-        sanchaCat = cat;
         updateStockExpressLiveStats();
     };
 
-    // 4. LIVE STOCK CHECKER
+    /* ========================================================================
+       6. LIVE STOCK CHECKER
+       ------------------------------------------------------------------------
+    ======================================================================== */
     const updateStockExpressLiveStats = () => {
         const val = document.getElementById('stk-item-name')?.value.trim();
         const disp = document.getElementById('stk-live-bacha-display');
         const hint = document.getElementById('stk-live-hint');
-        const targetKid = (typeof window.getActiveKarkhanaId === 'function') 
-            ? window.getActiveKarkhanaId() 
-            : (window.currentDashboardKarkhanaFilter || 'k_main');
+        const targetKid = getActiveTargetGodown();
+
+        if (stockMode === 'naya') {
+            if (disp) disp.textContent = '0.00 Kg';
+            if (hint) hint.textContent = 'Naya stock item banega';
+            return;
+        }
 
         if (!val) {
             if (disp) disp.textContent = '0.00 Kg';
-            if (hint) hint.textContent = 'नाम चुनते ही स्टॉक यहाँ दिखेगा';
+            if (hint) hint.textContent = 'Item chunte hi live stock dikhega';
             return;
         }
 
@@ -465,11 +1042,16 @@
         }
 
         if (disp) disp.textContent = `${bacha.toFixed(2)} Kg`;
-        if (hint) hint.textContent = `मौजूदा गोदाम में उपलब्ध स्टॉक`;
+        if (hint) hint.textContent = 'Godown me maujooda stock';
     };
 
-    // 5. ATOMIC SUBMIT (SAVES TO BANA / ZARI / SANCHA REGISTERS)
+    /* ========================================================================
+       7. ATOMIC SUBMIT (SAVES TO BANA / ZARI / SANCHA REGISTERS - UNCHANGED)
+       ------------------------------------------------------------------------
+    ======================================================================== */
     window.submitMasterStockExpress = () => {
+        showStkAcceptPrompt(false);
+
         const date = document.getElementById('stk-date')?.value || getToday();
         const isNew = (stockMode === 'naya');
 
@@ -477,27 +1059,24 @@
         const name = String(nameInp?.value || '').trim();
         const qty = safeNum(document.getElementById('stk-qty')?.value);
         const note = String(document.getElementById('stk-note')?.value || '').trim();
-        const targetKid = (typeof window.getActiveKarkhanaId === 'function') 
-            ? window.getActiveKarkhanaId() 
-            : (window.currentDashboardKarkhanaFilter || 'k_main');
+        const targetKid = getActiveTargetGodown();
 
         if (!name) {
-            alert('कृपया आइटम का सही नाम लिखिए!');
+            alert('Kripya item ka sahi naam likhein!');
             nameInp?.focus();
             return;
         }
 
         if (qty <= 0) {
-            alert('कृपया सही वज़न (Kg me) भरिए!');
+            alert('Kripya sahi wazan (Kg me) bharein!');
             document.getElementById('stk-qty')?.focus();
             return;
         }
 
         const now = Date.now();
 
-        // --- 1. BANA INWARD ---
         if (activeCategory === 'bana') {
-            const list = window.safeArray ? window.safeArray(window.getStore('bana_stock')) : [];
+            const list = toArray(window.getStore ? window.getStore('bana_stock') : []);
             const item = list.find((x) => {
                 const matchKid = (!x.karkhanaId && targetKid === 'k_main') || String(x.karkhanaId) === String(targetKid);
                 return x?.name && x.name.toLowerCase() === name.toLowerCase() && matchKid;
@@ -516,7 +1095,7 @@
             }
             if (typeof window.setStore === 'function') window.setStore('bana_stock', list);
 
-            const hist = window.safeArray ? window.safeArray(window.getStore('bana_history')) : [];
+            const hist = toArray(window.getStore ? window.getStore('bana_history') : []);
             hist.push({
                 id: `bhist_${now}`,
                 date, name,
@@ -530,9 +1109,8 @@
 
             if (typeof window.renderBanaTable === 'function') window.renderBanaTable();
 
-        // --- 2. ZARI INWARD ---
         } else if (activeCategory === 'zari') {
-            const list = window.safeArray ? window.safeArray(window.getStore('zari_stock')) : [];
+            const list = toArray(window.getStore ? window.getStore('zari_stock') : []);
             const item = list.find((x) => {
                 const matchKid = (!x.karkhanaId && targetKid === 'k_main') || String(x.karkhanaId) === String(targetKid);
                 return x?.name && x.name.toLowerCase() === name.toLowerCase() && matchKid;
@@ -551,7 +1129,7 @@
             }
             if (typeof window.setStore === 'function') window.setStore('zari_stock', list);
 
-            const hist = window.safeArray ? window.safeArray(window.getStore('zari_history')) : [];
+            const hist = toArray(window.getStore ? window.getStore('zari_history') : []);
             hist.push({
                 id: `zhist_${now}`,
                 date, name,
@@ -565,11 +1143,10 @@
 
             if (typeof window.renderZariTable === 'function') window.renderZariTable();
 
-        // --- 3. SANCHA (TANI/CHUKKA) INWARD ---
         } else if (activeCategory === 'sancha') {
             const person = String(document.getElementById('stk-sancha-person')?.value || '').trim();
             const category = sanchaCat;
-            const list = window.safeArray ? window.safeArray(window.getStore('sancha_items')) : [];
+            const list = toArray(window.getStore ? window.getStore('sancha_items') : []);
 
             const item = list.find((x) => {
                 const cat = x.category || 'tani';
@@ -594,7 +1171,7 @@
             }
             if (typeof window.setStore === 'function') window.setStore('sancha_items', list);
 
-            const hist = window.safeArray ? window.safeArray(window.getStore('sancha_history')) : [];
+            const hist = toArray(window.getStore ? window.getStore('sancha_history') : []);
             hist.push({
                 id: `shist_${now}`,
                 date, name, category,
@@ -610,7 +1187,6 @@
             if (typeof window.renderSanchaTable === 'function') window.renderSanchaTable();
         }
 
-        // Cache Transaction for A6 Print
         lastSavedStockEntry = {
             category: activeCategory.toUpperCase(),
             name: name,
@@ -622,26 +1198,40 @@
 
         if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
 
-        // Clear Inputs & Re-focus for next item
         document.getElementById('stk-qty').value = '';
         document.getElementById('stk-note').value = '';
-        if (nameInp) {
-            nameInp.value = '';
-            nameInp.focus();
+        const pInp = document.getElementById('stk-sancha-person');
+        if (pInp) pInp.value = '';
+        if (nameInp) nameInp.value = '';
+
+        // Refresh Datalist options
+        const dl = document.getElementById('stk-items-dl');
+        if (dl) {
+            const { banaOpts, zariOpts, sanchaOpts } = getStockExpressDatalists();
+            dl.innerHTML = activeCategory === 'bana' ? banaOpts : (activeCategory === 'zari' ? zariOpts : sanchaOpts);
         }
 
-        const catTitle = activeCategory === 'bana' ? 'बाना' : (activeCategory === 'zari' ? 'जरी' : 'साँचा');
+        const catTitle = activeCategory === 'bana'
+            ? 'Bana'
+            : (activeCategory === 'zari' ? 'Zari' : (sanchaCat === 'chukka' ? 'Sancha (Chukka)' : 'Sancha (Tani)'));
         const statusMsg = document.getElementById('stk-status-msg');
         if (statusMsg) {
-            statusMsg.innerHTML = `✅ <strong>${esc(name)}</strong> (+${qty.toFixed(2)} Kg ${catTitle}) स्टॉक में जमा हो गया!`;
+            statusMsg.innerHTML = `✅ <strong>${esc(name)}</strong> (+${qty.toFixed(2)} Kg ${catTitle}) stock me jama ho gaya!`;
         }
 
         updateStockExpressLiveStats();
+
+        if (nameInp) {
+            nameInp.focus();
+        }
     };
 
-    // 6. A6 THERMAL PRINT SLIP
+    /* ========================================================================
+       8. A6 THERMAL PRINT SLIP (UNCHANGED)
+       ------------------------------------------------------------------------
+    ======================================================================== */
     window.printLastSavedStockSlip = () => {
-        if (!lastSavedStockEntry) return alert('प्रिंट करने के लिए कोई रीसेंट एंट्री नहीं मिली!');
+        if (!lastSavedStockEntry) return alert('Print karne ke liye koi recent entry nahi mili!');
 
         const t = lastSavedStockEntry;
         const kName = (typeof window.getKarkhanaNameById === 'function') ? window.getKarkhanaNameById(t.kGodown) : 'Main Godown';
