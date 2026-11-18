@@ -2,8 +2,8 @@
    SIMPLICITY ERP - TANI ORDER EXPRESS ENGINE (2-STEP TALLYPRIME WHITE & GOLD)
    Folder: tani / File: tani-express.js • Developed for: Farhan Jawed
    Layout (Option A - Clean 2-Step 2-Column Voucher):
-   - Step 1: Order & Loom Details (Left) + Kariger/Sancha/Rangi Picker (Right)
-   - Step 2: Single 8-Row Colors Table (Left) + Full-Height Learned Colors Picker (Right)
+   - Step 1: Order Details (Left) + Kariger/Sancha/Rangi/Bana Picker (Right)
+   - Step 2: 8-Colors Table + Matching Style (Left) + Full Learned Colors Picker (Right)
    - Tally Accept Bar: Save & Print [Y/Enter] | Only Save [S] | Edit [N/Esc]
    - 100% Preserved: Sancha Portal Sync, Tani Order List, Urdu A6 Print & WhatsApp
 ============================================================================ */
@@ -15,11 +15,12 @@
 
     // Step & Contextual Picker State
     let currentStep = 1; // 1 = Order Details, 2 = 8-Colors Matching
-    let activePickerKind = 'kariger'; // 'kariger' | 'sancha' | 'rangi' | 'color' | 'summary'
+    let activePickerKind = 'kariger'; // 'kariger' | 'sancha' | 'rangi' | 'bana' | 'color' | 'summary'
     let activeTargetInputId = 'texp-kariger';
     let pickerFilteredItems = [];
     let pickerSelectedIdx = 0;
     let pickerNavigated = false;
+    let modalOpenedAt = 0;
 
     /* ========================================================================
        1. SAFE SANITIZATION & STORAGE BRIDGES
@@ -107,7 +108,6 @@
 
         orders.forEach(o => {
             if (o.border) colorsSet.add(String(o.border).trim());
-            if (o.bana) colorsSet.add(String(o.bana).trim());
             if (Array.isArray(o.matchingTable)) {
                 o.matchingTable.forEach(row => {
                     if (row.saree) colorsSet.add(String(row.saree).trim());
@@ -173,6 +173,30 @@
                 .map(r => ({ value: r, label: r, sub: 'Dyer / Rangi' }));
         }
 
+        if (kind === 'bana') {
+            const banaStock = toArray(getFromStore('bana_stock'));
+            const map = new Map();
+            banaStock.forEach(b => {
+                const nm = String(b?.name || '').trim();
+                if (!nm || map.has(nm.toLowerCase())) return;
+                const bacha = (typeof window.getBanaItemStats === 'function')
+                    ? safeNum(window.getBanaItemStats(nm, 'all').bacha)
+                    : safeNum(b.bacha);
+                map.set(nm.toLowerCase(), {
+                    value: nm,
+                    label: nm,
+                    sub: `Bacha: ${bacha.toFixed(2)} Kg`
+                });
+            });
+            getTaniOrders().forEach(o => {
+                const nm = String(o?.bana || '').trim();
+                if (nm && !map.has(nm.toLowerCase())) {
+                    map.set(nm.toLowerCase(), { value: nm, label: nm, sub: 'Past Order' });
+                }
+            });
+            return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+        }
+
         if (kind === 'color') {
             return getLearnedColors().map(c => ({
                 value: c,
@@ -211,6 +235,7 @@
             kariger: 'List of Karigers',
             sancha: 'List of Sanchas',
             rangi: 'List of Rangi / Dyers',
+            bana: 'List of Bana Stock',
             color: 'Learned Colors',
             summary: 'Parchi Snapshot'
         };
@@ -237,9 +262,9 @@
                     <div><strong>Meter / Pcs :</strong> ${esc(mtr)} Mtr · <strong style="color:#b47d00;">${esc(pcs)} Pcs</strong></div>
                     <div><strong>Paai :</strong> ${esc(paai)}</div>
                     <div><strong>Border :</strong> ${esc(brd)}</div>
-                    <div><strong>Bana Spec :</strong> ${esc(bana)}</div>
+                    <div><strong>Bana :</strong> ${esc(bana)}</div>
                     <div style="margin-top:10px; padding-top:8px; border-top:1px dashed #e5d5a7; font-size:11.5px; color:#6b7280;">
-                        <strong>Bana</strong> ke baad <strong>[Enter]</strong> dabane par seedha <strong>Step 2 (8-Colors Matching)</strong> khul jayega.
+                        <strong>[Tab]</strong> se koi bhi optional field skip kar sakte hain. <strong>Bana</strong> ke baad <strong>[Enter]</strong> se Step 2 khulega.
                     </div>
                 </div>
             `;
@@ -257,7 +282,7 @@
         if (!pickerFilteredItems.length) {
             listEl.innerHTML = `
                 <div style="padding:18px 14px; text-align:center; font-size:12.5px; color:#6b7280; line-height:1.6;">
-                    ${queryText ? `<strong>"${esc(queryText)}"</strong> naya naam hai — [Enter] dabakar aage badhein (save hone par yaad ho jayega).` : 'Koi saved record nahi mila.'}
+                    ${queryText ? `<strong>"${esc(queryText)}"</strong> naya naam hai — [Enter] dabakar aage badhein.` : 'Abhi koi saved record nahi mila — type karke [Enter] dabayein.'}
                 </div>
             `;
             return;
@@ -366,6 +391,7 @@
         const existing = document.getElementById('master-tani-express-modal');
         if (existing) existing.remove();
 
+        modalOpenedAt = performance.now();
         const today = getToday();
         const nextOrderNo = getNextParchiNumber();
         currentStep = 1;
@@ -573,22 +599,23 @@
                     box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.22);
                 }
                 .texp-contrast-box {
+                    margin-top: 8px;
                     display: flex;
-                    gap: 12px;
+                    gap: 14px;
                     flex-wrap: wrap;
                     align-items: center;
-                    font-size: 11.5px;
+                    font-size: 12px;
                     font-weight: 700;
                     color: #374151;
                     background: #fdfcf7;
                     border: 1px solid #e5d5a7;
-                    border-radius: 4px;
-                    padding: 5px 9px;
+                    border-radius: 5px;
+                    padding: 6px 10px;
                 }
                 .texp-contrast-box label {
                     display: inline-flex;
                     align-items: center;
-                    gap: 4px;
+                    gap: 5px;
                     cursor: pointer;
                 }
                 .texp-right-picker {
@@ -599,7 +626,7 @@
                     flex-direction: column;
                     overflow: hidden;
                     min-width: 0;
-                    height: 356px;
+                    height: 372px;
                 }
                 .texp-picker-head {
                     background: #fdf6e2;
@@ -643,7 +670,7 @@
                 .texp-pick-sub { font-size: 11px; color: #6b7280; font-weight: 600; }
                 .texp-pick-row.active .texp-pick-sub { color: #1f2937; }
 
-                /* --- STEP 2: SINGLE CLEAN 8-ROW TABLE (OVERRIDES GLOBAL style.css table min-width) --- */
+                /* --- STEP 2: SINGLE CLEAN 8-ROW TABLE --- */
                 #master-tani-express-modal table.texp-table {
                     width: 100% !important;
                     min-width: 0 !important;
@@ -677,7 +704,7 @@
                 .texp-c-inp {
                     width: 100%;
                     min-width: 0;
-                    height: 30px;
+                    height: 29px;
                     padding: 3px 7px;
                     border: 1px solid #d1d5db;
                     border-radius: 4px;
@@ -761,11 +788,11 @@
 
                                 <div class="texp-row">
                                     <label for="texp-kariger">Kariger :</label>
-                                    <input type="text" id="texp-kariger" class="texp-inp" data-step="1" data-picker="kariger" data-next="texp-mohalla" autocomplete="off">
+                                    <input type="text" id="texp-kariger" class="texp-inp" data-step="1" data-picker="kariger" data-next="texp-sancha" autocomplete="off">
                                 </div>
 
                                 <div class="texp-row">
-                                    <label for="texp-mohalla">Mohalla / Pata :</label>
+                                    <label for="texp-mohalla">Mohalla (Auto) :</label>
                                     <input type="text" id="texp-mohalla" class="texp-inp" data-step="1" data-picker="summary" data-next="texp-sancha" autocomplete="off">
                                 </div>
 
@@ -795,18 +822,9 @@
                                     </div>
                                 </div>
 
-                                <div class="texp-row">
-                                    <label for="texp-bana">Bana Spec :</label>
-                                    <input type="text" id="texp-bana" class="texp-inp" data-step="1" data-picker="summary" data-next="texp-step-2" autocomplete="off">
-                                </div>
-
                                 <div class="texp-row" style="margin-bottom:0;">
-                                    <label>Matching Style :</label>
-                                    <div class="texp-contrast-box">
-                                        <label><input type="checkbox" name="texp_contrast" value="aanchal_blouse" checked> Aanchal Blouse</label>
-                                        <label><input type="checkbox" name="texp_contrast" value="border_only"> Sirf Border</label>
-                                        <label><input type="checkbox" name="texp_contrast" value="self"> Self</label>
-                                    </div>
+                                    <label for="texp-bana">Bana (Stock) :</label>
+                                    <input type="text" id="texp-bana" class="texp-inp" data-step="1" data-picker="bana" data-next="texp-step-2" autocomplete="off">
                                 </div>
                             </div>
 
@@ -824,11 +842,11 @@
                         </div>
                     </div>
 
-                    <!-- STEP 2: SINGLE 8-COLORS TABLE (LEFT) + FULL-HEIGHT LEARNED COLORS PICKER (RIGHT) -->
+                    <!-- STEP 2: SINGLE 8-COLORS TABLE + MATCHING STYLE (LEFT) + LEARNED COLORS PICKER (RIGHT) -->
                     <div id="texp-step-2" class="texp-split" style="display:none;">
                         <div class="texp-left-pane">
                             <div>
-                                <div class="texp-sec-lbl">Step 2: 8-Colors Matching Table (Type Letter &rarr; Right Picker &rarr; Enter)</div>
+                                <div class="texp-sec-lbl">Step 2: 8-Colors Matching &amp; Style (Type Letter &rarr; Right Picker &rarr; Enter)</div>
                                 <table class="texp-table">
                                     <thead>
                                         <tr>
@@ -840,10 +858,17 @@
                                     </thead>
                                     <tbody>${colorRowsHtml}</tbody>
                                 </table>
+
+                                <div class="texp-contrast-box">
+                                    <span style="color:#92400e; font-size:11.5px; font-weight:800;">Matching Style:</span>
+                                    <label><input type="checkbox" name="texp_contrast" value="aanchal_blouse" checked> Aanchal Blouse</label>
+                                    <label><input type="checkbox" name="texp_contrast" value="border_only"> Sirf Border</label>
+                                    <label><input type="checkbox" name="texp_contrast" value="self"> Self</label>
+                                </div>
                             </div>
 
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:8px;">
-                                <button type="button" class="texp-btn-plain" onclick="window.__texpGoStep(1)">← Back to Order Details [PgUp]</button>
+                                <button type="button" class="texp-btn-plain" onclick="window.__texpGoStep(1)">← Order Details [PgUp]</button>
                                 <button type="button" class="texp-btn-gold" onclick="window.__texpOpenAccept()">Accept / Save [Ctrl+Enter]</button>
                             </div>
                         </div>
@@ -869,7 +894,7 @@
                 </div>
 
                 <div class="texp-footer">
-                    <div id="texp-status-msg" style="font-size:12px; font-weight:700; color:#92400e;">[↑ ↓ + Enter] Picker Select · [PgDn/PgUp] Step Switch · [Ctrl+Enter] Save Bar · [Alt+P] A6 Print</div>
+                    <div id="texp-status-msg" style="font-size:12px; font-weight:700; color:#92400e;">[↑ ↓ + Enter] Picker Select · [Tab] Skip Optional · [Ctrl+Enter] Save Bar · [Alt+P] A6 Print</div>
                     <div class="texp-footer-actions">
                         <button type="button" class="texp-btn-plain" onclick="closeTaniExpressModal()">Close</button>
                         <button type="button" class="texp-btn-plain" onclick="sendTaniExpressWhatsApp()">WhatsApp [Alt+W]</button>
@@ -925,7 +950,15 @@
             });
 
             inp.addEventListener('keydown', (e) => {
-                const isPickerActive = (activePickerKind !== 'summary' && pickerFilteredItems.length > 0);
+                // Prevent Gateway opening Enter keypress from leaking into Kariger field
+                if (e.key === 'Enter' && (performance.now() - modalOpenedAt) < 160) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+
+                const kind = inp.getAttribute('data-picker') || 'summary';
+                const isPickerActive = (kind !== 'summary' && pickerFilteredItems.length > 0);
 
                 if (e.key === 'Enter' && e.ctrlKey) {
                     e.preventDefault();
@@ -977,8 +1010,12 @@
                         return;
                     }
 
+                    const isListPicker = (kind === 'kariger' || kind === 'sancha' || kind === 'rangi' || kind === 'bana');
                     const typedNonEmpty = inp.value.trim() !== '';
-                    if (isPickerActive && (pickerNavigated || typedNonEmpty)) {
+
+                    // For Step 1 pickers (Kariger, Sancha, Rangi, Bana): Enter selects the Gold-highlighted item!
+                    // For Step 2 colors: Enter selects when navigated OR typed text matches; empty optional cells advance cleanly.
+                    if (isPickerActive && (isListPicker || pickerNavigated || typedNonEmpty)) {
                         applyPickerSelection(pickerSelectedIdx, true);
                         return;
                     }
@@ -1109,7 +1146,6 @@
         const usedColors = [];
 
         if (border) usedColors.push(border);
-        if (bana) usedColors.push(bana);
 
         for (let i = 1; i <= 8; i++) {
             const sCol = String(document.getElementById(`texp-col-saree-${i}`)?.value || '').trim();
