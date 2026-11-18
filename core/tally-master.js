@@ -281,32 +281,150 @@
     let ssActiveIdx = 0;
 
     const ensureStockSummaryStyles = () => {
-        if (document.getElementById('ss-tally-styles')) return;
+        const old = document.getElementById('ss-tally-styles');
+        if (old) old.remove();
+
         const style = document.createElement('style');
         style.id = 'ss-tally-styles';
         style.textContent = `
-            .ss-wrap { padding: 16px 20px; }
-            .ss-table { width: 100%; border-collapse: collapse; border: 1px solid #e5d5a7; border-radius: 6px; overflow: hidden; background: #ffffff; }
-            .ss-table th {
-                background: #fdf6e2; color: #1f2937; font-size: 12px; font-weight: 800;
-                padding: 10px 14px; text-align: left; border-bottom: 1.5px solid #e5d5a7;
+            #stock-summary-section {
+                padding: 0 !important;
+                overflow: hidden;
+                font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
             }
-            .ss-row {
-                cursor: pointer; border-bottom: 1px solid #f3f4f6;
+            #stock-summary-section .ss-topbar {
+                background: #fdf6e2;
+                border-bottom: 1.5px solid #e5d5a7;
+                padding: 12px 20px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+                flex-wrap: wrap;
+            }
+            #stock-summary-section .ss-topbar-left {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                flex-wrap: wrap;
+            }
+            #stock-summary-section .ss-topbar h2 {
+                margin: 0;
+                font-size: 17px;
+                font-weight: 800;
+                color: #1f2937;
+            }
+            #stock-summary-section .ss-godown-pill {
+                background: #ffffff;
+                border: 1px solid #d9b86c;
+                color: #92400e;
+                padding: 3px 10px;
+                border-radius: 999px;
+                font-size: 11.5px;
+                font-weight: 700;
+            }
+            #stock-summary-section .ss-esc-btn {
+                background: #ffffff;
+                color: #374151;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                padding: 6px 13px;
+                font-size: 12px;
+                font-weight: 700;
+                cursor: pointer;
+                transition: all 0.12s ease;
+            }
+            #stock-summary-section .ss-esc-btn:hover {
+                border-color: #d9a425;
+                background: #fef9ea;
+                color: #1f2937;
+            }
+            #stock-summary-section .ss-wrap {
+                padding: 16px 20px;
+                background: #ffffff;
+            }
+            #stock-summary-section .ss-table {
+                width: 100%;
+                border-collapse: collapse;
+                border: 1px solid #e5d5a7;
+                border-radius: 6px;
+                overflow: hidden;
+                background: #ffffff;
+            }
+            #stock-summary-section .ss-table th {
+                background: #fdf6e2;
+                color: #1f2937;
+                font-size: 12px;
+                font-weight: 800;
+                padding: 10px 14px;
+                text-align: left;
+                border-bottom: 1.5px solid #e5d5a7;
+            }
+            #stock-summary-section .ss-row {
+                cursor: pointer;
+                border-bottom: 1px solid #f3f4f6;
                 transition: background 0.1s ease;
             }
-            .ss-row:hover { background: #fef9ea; }
-            .ss-row.active { background: #f2b71d !important; color: #1f2937; }
-            .ss-row td { padding: 12px 14px; font-size: 13.5px; color: #1f2937; }
-            .ss-row.active td { font-weight: 700; }
-            .ss-key-badge {
-                display: inline-block; min-width: 22px; text-align: center;
-                padding: 2px 7px; border-radius: 4px; font-size: 11.5px; font-weight: 800;
-                background: #fdf6e2; border: 1px solid #d9b86c; color: #92400e;
+            #stock-summary-section .ss-row:hover { background: #fef9ea; }
+            #stock-summary-section .ss-row.active {
+                background: #f2b71d !important;
+                color: #1f2937;
             }
-            .ss-row.active .ss-key-badge { background: #ffffff; color: #1f2937; border-color: #b47d00; }
-            .ss-val-cell { font-weight: 800; color: #b47d00; text-align: right; font-variant-numeric: tabular-nums; }
-            .ss-row.active .ss-val-cell { color: #1f2937; }
+            #stock-summary-section .ss-row td {
+                padding: 12px 14px;
+                font-size: 13.5px;
+                color: #1f2937;
+            }
+            #stock-summary-section .ss-row.active td { font-weight: 700; }
+            #stock-summary-section .ss-sub-txt {
+                color: #6b7280;
+                display: block;
+                font-size: 11.5px;
+                font-weight: 500;
+                margin-top: 2px;
+            }
+            #stock-summary-section .ss-row.active .ss-sub-txt { color: #374151; }
+            #stock-summary-section .ss-key-badge {
+                display: inline-block;
+                min-width: 24px;
+                text-align: center;
+                padding: 2px 7px;
+                border-radius: 4px;
+                font-size: 11.5px;
+                font-weight: 800;
+                background: #fdf6e2;
+                border: 1px solid #d9b86c;
+                color: #92400e;
+            }
+            #stock-summary-section .ss-row.active .ss-key-badge {
+                background: #ffffff;
+                color: #1f2937;
+                border-color: #b47d00;
+            }
+            #stock-summary-section .ss-val-cell {
+                font-weight: 800;
+                color: #b47d00;
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+            #stock-summary-section .ss-row.active .ss-val-cell { color: #1f2937; }
+            #stock-summary-section .ss-status-strip {
+                background: #fdf6e2;
+                border-top: 1px solid #e5d5a7;
+                padding: 10px 20px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 10px;
+                flex-wrap: wrap;
+                font-size: 12px;
+                color: #6b7280;
+                font-weight: 600;
+            }
+            #stock-summary-section .ss-toast {
+                color: #92400e;
+                font-weight: 700;
+            }
         `;
         document.head.appendChild(style);
     };
@@ -317,12 +435,12 @@
         if (!sec || sec.dataset.ssInitialized === '1') return;
 
         sec.innerHTML = `
-            <div class="tm-topbar">
-                <div class="tm-topbar-left">
-                    <h2>Stock Summary (Tally Style)</h2>
-                    <span class="tm-grp-pill" id="ss-godown-badge">Sabhi Karkhane</span>
+            <div class="ss-topbar">
+                <div class="ss-topbar-left">
+                    <h2>Stock Summary</h2>
+                    <span class="ss-godown-pill" id="ss-godown-badge">Sabhi Karkhane</span>
                 </div>
-                <button type="button" class="tm-esc-btn" onclick="backToDashboard()">← [Esc] Dashboard</button>
+                <button type="button" class="ss-esc-btn" onclick="backToDashboard()">← [Esc] Back</button>
             </div>
 
             <div class="ss-wrap">
@@ -339,28 +457,28 @@
                     <tbody>
                         <tr class="ss-row active" data-ss-idx="0" onclick="ssOpenStockGroup(0)">
                             <td>1</td>
-                            <td><strong>Bana Stock</strong> <small style="color:#6b7280; display:block; font-size:11.5px;">Raw Bana Yarn &amp; Kariger Issue Register</small></td>
+                            <td><strong>Bana Stock</strong><small class="ss-sub-txt">Raw Bana Yarn &amp; Kariger Issue Register</small></td>
                             <td style="text-align:center;"><span class="ss-key-badge">B</span></td>
                             <td class="ss-val-cell" id="ss-val-bana">Bacha: 0.00 Kg</td>
                             <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
                         </tr>
                         <tr class="ss-row" data-ss-idx="1" onclick="ssOpenStockGroup(1)">
                             <td>2</td>
-                            <td><strong>Zari Stock</strong> <small style="color:#6b7280; display:block; font-size:11.5px;">Zari &amp; Metallic Thread Register</small></td>
+                            <td><strong>Zari Stock</strong><small class="ss-sub-txt">Zari &amp; Metallic Thread Register</small></td>
                             <td style="text-align:center;"><span class="ss-key-badge">Z</span></td>
                             <td class="ss-val-cell" id="ss-val-zari">Bacha: 0.00 Kg</td>
                             <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
                         </tr>
                         <tr class="ss-row" data-ss-idx="2" onclick="ssOpenStockGroup(2)">
                             <td>3</td>
-                            <td><strong>Sancha (Tani &amp; Chukka)</strong> <small style="color:#6b7280; display:block; font-size:11.5px;">Tani &amp; Chukka Warp Stock Register</small></td>
+                            <td><strong>Sancha (Tani &amp; Chukka)</strong><small class="ss-sub-txt">Tani &amp; Chukka Warp Stock Register</small></td>
                             <td style="text-align:center;"><span class="ss-key-badge">N</span></td>
                             <td class="ss-val-cell" id="ss-val-sancha">Tani: 0.0 Kg · Chukka: 0.0 Kg</td>
                             <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
                         </tr>
                         <tr class="ss-row" data-ss-idx="3" onclick="ssOpenStockGroup(3)">
                             <td>4</td>
-                            <td><strong>Saree Stock</strong> <small style="color:#6b7280; display:block; font-size:11.5px;">Fresh, Cutting, Embroidery, Finished &amp; Lott</small></td>
+                            <td><strong>Saree Stock</strong><small class="ss-sub-txt">Fresh, Cutting, Embroidery, Finished &amp; Lott</small></td>
                             <td style="text-align:center;"><span class="ss-key-badge">E</span></td>
                             <td class="ss-val-cell" id="ss-val-saree">Stock: 0 Pcs</td>
                             <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
@@ -369,8 +487,8 @@
                 </table>
             </div>
 
-            <div class="tm-status-strip">
-                <span class="tm-toast">[↑ ↓] Group Chunein · [Enter] ya [B / Z / N / E] se Stock Kholein · [Esc] Dashboard</span>
+            <div class="ss-status-strip">
+                <span class="ss-toast">[↑ ↓] Group Chunein · [Enter] ya [B / Z / N / E] se Stock Kholein · [Esc] Back</span>
                 <span>4 Stock Groups</span>
             </div>
         `;
@@ -1109,7 +1227,6 @@
                 targetBtn.click();
                 return;
             }
-            // Direct background stock shortcuts (B/Z/N/E) remain active for power speed
             if (k === 'b' && typeof window.openBanaModule === 'function') { e.preventDefault(); window.__slReturnToStockSummary = false; window.openBanaModule(); }
             else if (k === 'z' && typeof window.openZariModule === 'function') { e.preventDefault(); window.__slReturnToStockSummary = false; window.openZariModule(); }
             else if (k === 'n' && typeof window.openSanchaModule === 'function') { e.preventDefault(); window.__slReturnToStockSummary = false; window.openSanchaModule(); }
