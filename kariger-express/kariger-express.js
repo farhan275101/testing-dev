@@ -1,12 +1,12 @@
 /* ============================================================================
-   SIMPLICITY ERP - ⚡ MASTER KARIGER EXPRESS ENGINE (AUTO-TANI & BADA COUNTER)
+   SIMPLICITY ERP - KARIGER EXPRESS VOUCHER (TALLYPRIME WHITE & GOLD EDITION)
    Folder: kariger-express / File: kariger-express.js
    Developed for: Farhan Jawed
    Features:
-   - Auto-Tani Detection: Target (65/70/72) Poori Hote Hi Nayi Tani Auto-Create & Alert!
-   - Auto Carry-Forward: Bacha Bana, Bachi Zari & Baki Mazdoori Nayi Tani Me Transfer
-   - Spacious & Legible Inputs (No Up/Down Spinner Arrows on Qty)
-   - Zero-Mouse Rapid Enter Chaining & Instant A6 Thermal Print
+   - TallyPrime White & Gold 2-Column Voucher Layout (Matching Profile Creation)
+   - Dynamic Right-Pane Picker (List of Karigers / Bana Stock / Zari Stock)
+   - Auto-Tani Detection & Carry-Forward Rollover
+   - Zero-Mouse Enter Chaining, Shift+Enter Back, Arrow Navigation & A6 Print
 ============================================================================ */
 
 (() => {
@@ -18,8 +18,14 @@
     let prevDeliveredSarees = 0;
     let lastSavedTransaction = null;
 
+    // Right-Pane Tally Picker State
+    let pickerMode = 'summary'; // 'kariger' | 'bana' | 'zari' | 'summary'
+    let pickerItems = [];
+    let pickerActiveIdx = 0;
+    let pickerArrowUsed = false;
+
     /* ========================================================================
-       1. SAFE HELPERS & DATA STORES
+       1. SAFE HELPERS & DATA STORES (UNCHANGED)
        ------------------------------------------------------------------------
     ======================================================================== */
     const toArray = (v) => {
@@ -47,7 +53,9 @@
 
     const esc = (s) => {
         if (typeof window.sanitizeHTML === 'function') return window.sanitizeHTML(s);
-        return String(s || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        return String(s || '').replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
     };
 
     const safeNum = (val, fallback = 0) => {
@@ -55,35 +63,19 @@
         return isNaN(n) || !isFinite(n) ? fallback : n;
     };
 
-    const safeInt = (val, fallback = 0) => {
-        const n = parseInt(val, 10);
-        return isNaN(n) || !isFinite(n) ? fallback : n;
-    };
-
     const getToday = () => {
-        return (typeof window.getTodayDate === 'function') 
-            ? window.getTodayDate() 
+        return (typeof window.getTodayDate === 'function')
+            ? window.getTodayDate()
             : new Date().toISOString().split('T')[0];
     };
 
-    const formatDisplay = (d) => {
-        return (typeof window.formatDateDisplay === 'function') 
-            ? window.formatDateDisplay(d) 
-            : (d || '-');
-    };
-
-    const normText = (txt, fallback = '') => {
-        return String(txt || fallback).trim().toUpperCase();
-    };
-
-    // Live Godown Stock Helpers
     const getBanaStockBacha = (itemName, kGodown) => {
         if (!itemName) return 0;
         if (typeof window.getBanaItemStats === 'function') {
             return safeNum(window.getBanaItemStats(itemName, kGodown).bacha);
         }
         const raw = toArray(getFromStore('bana_stock'));
-        const item = raw.find(x => x && x.name && x.name.toLowerCase() === itemName.toLowerCase() && 
+        const item = raw.find(x => x && x.name && x.name.toLowerCase() === itemName.toLowerCase() &&
             ((!x.karkhanaId && kGodown === 'k_main') || String(x.karkhanaId) === String(kGodown)));
         return item ? safeNum(item.bacha) : 0;
     };
@@ -94,12 +86,11 @@
             return safeNum(window.getZariItemStats(itemName, kGodown).bacha);
         }
         const raw = toArray(getFromStore('zari_stock'));
-        const item = raw.find(x => x && x.name && x.name.toLowerCase() === itemName.toLowerCase() && 
+        const item = raw.find(x => x && x.name && x.name.toLowerCase() === itemName.toLowerCase() &&
             ((!x.karkhanaId && kGodown === 'k_main') || String(x.karkhanaId) === String(kGodown)));
         return item ? safeNum(item.bacha) : 0;
     };
 
-    // Auto-Build Datalists (Kariger, Bana, Zari, Sancha Tani, Sancha Chukka)
     const getKarigerExpressDatalists = () => {
         const rawKarigers = toArray(getFromStore('kariger_list'));
         let kOpts = '';
@@ -151,13 +142,12 @@
         return { kOpts, bOpts, zOpts, taniOpts, chukkaOpts };
     };
 
-    // Sancha Stock Deduction Engine
     const deductSanchaStockItem = (itemName, category, wazan, kGodown, refKey, kName) => {
         if (!itemName || !wazan || wazan <= 0) return;
         const sList = toArray(getFromStore('sancha_items'));
         const found = sList.find((x) => {
             const matchKid = (!x.karkhanaId && kGodown === 'k_main') || String(x.karkhanaId) === String(kGodown);
-            return x && x.name && x.name.toLowerCase() === itemName.toLowerCase() && 
+            return x && x.name && x.name.toLowerCase() === itemName.toLowerCase() &&
                    String(x.category || 'tani').toLowerCase() === category.toLowerCase() && matchKid;
         });
 
@@ -185,10 +175,157 @@
     };
 
     /* ========================================================================
-       2. OPEN KARIGER EXPRESS COUNTER (BADA & KHULA 960px LAYOUT)
+       2. SCOPED TALLYPRIME WHITE & GOLD STYLES
+       ------------------------------------------------------------------------
+    ======================================================================== */
+    const ensureTallyExpressStyles = () => {
+        if (document.getElementById('kexp-tally-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'kexp-tally-styles';
+        style.textContent = `
+            .kexp-overlay {
+                position: fixed; inset: 0;
+                background: rgba(31, 41, 55, 0.38);
+                backdrop-filter: blur(2px);
+                z-index: 999999;
+                display: flex; align-items: center; justify-content: center;
+                padding: 14px; box-sizing: border-box;
+                font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            }
+            .kexp-card {
+                background: #ffffff;
+                width: 100%; max-width: 980px;
+                border: 1.5px solid #d9b86c;
+                border-radius: 8px;
+                box-shadow: 0 18px 42px rgba(0, 0, 0, 0.14);
+                overflow: hidden;
+                max-height: 95vh;
+                display: flex; flex-direction: column;
+                color: #1f2937;
+            }
+            .kexp-header {
+                background: #fdf6e2;
+                border-bottom: 1.5px solid #e5d5a7;
+                padding: 10px 18px;
+                display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+            }
+            .kexp-title {
+                margin: 0; font-size: 15px; font-weight: 800; color: #1f2937;
+                letter-spacing: 0.2px;
+            }
+            .kexp-pill-btn {
+                background: #ffffff; color: #374151;
+                border: 1px solid #d1d5db; border-radius: 5px;
+                padding: 5px 11px; font-size: 12px; font-weight: 700;
+                cursor: pointer; transition: all 0.12s ease;
+            }
+            .kexp-pill-btn:hover { border-color: #d9a425; background: #fef9ea; color: #1f2937; }
+            .kexp-pill-gold {
+                background: #f2b71d; color: #1f2937;
+                border: 1px solid #d9a425; border-radius: 5px;
+                padding: 5px 12px; font-size: 12px; font-weight: 800;
+                cursor: pointer;
+            }
+            .kexp-pill-gold:hover { background: #e5aa12; }
+            .kexp-body {
+                display: grid; grid-template-columns: 1.55fr 1fr;
+                gap: 16px; padding: 14px 18px;
+                overflow-y: auto; flex: 1; background: #ffffff;
+            }
+            @media (max-width: 820px) {
+                .kexp-body { grid-template-columns: 1fr; }
+            }
+            .kexp-sec-title {
+                font-size: 11px; font-weight: 800; color: #92400e;
+                text-transform: uppercase; letter-spacing: 0.6px;
+                border-bottom: 1px solid #eadab0;
+                padding-bottom: 4px; margin: 12px 0 8px 0;
+            }
+            .kexp-row {
+                display: grid; grid-template-columns: 155px 1fr;
+                align-items: center; gap: 10px; margin-bottom: 7px;
+            }
+            .kexp-row-2 {
+                display: grid; grid-template-columns: 1fr 1fr;
+                gap: 12px; margin-bottom: 7px;
+            }
+            .kexp-mini-row {
+                display: grid; grid-template-columns: 115px 1fr;
+                align-items: center; gap: 8px;
+            }
+            .kexp-lbl {
+                font-size: 12.5px; font-weight: 600; color: #374151;
+            }
+            .kexp-inp {
+                width: 100%; box-sizing: border-box;
+                padding: 6px 10px;
+                border: 1px solid #d1d5db; border-radius: 4px;
+                font-size: 13.5px; font-weight: 700; color: #111827;
+                background: #ffffff; outline: none;
+                transition: border-color 0.12s, background 0.12s;
+            }
+            .kexp-inp:focus {
+                border-color: #d9a425 !important;
+                background: #fffdf5 !important;
+                box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.22);
+            }
+            .kexp-inp-num { text-align: right; font-variant-numeric: tabular-nums; }
+            .kexp-right-panel {
+                border: 1px solid #e5d5a7; border-radius: 6px;
+                background: #ffffff; display: flex; flex-direction: column;
+                overflow: hidden; min-height: 360px;
+            }
+            .kexp-right-head {
+                background: #fdf6e2; border-bottom: 1px solid #e5d5a7;
+                padding: 8px 12px; font-size: 12.5px; font-weight: 800; color: #1f2937;
+                display: flex; justify-content: space-between; align-items: center;
+            }
+            .kexp-picker-list {
+                flex: 1; overflow-y: auto; max-height: 360px;
+            }
+            .kexp-picker-item {
+                padding: 7px 12px; font-size: 12.5px; font-weight: 600; color: #1f2937;
+                border-bottom: 1px solid #f3f4f6; cursor: pointer;
+                display: flex; justify-content: space-between; align-items: center; gap: 8px;
+            }
+            .kexp-picker-item:hover { background: #fef9ea; }
+            .kexp-picker-item.active {
+                background: #f2b71d; color: #1f2937; font-weight: 800;
+            }
+            .kexp-picker-sub {
+                font-size: 11px; color: #6b7280; font-weight: 600;
+            }
+            .kexp-picker-item.active .kexp-picker-sub { color: #374151; }
+            .kexp-footer {
+                background: #fdf6e2; border-top: 1px solid #e5d5a7;
+                padding: 8px 18px;
+                display: flex; justify-content: space-between; align-items: center;
+                flex-wrap: wrap; gap: 8px; font-size: 11.5px; color: #6b7280;
+            }
+            .kexp-btn-save {
+                background: #f2b71d; color: #1f2937;
+                border: 1px solid #d9a425; border-radius: 5px;
+                padding: 7px 20px; font-size: 13px; font-weight: 800;
+                cursor: pointer;
+            }
+            .kexp-btn-save:hover { background: #e5aa12; }
+            .kexp-btn-sec {
+                background: #ffffff; color: #1f2937;
+                border: 1px solid #d1d5db; border-radius: 5px;
+                padding: 7px 14px; font-size: 12.5px; font-weight: 700;
+                cursor: pointer;
+            }
+            .kexp-btn-sec:hover { border-color: #d9a425; background: #fef9ea; }
+        `;
+        document.head.appendChild(style);
+    };
+
+    /* ========================================================================
+       3. OPEN KARIGER EXPRESS VOUCHER (TALLY WHITE & GOLD)
        ------------------------------------------------------------------------
     ======================================================================== */
     window.openKarigerExpressModal = () => {
+        ensureTallyExpressStyles();
         const existing = document.getElementById('kariger-express-modal');
         if (existing) existing.remove();
 
@@ -197,171 +334,155 @@
         activeSheetIndex = 0;
         prevDeliveredSarees = 0;
         lastSavedTransaction = null;
+        pickerMode = 'kariger';
+        pickerItems = [];
+        pickerActiveIdx = 0;
+        pickerArrowUsed = false;
 
         const { kOpts, bOpts, zOpts } = getKarigerExpressDatalists();
         const today = getToday();
 
         const modalHtml = `
-        <div id="kariger-express-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.85); z-index:999999; display:flex; align-items:center; justify-content:center; padding:10px; box-sizing:border-box;">
-            <div style="background:#ffffff; width:100%; max-width:960px; border-radius:14px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.65); overflow:hidden; font-family:sans-serif; max-height:97vh; display:flex; flex-direction:column;">
-                
-                <!-- Modal Top Header -->
-                <div style="background:#0f172a; color:#fff; padding:12px 20px; display:flex; justify-content:space-between; align-items:center;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span style="font-size:24px;">⚡</span>
-                        <h3 style="margin:0; font-size:17px; font-weight:800; letter-spacing:0.5px;">KARIGER EXPRESS • कारीगर बैठक काउन्टर</h3>
+        <div id="kariger-express-modal" class="kexp-overlay">
+            <div class="kexp-card">
+
+                <!-- Top Cream Tally Header -->
+                <div class="kexp-header">
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <h3 class="kexp-title">Kariger Baithak Voucher</h3>
+                        <button type="button" id="kexp-btn-alt-c" class="kexp-pill-gold" onclick="openAltCKarigerModal()">+ Naya Kariger [Alt+C]</button>
+                        <button type="button" class="kexp-pill-btn" onclick="openExpressNewTaniModal()">+ Nayi Tani [Alt+N]</button>
                     </div>
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span style="font-size:12px; background:#1e293b; color:#38bdf8; padding:4px 10px; border-radius:6px; font-weight:bold;">[Alt+C] Naya Kariger | [Enter] Next | [F2] Search | [Alt+P] Print</span>
-                        <button type="button" onclick="closeKarigerExpressModal()" style="background:transparent; border:none; color:#fff; font-size:26px; cursor:pointer; line-height:1;">&times;</button>
-                    </div>
+                    <button type="button" class="kexp-pill-btn" onclick="closeKarigerExpressModal()">&larr; [Esc] Back</button>
                 </div>
 
-                <!-- Form Body -->
-                <div style="padding:16px 20px; overflow-y:auto; flex:1;">
-                    
-                    <!-- Row 1: Date & Kariger Selector with Alt+C Button -->
-                    <div style="display:grid; grid-template-columns:160px 1fr auto; gap:12px; margin-bottom:14px; align-items:flex-end;">
-                        <div>
-                            <label style="font-size:12px; font-weight:bold; color:#475569; display:block; margin-bottom:4px;">तारीख (Date):</label>
-                            <input type="date" id="kexp-date" value="${today}" data-next="kexp-kariger-input" style="width:100%; padding:11px 12px; border:1.5px solid #cbd5e1; border-radius:8px; font-size:14px; font-weight:bold; box-sizing:border-box; background:#ffffff;">
-                        </div>
-                        <div>
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <label style="font-size:12px; font-weight:bold; color:#1e3a8a;">कारीगर का नाम चुनें (F2 Search):</label>
-                                <span style="font-size:11px; color:#64748b;">(Naya banane ke liye Alt+C)</span>
+                <!-- Main 2-Column Split Body -->
+                <div class="kexp-body">
+
+                    <!-- LEFT PANE: CLEAN TALLY FORM -->
+                    <div>
+                        <div class="kexp-row-2">
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Date :</label>
+                                <input type="date" id="kexp-date" value="${today}" data-next="kexp-kariger-input" class="kexp-inp">
                             </div>
-                            <input type="text" id="kexp-kariger-input" list="kexp-kariger-dl" data-next="kexp-saree-qty" placeholder="Kariger naam likhein..." autocomplete="off" style="width:100%; padding:11px 14px; border:2px solid #2563eb; border-radius:8px; font-size:16px; font-weight:bold; box-sizing:border-box; background:#eff6ff; color:#0f172a;">
-                            <datalist id="kexp-kariger-dl">${kOpts}</datalist>
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Kariger [F2] :</label>
+                                <input type="text" id="kexp-kariger-input" data-next="kexp-saree-qty" placeholder="Type name or &uarr;&darr;..." autocomplete="off" class="kexp-inp">
+                                <datalist id="kexp-kariger-dl">${kOpts}</datalist>
+                            </div>
                         </div>
-                        <div>
-                            <button type="button" id="kexp-btn-alt-c" onclick="openAltCKarigerModal()" style="background:#10b981; color:#fff; border:none; padding:12px 18px; border-radius:8px; font-weight:900; font-size:14px; cursor:pointer; white-space:nowrap; box-shadow:0 3px 6px rgba(16,185,129,0.3);">
-                                ➕ Naya Kariger [Alt+C]
-                            </button>
+
+                        <!-- Tani Selection Tabs Strip -->
+                        <div id="kexp-tani-tabs-bar" style="display:none; margin:6px 0 8px 0; background:#fdf6e2; padding:5px 8px; border-radius:4px; border:1px solid #e5d5a7; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                            <div id="kexp-tani-chips-container" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;"></div>
+                            <span style="font-size:11px; color:#92400e; font-weight:700;">Active Tani</span>
+                        </div>
+
+                        <!-- SECTION 1: INWARD -->
+                        <div class="kexp-sec-title">Inward &mdash; Saree Jama &amp; Material Return</div>
+                        <div class="kexp-row-2">
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Saree Jama (Pcs) :</label>
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="kexp-saree-qty" data-next="kexp-saree-lott" placeholder="0" oninput="calculateKarigerExpressLive()" class="kexp-inp kexp-inp-num" style="border-color:#d9a425;">
+                            </div>
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Lott / Cut (Pcs) :</label>
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="kexp-saree-lott" data-next="kexp-ret-bana" placeholder="0" oninput="calculateKarigerExpressLive()" class="kexp-inp kexp-inp-num">
+                            </div>
+                        </div>
+                        <div class="kexp-row-2">
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Bana Wapsi (Kg) :</label>
+                                <input type="text" inputmode="decimal" id="kexp-ret-bana" data-next="kexp-ret-zari" placeholder="0.00" class="kexp-inp kexp-inp-num">
+                            </div>
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Zari Wapsi (Kg) :</label>
+                                <input type="text" inputmode="decimal" id="kexp-ret-zari" data-next="kexp-bana-name" placeholder="0.00" class="kexp-inp kexp-inp-num">
+                            </div>
+                        </div>
+
+                        <!-- SECTION 2: OUTWARD -->
+                        <div class="kexp-sec-title">Outward &mdash; Bana &amp; Zari Issue</div>
+                        <div class="kexp-row">
+                            <label class="kexp-lbl">Bana Item : <small id="kexp-live-bana-badge" style="display:block; font-size:10.5px; color:#b47d00; font-weight:700;">Bacha: 0.00 Kg</small></label>
+                            <input type="text" id="kexp-bana-name" data-next="kexp-bana-cone" placeholder="Select Bana..." autocomplete="off" oninput="updateExpressStockBadges()" class="kexp-inp">
+                            <datalist id="kexp-bana-dl">${bOpts}</datalist>
+                        </div>
+                        <div class="kexp-row-2">
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Bana Gross (Kg) :</label>
+                                <input type="text" inputmode="decimal" id="kexp-bana-cone" data-next="kexp-bana-lesstp" placeholder="0.00" oninput="calculateKarigerExpressLive()" class="kexp-inp kexp-inp-num">
+                            </div>
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Less TP (Kg) :</label>
+                                <input type="text" inputmode="decimal" id="kexp-bana-lesstp" data-next="kexp-zari-name" placeholder="0.00" oninput="calculateKarigerExpressLive()" class="kexp-inp kexp-inp-num">
+                            </div>
+                        </div>
+
+                        <div class="kexp-row" style="margin-top:8px;">
+                            <label class="kexp-lbl">Zari Item : <small id="kexp-live-zari-badge" style="display:block; font-size:10.5px; color:#b47d00; font-weight:700;">Bacha: 0.00 Kg</small></label>
+                            <input type="text" id="kexp-zari-name" data-next="kexp-zari-qty" placeholder="Select Zari..." autocomplete="off" oninput="updateExpressStockBadges()" class="kexp-inp">
+                            <datalist id="kexp-zari-dl">${zOpts}</datalist>
+                        </div>
+                        <div class="kexp-row-2">
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Zari Gross (Kg) :</label>
+                                <input type="text" inputmode="decimal" id="kexp-zari-qty" data-next="kexp-zari-topi" placeholder="0.00" oninput="calculateKarigerExpressLive()" class="kexp-inp kexp-inp-num">
+                            </div>
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Topi Less (Kg) :</label>
+                                <input type="text" inputmode="decimal" id="kexp-zari-topi" data-next="kexp-paid-amount" placeholder="0.00" oninput="calculateKarigerExpressLive()" class="kexp-inp kexp-inp-num">
+                            </div>
+                        </div>
+
+                        <!-- SECTION 3: MAZDOORI & ROKAD -->
+                        <div class="kexp-sec-title">Mazdoori &amp; Rokad Payment</div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:#fdfcf7; border:1px solid #eadab0; border-radius:4px; padding:6px 10px; margin-bottom:8px; font-size:12.5px;">
+                            <span>Bani Rate: <strong id="kexp-disp-bani-rate" style="color:#1f2937;">₹ 0.00</strong></span>
+                            <span>Aaj ki Mazdoori: <strong id="kexp-disp-gross-bani" style="color:#b47d00;">₹ 0.00</strong></span>
+                        </div>
+                        <div class="kexp-row">
+                            <label class="kexp-lbl">Aaj Rokad Diya (₹) :</label>
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="kexp-paid-amount" placeholder="0" oninput="calculateKarigerExpressLive()" class="kexp-inp kexp-inp-num" style="border-color:#d9a425; font-size:15px;">
+                        </div>
+
+                        <!-- Bottom Voucher Action Strip -->
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding-top:10px; border-top:1px solid #eadab0; flex-wrap:wrap; gap:8px;">
+                            <div style="font-size:13px; font-weight:700; color:#374151;">
+                                Antim Baki: <span id="kexp-disp-net-balance" style="font-size:17px; font-weight:900; color:#b47d00; margin-left:4px;">₹ 0.00</span>
+                            </div>
+                            <div style="display:flex; gap:8px;">
+                                <button type="button" id="kexp-print-btn" class="kexp-btn-sec" onclick="printLastSavedExpressSlip()">A6 Parchi [Alt+P]</button>
+                                <button type="button" id="kexp-submit-btn" class="kexp-btn-save" onclick="submitKarigerExpress()">Save &amp; Parchi [Enter]</button>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- TANI SELECTION TABS & NEW TANI BUTTON -->
-                    <div id="kexp-tani-tabs-bar" style="display:none; margin-bottom:12px; background:#f1f5f9; padding:8px 12px; border-radius:8px; border:1px solid #cbd5e1; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-                        <div id="kexp-tani-chips-container" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;"></div>
-                        <button type="button" onclick="openExpressNewTaniModal()" style="background:#0284c7; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer;">
-                            ➕ Nayi Tani [Alt+N]
-                        </button>
-                    </div>
-
-                    <!-- Live Weaver Snapshot Banner -->
-                    <div id="kexp-weaver-banner" style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px; padding:12px 16px; margin-bottom:16px;">
-                        <span style="font-size:13px; color:#64748b;">कारीगर चुनिए, तानी का पूरा हिसाब और कलर यहाँ दिखेंगे...</span>
-                    </div>
-
-                    <!-- 3-Column Express Grid -->
-                    <div style="display:grid; grid-template-columns:1fr 1fr 1.15fr; gap:14px;">
-                        
-                        <!-- COLUMN 1: SAREE & RETURN -->
-                        <div style="background:#ecfdf5; border:1.5px solid #a7f3d0; border-radius:10px; padding:14px;">
-                            <h4 style="margin:0 0 12px 0; color:#065f46; font-size:14px; border-bottom:1.5px solid #a7f3d0; padding-bottom:6px;">📦 माल आया (Inward)</h4>
-                            
-                            <div style="margin-bottom:10px;">
-                                <label style="font-size:12px; font-weight:bold; color:#065f46; display:block; margin-bottom:3px;">साड़ी संख्या (Pcs):</label>
-                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="kexp-saree-qty" data-next="kexp-saree-lott" placeholder="0" oninput="calculateKarigerExpressLive()" style="width:100%; padding:10px 12px; border:2.5px solid #10b981; border-radius:8px; font-size:20px; font-weight:900; color:#065f46; box-sizing:border-box; background:#ffffff; text-align:center;">
-                            </div>
-                            <div style="margin-bottom:10px;">
-                                <label style="font-size:11px; font-weight:bold; color:#b91c1c; display:block; margin-bottom:3px;">लॉट / कट साड़ी (Pcs):</label>
-                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="kexp-saree-lott" data-next="kexp-ret-bana" placeholder="0" oninput="calculateKarigerExpressLive()" style="width:100%; padding:9px 12px; border:1.5px solid #cbd5e1; border-radius:6px; font-size:15px; font-weight:bold; color:#dc2626; box-sizing:border-box; background:#ffffff; text-align:center;">
-                            </div>
-                            <div style="margin-bottom:10px;">
-                                <label style="font-size:11px; font-weight:bold; color:#374151; display:block; margin-bottom:3px;">बचा बाना वापसी (Kg):</label>
-                                <input type="text" inputmode="decimal" id="kexp-ret-bana" data-next="kexp-ret-zari" placeholder="0.00" style="width:100%; padding:9px 12px; border:1.5px solid #cbd5e1; border-radius:6px; font-size:14px; font-weight:bold; box-sizing:border-box; background:#ffffff;">
-                            </div>
-                            <div>
-                                <label style="font-size:11px; font-weight:bold; color:#374151; display:block; margin-bottom:3px;">बची जरी वापसी (Kg):</label>
-                                <input type="text" inputmode="decimal" id="kexp-ret-zari" data-next="kexp-bana-name" placeholder="0.00" style="width:100%; padding:9px 12px; border:1.5px solid #cbd5e1; border-radius:6px; font-size:14px; font-weight:bold; box-sizing:border-box; background:#ffffff;">
-                            </div>
+                    <!-- RIGHT PANE: TALLY CONTEXTUAL PANEL -->
+                    <div class="kexp-right-panel">
+                        <div class="kexp-right-head">
+                            <span id="kexp-right-title">List of Karigers</span>
+                            <span id="kexp-right-hint" style="font-size:11px; color:#6b7280; font-weight:600;">&uarr;&darr; + Enter</span>
                         </div>
 
-                        <!-- COLUMN 2: BANA & ZARI ISSUE -->
-                        <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:10px; padding:14px;">
-                            <h4 style="margin:0 0 12px 0; color:#1e40af; font-size:14px; border-bottom:1.5px solid #bfdbfe; padding-bottom:6px;">🧶 कच्चा माल दिया (Outward)</h4>
-                            
-                            <div style="margin-bottom:10px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
-                                    <label style="font-size:11px; font-weight:bold; color:#374151;">बाना आइटम चुनें:</label>
-                                    <small id="kexp-live-bana-badge" style="color:#059669; font-weight:bold; font-size:11px;">Bacha: 0.00 Kg</small>
-                                </div>
-                                <input type="text" id="kexp-bana-name" list="kexp-bana-dl" data-next="kexp-bana-cone" placeholder="Bana..." oninput="updateExpressStockBadges()" style="width:100%; padding:9px 10px; border:1.5px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:bold; box-sizing:border-box; background:#ffffff;">
-                                <datalist id="kexp-bana-dl">${bOpts}</datalist>
-                            </div>
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
-                                <div>
-                                    <label style="font-size:11px; font-weight:bold; color:#475569; display:block; margin-bottom:3px;">Bana Gross:</label>
-                                    <input type="text" inputmode="decimal" id="kexp-bana-cone" data-next="kexp-bana-lesstp" placeholder="0.00" oninput="calculateKarigerExpressLive()" style="width:100%; padding:9px 10px; border:1.5px solid #cbd5e1; border-radius:6px; font-size:14px; font-weight:bold; box-sizing:border-box; background:#ffffff;">
-                                </div>
-                                <div>
-                                    <label style="font-size:11px; font-weight:bold; color:#dc2626; display:block; margin-bottom:3px;">Less TP:</label>
-                                    <input type="text" inputmode="decimal" id="kexp-bana-lesstp" data-next="kexp-zari-name" placeholder="0.00" oninput="calculateKarigerExpressLive()" style="width:100%; padding:9px 10px; border:1.5px solid #cbd5e1; border-radius:6px; font-size:14px; font-weight:bold; box-sizing:border-box; background:#ffffff;">
-                                </div>
-                            </div>
+                        <!-- Dynamic Picker List (Visible when Kariger / Bana / Zari focused) -->
+                        <div id="kexp-right-picker" class="kexp-picker-list"></div>
 
-                            <div style="margin-bottom:10px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
-                                    <label style="font-size:11px; font-weight:bold; color:#374151;">जरी आइटम चुनें:</label>
-                                    <small id="kexp-live-zari-badge" style="color:#ea580c; font-weight:bold; font-size:11px;">Bacha: 0.00 Kg</small>
-                                </div>
-                                <input type="text" id="kexp-zari-name" list="kexp-zari-dl" data-next="kexp-zari-qty" placeholder="Zari..." oninput="updateExpressStockBadges()" style="width:100%; padding:9px 10px; border:1.5px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:bold; box-sizing:border-box; background:#ffffff;">
-                                <datalist id="kexp-zari-dl">${zOpts}</datalist>
-                            </div>
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                                <div>
-                                    <label style="font-size:11px; font-weight:bold; color:#475569; display:block; margin-bottom:3px;">Zari Gross:</label>
-                                    <input type="text" inputmode="decimal" id="kexp-zari-qty" data-next="kexp-zari-topi" placeholder="0.00" oninput="calculateKarigerExpressLive()" style="width:100%; padding:9px 10px; border:1.5px solid #cbd5e1; border-radius:6px; font-size:14px; font-weight:bold; box-sizing:border-box; background:#ffffff;">
-                                </div>
-                                <div>
-                                    <label style="font-size:11px; font-weight:bold; color:#dc2626; display:block; margin-bottom:3px;">Topi Less:</label>
-                                    <input type="text" inputmode="decimal" id="kexp-zari-topi" data-next="kexp-paid-amount" placeholder="0.00" oninput="calculateKarigerExpressLive()" style="width:100%; padding:9px 10px; border:1.5px solid #cbd5e1; border-radius:6px; font-size:14px; font-weight:bold; box-sizing:border-box; background:#ffffff;">
-                                </div>
-                            </div>
+                        <!-- Weaver Snapshot Banner (Always in DOM, visible when entering quantities) -->
+                        <div id="kexp-weaver-banner" style="display:none; padding:12px; font-size:12.5px; line-height:1.5; flex:1; overflow-y:auto;">
+                            <span style="color:#6b7280;">Kariger chunein — tani ka poora hisab aur 8 colors yahan dikhenge.</span>
                         </div>
-
-                        <!-- COLUMN 3: MAZDOORI & ROKAD -->
-                        <div style="background:#fff7ed; border:1.5px solid #fed7aa; border-radius:10px; padding:14px; display:flex; flex-direction:column; justify-content:space-between;">
-                            <div>
-                                <h4 style="margin:0 0 12px 0; color:#9a3412; font-size:14px; border-bottom:1.5px solid #fed7aa; padding-bottom:6px;">💰 मजदूरी व रोकड़ हिसाब</h4>
-                                
-                                <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;">
-                                    <span>बानी रेट (प्रति साड़ी):</span>
-                                    <strong id="kexp-disp-bani-rate">₹ 0.00</strong>
-                                </div>
-                                <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:10px;">
-                                    <span>आज की मजदूरी (Gross):</span>
-                                    <strong id="kexp-disp-gross-bani" style="color:#059669; font-size:14px;">₹ 0.00</strong>
-                                </div>
-
-                                <div style="margin-bottom:12px;">
-                                    <label style="font-size:12px; font-weight:bold; color:#374151; display:block; margin-bottom:4px;">आज रोकड़ / खर्चे दिया (₹):</label>
-                                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="kexp-paid-amount" placeholder="₹0" oninput="calculateKarigerExpressLive()" style="width:100%; padding:10px 12px; border:2.5px solid #ea580c; border-radius:8px; font-size:18px; font-weight:900; color:#c2410c; box-sizing:border-box; background:#ffffff;">
-                                </div>
-
-                                <div style="background:#ffffff; border:2px dashed #fdba74; border-radius:8px; padding:10px; text-align:center;">
-                                    <div style="font-size:12px; color:#64748b; font-weight:bold;">कारीगर का अंतिम बाकी रुपया:</div>
-                                    <div id="kexp-disp-net-balance" style="font-size:22px; font-weight:900; color:#1e3a8a; margin-top:3px;">₹ 0.00</div>
-                                </div>
-                            </div>
-                        </div>
-
                     </div>
+
                 </div>
 
-                <!-- Footer Action Bar -->
-                <div style="background:#f1f5f9; padding:12px 20px; border-top:1.5px solid #cbd5e1; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                    <div id="kexp-status-msg" style="font-size:13px; font-weight:bold; color:#059669;"></div>
-                    <div style="display:flex; gap:10px;">
-                        <button type="button" id="kexp-print-btn" onclick="printLastSavedExpressSlip()" style="background:#1e3a8a; color:#ffffff; border:none; padding:11px 18px; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-                            🖨️ A6 Parchi [Alt+P]
-                        </button>
-                        <button type="button" id="kexp-submit-btn" onclick="submitKarigerExpress()" style="background:#059669; color:#ffffff; border:none; padding:12px 28px; border-radius:8px; font-size:15px; font-weight:900; cursor:pointer; box-shadow:0 4px 6px rgba(5,150,105,0.3); display:inline-flex; align-items:center; gap:8px;">
-                            💾 पक्का करें & पर्ची [ ENTER ]
-                        </button>
+                <!-- Bottom Tally Status Bar -->
+                <div class="kexp-footer">
+                    <div>
+                        <span id="kexp-status-msg" style="font-weight:700; color:#b47d00;">[F2] Kariger &bull; [Enter] Next / Save &bull; [Shift+Enter] Prev &bull; [Alt+C] Naya Kariger &bull; [Alt+N] Nayi Tani &bull; [Esc] Back</span>
                     </div>
+                    <div style="font-weight:600;">TallyPrime White &amp; Gold Mode</div>
                 </div>
 
             </div>
@@ -369,10 +490,157 @@
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         bindKarigerExpressEvents();
+        showRightPicker('kariger', '');
     };
 
     /* ========================================================================
-       3. TANI SELECTION & SWITCHER BAR
+       4. RIGHT-PANE CONTEXTUAL PICKER (TALLY LIST OF KARIGERS / STOCK)
+       ------------------------------------------------------------------------
+    ======================================================================== */
+    const showRightPicker = (mode, queryText) => {
+        pickerMode = mode;
+        const pickerEl = document.getElementById('kexp-right-picker');
+        const bannerEl = document.getElementById('kexp-weaver-banner');
+        const titleEl = document.getElementById('kexp-right-title');
+        const hintEl = document.getElementById('kexp-right-hint');
+        if (!pickerEl || !bannerEl) return;
+
+        if (mode === 'summary') {
+            pickerEl.style.display = 'none';
+            bannerEl.style.display = 'block';
+            if (titleEl) titleEl.textContent = selectedKariger ? `Snapshot: ${selectedKariger.name}` : 'Tani & Hisab Snapshot';
+            if (hintEl) hintEl.textContent = 'Live Balance';
+            return;
+        }
+
+        pickerEl.style.display = 'block';
+        bannerEl.style.display = 'none';
+        if (hintEl) hintEl.textContent = '↑↓ + Enter';
+
+        const q = String(queryText || '').trim().toLowerCase();
+        const kGodown = selectedKariger ? (selectedKariger.karkhanaId || 'k_main') : 'k_main';
+        pickerItems = [];
+
+        if (mode === 'kariger') {
+            if (titleEl) titleEl.textContent = 'List of Karigers';
+            const list = toArray(getFromStore('kariger_list')).filter(k => k && k.name);
+            list.forEach((k) => {
+                const text = `${k.name} ${k.saree || ''}`.toLowerCase();
+                if (!q || text.includes(q)) {
+                    pickerItems.push({
+                        label: k.name,
+                        sub: k.saree || 'Saree',
+                        data: k
+                    });
+                }
+            });
+        } else if (mode === 'bana') {
+            if (titleEl) titleEl.textContent = 'List of Bana Stock';
+            const raw = toArray(getFromStore('bana_stock'));
+            const seen = new Set();
+            raw.forEach((b) => {
+                if (!b || !b.name) return;
+                const nm = b.name.trim();
+                const key = nm.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                if (!q || key.includes(q)) {
+                    const bacha = getBanaStockBacha(nm, kGodown);
+                    pickerItems.push({
+                        label: nm,
+                        sub: `${bacha.toFixed(2)} Kg`,
+                        data: nm
+                    });
+                }
+            });
+        } else if (mode === 'zari') {
+            if (titleEl) titleEl.textContent = 'List of Zari Stock';
+            const raw = toArray(getFromStore('zari_stock'));
+            const seen = new Set();
+            raw.forEach((z) => {
+                if (!z || !z.name) return;
+                const nm = z.name.trim();
+                const key = nm.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                if (!q || key.includes(q)) {
+                    const bacha = getZariStockBacha(nm, kGodown);
+                    pickerItems.push({
+                        label: nm,
+                        sub: `${bacha.toFixed(2)} Kg`,
+                        data: nm
+                    });
+                }
+            });
+        }
+
+        if (pickerActiveIdx >= pickerItems.length) pickerActiveIdx = 0;
+        if (pickerActiveIdx < 0) pickerActiveIdx = 0;
+        renderRightPickerList();
+    };
+
+    const renderRightPickerList = () => {
+        const pickerEl = document.getElementById('kexp-right-picker');
+        if (!pickerEl) return;
+
+        if (!pickerItems.length) {
+            pickerEl.innerHTML = `<div style="padding:18px 12px; text-align:center; color:#6b7280; font-size:12px;">Koi matching record nahi mila.</div>`;
+            return;
+        }
+
+        let html = '';
+        pickerItems.forEach((item, idx) => {
+            const cls = idx === pickerActiveIdx ? 'kexp-picker-item active' : 'kexp-picker-item';
+            html += `<div class="${cls}" data-pidx="${idx}" onmousedown="event.preventDefault(); window.__kexpPickItem(${idx})">
+                <span>${esc(item.label)}</span>
+                <span class="kexp-picker-sub">${esc(item.sub)}</span>
+            </div>`;
+        });
+        pickerEl.innerHTML = html;
+
+        const activeEl = pickerEl.querySelector('.kexp-picker-item.active');
+        if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+    };
+
+    window.__kexpPickItem = (idx) => {
+        const item = pickerItems[idx];
+        if (!item) return;
+
+        if (pickerMode === 'kariger') {
+            const k = item.data;
+            const kInp = document.getElementById('kexp-kariger-input');
+            if (kInp) kInp.value = k.name;
+            applySelectedKariger(k);
+            const nextEl = document.getElementById('kexp-saree-qty');
+            if (nextEl) { nextEl.focus(); nextEl.select(); }
+        } else if (pickerMode === 'bana') {
+            const bInp = document.getElementById('kexp-bana-name');
+            if (bInp) bInp.value = item.data;
+            updateExpressStockBadges();
+            const nextEl = document.getElementById('kexp-bana-cone');
+            if (nextEl) { nextEl.focus(); nextEl.select(); }
+        } else if (pickerMode === 'zari') {
+            const zInp = document.getElementById('kexp-zari-name');
+            if (zInp) zInp.value = item.data;
+            updateExpressStockBadges();
+            const nextEl = document.getElementById('kexp-zari-qty');
+            if (nextEl) { nextEl.focus(); nextEl.select(); }
+        }
+    };
+
+    const applySelectedKariger = (k) => {
+        selectedKariger = k;
+        const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(k.id) : [];
+        activeSheetIndex = sheets.length ? sheets.length - 1 : 0;
+        currentActiveSheet = sheets[activeSheetIndex] || null;
+
+        renderKarigerExpressTaniTabs();
+        updateWeaverBannerSnapshot();
+        calculateKarigerExpressLive();
+    };
+
+    /* ========================================================================
+       5. TANI SELECTION & SNAPSHOT BANNER
        ------------------------------------------------------------------------
     ======================================================================== */
     const renderKarigerExpressTaniTabs = () => {
@@ -394,7 +662,7 @@
 
         sheets.forEach((sh, idx) => {
             const isActive = (idx === activeSheetIndex);
-            html += `<button type="button" onclick="switchExpressTaniSheet(${idx})" style="background:${isActive ? '#2563eb' : '#ffffff'}; color:${isActive ? '#ffffff' : '#334155'}; border:1px solid ${isActive ? '#1d4ed8' : '#cbd5e1'}; padding:4px 12px; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer;">
+            html += `<button type="button" onclick="switchExpressTaniSheet(${idx})" style="background:${isActive ? '#f2b71d' : '#ffffff'}; color:#1f2937; border:1px solid ${isActive ? '#d9a425' : '#d1d5db'}; padding:3px 10px; border-radius:4px; font-size:11.5px; font-weight:${isActive ? '800' : '600'}; cursor:pointer;">
                 ${esc(sh.title || `Tani ${idx + 1}`)}
             </button>`;
         });
@@ -410,6 +678,7 @@
         renderKarigerExpressTaniTabs();
         updateWeaverBannerSnapshot();
         calculateKarigerExpressLive();
+        showRightPicker('summary', '');
     };
 
     const updateWeaverBannerSnapshot = () => {
@@ -417,15 +686,14 @@
         if (!banner || !selectedKariger || !currentActiveSheet) return;
 
         const k = selectedKariger;
-        const calc = (typeof window.calculateSheetTotals === 'function') 
-            ? window.calculateSheetTotals(currentActiveSheet) 
+        const calc = (typeof window.calculateSheetTotals === 'function')
+            ? window.calculateSheetTotals(currentActiveSheet)
             : { remainingAmt: 0, remainingBana: 0, remainingZari: 0, totSaree: 0 };
 
         prevDeliveredSarees = safeNum(calc.totSaree);
 
         const rateBani = safeNum(currentActiveSheet.rateBani, 240);
         const totalTaniTarget = safeNum(currentActiveSheet.taniPcs, 72);
-        
         const taniSancha = currentActiveSheet.taniSancha || 'N/A';
         const chukkaSancha = currentActiveSheet.chukkaSancha || 'N/A';
         const taniItem = currentActiveSheet.taniItem || 'Tani';
@@ -435,206 +703,238 @@
         if (colorsArr.length) {
             colorsArr.forEach((c, idx) => {
                 if (c && String(c).trim()) {
-                    colorsHtml += `<span style="background:#fef3c7; color:#92400e; border:1px solid #fde68a; font-size:11px; font-weight:bold; padding:2px 7px; border-radius:4px;">${idx + 1}. ${esc(c)}</span> `;
+                    colorsHtml += `<span style="background:#fdf6e2; color:#1f2937; border:1px solid #e5d5a7; font-size:11px; font-weight:600; padding:1px 6px; border-radius:3px;">${idx + 1}. ${esc(c)}</span> `;
                 }
             });
         }
-        if (!colorsHtml) colorsHtml = `<span style="color:#94a3b8; font-size:11px;">Color matching set nahi hai</span>`;
+        if (!colorsHtml) colorsHtml = `<span style="color:#9ca3af; font-size:11px;">Colors set nahi hain</span>`;
 
-        if (currentActiveSheet.banaItem && !document.getElementById('kexp-bana-name').value) {
-            document.getElementById('kexp-bana-name').value = currentActiveSheet.banaItem;
+        const banaInp = document.getElementById('kexp-bana-name');
+        const zariInp = document.getElementById('kexp-zari-name');
+        if (banaInp && currentActiveSheet.banaItem && !banaInp.value) {
+            banaInp.value = currentActiveSheet.banaItem;
         }
-        if (currentActiveSheet.zariItem && !document.getElementById('kexp-zari-name').value) {
-            document.getElementById('kexp-zari-name').value = currentActiveSheet.zariItem;
+        if (zariInp && currentActiveSheet.zariItem && !zariInp.value) {
+            zariInp.value = currentActiveSheet.zariItem;
         }
 
         updateExpressStockBadges();
 
         banner.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
-                <span style="font-size:14px; font-weight:bold; color:#1e3a8a;">👤 ${esc(k.name)} (${esc(k.saree || 'Satan')})</span>
-                <span style="font-size:12px; color:#475569;">
-                    🧵 <strong>${esc(currentActiveSheet.title || 'Tani')}</strong> | 
-                    ⚙️ साँचा: <strong>${esc(taniSancha)}</strong> (${esc(taniItem)}) | 
-                    चुक्का: <strong>${esc(chukkaSancha)}</strong>
-                </span>
-                <span style="font-size:12.5px; color:#b45309;">पिछला बकाया: <strong>₹ ${safeNum(calc.remainingAmt).toFixed(2)}</strong></span>
+            <div style="border-bottom:1px solid #eadab0; padding-bottom:8px; margin-bottom:8px;">
+                <div style="font-size:14px; font-weight:800; color:#1f2937;">${esc(k.name)}</div>
+                <div style="font-size:11.5px; color:#6b7280;">Design: <strong style="color:#1f2937;">${esc(k.saree || 'Satan')}</strong> &bull; ${esc(currentActiveSheet.title || 'Tani')}</div>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                <div id="kexp-live-tani-progress" style="font-size:13px;">
-                    🎯 कुल तानी: <strong>${totalTaniTarget} Pcs</strong> | 📥 अब तक आई: <strong style="color:#059669;">${prevDeliveredSarees} Pcs</strong> | ⏳ बाकी: <strong style="color:#dc2626;">${Math.max(0, totalTaniTarget - prevDeliveredSarees)} Pcs</strong>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:12px; margin-bottom:10px;">
+                <div style="background:#fdfcf7; border:1px solid #eadab0; padding:6px 8px; border-radius:4px;">
+                    <div style="font-size:10.5px; color:#6b7280;">Sancha / Tani</div>
+                    <strong style="color:#1f2937;">${esc(taniSancha)}</strong> <span style="font-size:11px; color:#6b7280;">(${esc(taniItem)})</span>
                 </div>
-                <div style="font-size:12px;">
-                    बचा बाना: <strong style="color:#059669;">${safeNum(calc.remainingBana).toFixed(2)} Kg</strong> | 
-                    बची जरी: <strong style="color:#ea580c;">${safeNum(calc.remainingZari).toFixed(2)} Kg</strong>
+                <div style="background:#fdfcf7; border:1px solid #eadab0; padding:6px 8px; border-radius:4px;">
+                    <div style="font-size:10.5px; color:#6b7280;">Chukka Sancha</div>
+                    <strong style="color:#1f2937;">${esc(chukkaSancha)}</strong>
                 </div>
             </div>
-            <div style="margin-top:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                <span style="font-size:11px; font-weight:bold; color:#475569;">🎨 8 Colors:</span>
-                ${colorsHtml}
+
+            <div id="kexp-live-tani-progress" style="background:#fdf6e2; border:1px solid #e5d5a7; padding:7px 9px; border-radius:4px; font-size:12px; margin-bottom:10px;">
+                Tani: <strong>${totalTaniTarget} Pcs</strong> &bull; Aayi: <strong>${prevDeliveredSarees}</strong> &bull; Baki: <strong style="color:#b47d00;">${Math.max(0, totalTaniTarget - prevDeliveredSarees)} Pcs</strong>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; font-size:12px; border-bottom:1px solid #f3f4f6; padding-bottom:6px; margin-bottom:6px;">
+                <span style="color:#6b7280;">Pichla Baki Rupya:</span>
+                <strong style="color:#b47d00;">₹ ${safeNum(calc.remainingAmt).toFixed(2)}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; border-bottom:1px solid #f3f4f6; padding-bottom:6px; margin-bottom:6px;">
+                <span style="color:#6b7280;">Kariger ke paas Bana:</span>
+                <strong>${safeNum(calc.remainingBana).toFixed(2)} Kg</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; border-bottom:1px solid #f3f4f6; padding-bottom:6px; margin-bottom:8px;">
+                <span style="color:#6b7280;">Kariger ke paas Zari:</span>
+                <strong>${safeNum(calc.remainingZari).toFixed(2)} Kg</strong>
+            </div>
+
+            <div>
+                <div style="font-size:10.5px; font-weight:700; color:#92400e; text-transform:uppercase; margin-bottom:4px;">8 Colors Matching</div>
+                <div style="display:flex; flex-wrap:wrap; gap:4px;">${colorsHtml}</div>
             </div>
         `;
-        document.getElementById('kexp-disp-bani-rate').textContent = `₹ ${rateBani.toFixed(2)}`;
+        const rateEl = document.getElementById('kexp-disp-bani-rate');
+        if (rateEl) rateEl.textContent = `₹ ${rateBani.toFixed(2)}`;
     };
 
     /* ========================================================================
-       4. ⚡ ALT + C MODAL: NEW WEAVER SETUP
+       6. ALT + C MODAL: NEW WEAVER SETUP (TALLY WHITE & GOLD)
        ------------------------------------------------------------------------
     ======================================================================== */
     window.openAltCKarigerModal = () => {
+        ensureTallyExpressStyles();
         const existing = document.getElementById('alt-c-kariger-modal');
         if (existing) existing.remove();
 
         const { taniOpts, chukkaOpts } = getKarigerExpressDatalists();
         const activeKid = (selectedKariger && selectedKariger.karkhanaId) ? selectedKariger.karkhanaId : 'k_main';
 
-        let karkhanas = (typeof window.getKarkhanasSafe === 'function') 
-            ? window.getKarkhanasSafe() 
+        let karkhanas = (typeof window.getKarkhanasSafe === 'function')
+            ? window.getKarkhanasSafe()
             : toArray(getFromStore('karkhana_list'));
         if (!karkhanas.length) karkhanas = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
 
         let karkhanaOptions = '';
         karkhanas.forEach((k) => {
             const isSel = (String(k.id) === String(activeKid));
-            karkhanaOptions += `<option value="${esc(k.id)}" ${isSel ? 'selected' : ''}>${k.id === 'k_main' ? '🏢 ' : '🏭 '}${esc(k.name)}</option>`;
+            karkhanaOptions += `<option value="${esc(k.id)}" ${isSel ? 'selected' : ''}>${esc(k.name)}</option>`;
         });
 
         const modalHtml = `
-        <div id="alt-c-kariger-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.85); z-index:1000005; display:flex; align-items:center; justify-content:center; padding:12px; box-sizing:border-box;">
-            <div style="background:#ffffff; width:100%; max-width:680px; border-radius:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); overflow:hidden; font-family:sans-serif; max-height:95vh; display:flex; flex-direction:column;">
-                
-                <div style="background:linear-gradient(135deg, #059669, #0f766e); color:#fff; padding:12px 18px; display:flex; justify-content:space-between; align-items:center;">
+        <div id="alt-c-kariger-modal" class="kexp-overlay" style="z-index:1000005;">
+            <div class="kexp-card" style="max-width:720px;">
+
+                <div class="kexp-header">
                     <div>
-                        <h3 style="margin:0; font-size:15px; display:flex; align-items:center; gap:6px;">⚡ नया कारीगर व तानी 1 सेटअप <span style="background:#34d399; color:#064e3b; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:800;">Alt + C Mode</span></h3>
-                        <small style="color:#a7f3d0; font-size:11px;">[Enter] Next Field | [Ctrl+Enter] Save & Load in Express | [Esc] Close</small>
+                        <h3 class="kexp-title">Naya Kariger &amp; Tani 1 Setup (Alt+C)</h3>
+                        <span style="font-size:11px; color:#6b7280;">[Enter] Next Field &bull; [Ctrl+Enter] Save &amp; Load &bull; [Esc] Close</span>
                     </div>
-                    <button type="button" onclick="closeAltCKarigerModal()" style="background:transparent; border:none; color:#fff; font-size:22px; cursor:pointer;">&times;</button>
+                    <button type="button" class="kexp-pill-btn" onclick="closeAltCKarigerModal()">&larr; [Esc] Cancel</button>
                 </div>
 
-                <div style="padding:14px; overflow-y:auto; flex:1;">
-                    
-                    <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px; margin-bottom:12px;">
-                        <div style="font-weight:800; color:#0f766e; font-size:12px; margin-bottom:6px;">👤 1. कारीगर की जानकारी:</div>
-                        <div style="display:grid; grid-template-columns:1.5fr 1.2fr; gap:8px; margin-bottom:8px;">
-                            <div>
-                                <label style="font-size:11px; font-weight:bold; color:#334155;">कारीगर का पूरा नाम:</label>
-                                <input type="text" id="altc-kar-name" placeholder="jaise: Guddu Ansari" autocomplete="off" style="width:100%; padding:8px 10px; border:2px solid #059669; border-radius:6px; font-size:14px; font-weight:bold; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:11px; font-weight:bold; color:#334155;">साड़ी का नाम (Design):</label>
-                                <input type="text" id="altc-kar-saree" placeholder="jaise: Satan / Minakari" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:bold; box-sizing:border-box;">
-                            </div>
+                <div style="padding:14px 18px; overflow-y:auto; flex:1;">
+                    <div class="kexp-sec-title" style="margin-top:0;">1. Kariger Master Details</div>
+                    <div class="kexp-row-2">
+                        <div class="kexp-mini-row">
+                            <label class="kexp-lbl">Kariger Name :</label>
+                            <input type="text" id="altc-kar-name" data-altc-next="altc-kar-saree" placeholder="Jaise: GUDDU ANSARI" autocomplete="off" class="kexp-inp" style="border-color:#d9a425;">
                         </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                            <div>
-                                <label style="font-size:11px; font-weight:bold; color:#334155;">मोबाइल नंबर:</label>
-                                <input type="tel" id="altc-kar-mobile" placeholder="10-digit Mobile" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:11px; font-weight:bold; color:#334155;">गोदाम (Karkhana):</label>
-                                <select id="altc-kar-godown" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; font-weight:bold;">${karkhanaOptions}</select>
-                            </div>
+                        <div class="kexp-mini-row">
+                            <label class="kexp-lbl">Saree Design :</label>
+                            <input type="text" id="altc-kar-saree" data-altc-next="altc-kar-mobile" placeholder="Jaise: Satan" class="kexp-inp">
+                        </div>
+                    </div>
+                    <div class="kexp-row-2">
+                        <div class="kexp-mini-row">
+                            <label class="kexp-lbl">Mobile No. :</label>
+                            <input type="tel" id="altc-kar-mobile" data-altc-next="altc-kar-godown" placeholder="10-digit Mobile" class="kexp-inp">
+                        </div>
+                        <div class="kexp-mini-row">
+                            <label class="kexp-lbl">Karkhana :</label>
+                            <select id="altc-kar-godown" data-altc-next="altc-tani-item" class="kexp-inp">${karkhanaOptions}</select>
                         </div>
                     </div>
 
-                    <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:10px; margin-bottom:12px;">
-                        <div style="font-weight:800; color:#1e40af; font-size:12px; margin-bottom:6px;">🧵 2. ताना व साँचा सेटअप (Tani 1):</div>
-                        <div style="display:grid; grid-template-columns:1.5fr 1fr 0.8fr 0.8fr; gap:6px; margin-bottom:8px;">
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#1e3a8a;">Tani Item Chunein:</label>
-                                <input type="text" id="altc-tani-item" list="altc-tani-dl" placeholder="Tani Item..." style="width:100%; padding:6px 8px; border:1px solid #93c5fd; border-radius:4px; font-size:11.5px; font-weight:bold; box-sizing:border-box;">
-                                <datalist id="altc-tani-dl">${taniOpts}</datalist>
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#1e3a8a;">साँचा नाम (Maker):</label>
-                                <input type="text" id="altc-tani-sancha" placeholder="jaise: Azhar" style="width:100%; padding:6px 8px; border:1px solid #93c5fd; border-radius:4px; font-size:11.5px; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#1e3a8a;">Wazan (Kg):</label>
-                                <input type="number" step="0.01" id="altc-tani-wazan" placeholder="0.00" style="width:100%; padding:6px 8px; border:1px solid #93c5fd; border-radius:4px; font-size:11.5px; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#1e3a8a;">🎯 Tani Saree:</label>
-                                <input type="number" id="altc-tani-pcs" value="72" style="width:100%; padding:6px 8px; border:1.5px solid #2563eb; border-radius:4px; font-size:12px; font-weight:bold; box-sizing:border-box;">
-                            </div>
+                    <div class="kexp-sec-title">2. Taana &amp; Sancha Setup (Tani 1)</div>
+                    <div style="display:grid; grid-template-columns:1.4fr 1fr 0.8fr 0.8fr; gap:8px; margin-bottom:8px;">
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Tani Item :</label>
+                            <input type="text" id="altc-tani-item" list="altc-tani-dl" data-altc-next="altc-tani-sancha" placeholder="Tani Item..." class="kexp-inp" style="font-size:12px;">
+                            <datalist id="altc-tani-dl">${taniOpts}</datalist>
                         </div>
-
-                        <div style="display:grid; grid-template-columns:1.5fr 1fr 0.8fr 0.8fr; gap:6px;">
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#7c3aed;">Chukka Item Chunein:</label>
-                                <input type="text" id="altc-chukka-item" list="altc-chukka-dl" placeholder="Chukka Item..." style="width:100%; padding:6px 8px; border:1px solid #d8b4fe; border-radius:4px; font-size:11.5px; font-weight:bold; box-sizing:border-box;">
-                                <datalist id="altc-chukka-dl">${chukkaOpts}</datalist>
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#7c3aed;">साँचा नाम (Chukka):</label>
-                                <input type="text" id="altc-chukka-sancha" placeholder="jaise: Arman" style="width:100%; padding:6px 8px; border:1px solid #d8b4fe; border-radius:4px; font-size:11.5px; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#7c3aed;">Wazan (Kg):</label>
-                                <input type="number" step="0.01" id="altc-chukka-wazan" placeholder="0.00" style="width:100%; padding:6px 8px; border:1px solid #d8b4fe; border-radius:4px; font-size:11.5px; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#7c3aed;">🎯 Chukka Pcs:</label>
-                                <input type="number" id="altc-chukka-pcs" value="72" style="width:100%; padding:6px 8px; border:1.5px solid #7c3aed; border-radius:4px; font-size:12px; font-weight:bold; box-sizing:border-box;">
-                            </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Sancha Maker :</label>
+                            <input type="text" id="altc-tani-sancha" data-altc-next="altc-tani-wazan" placeholder="Jaise: Azhar" class="kexp-inp" style="font-size:12px;">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Wazan (Kg) :</label>
+                            <input type="number" step="0.01" id="altc-tani-wazan" data-altc-next="altc-tani-pcs" placeholder="0.00" class="kexp-inp" style="font-size:12px;">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Tani Saree :</label>
+                            <input type="number" id="altc-tani-pcs" value="72" data-altc-next="altc-chukka-item" class="kexp-inp" style="font-size:12px;">
                         </div>
                     </div>
 
-                    <div style="background:#fff7ed; border:1.5px solid #fed7aa; border-radius:8px; padding:10px; margin-bottom:12px;">
-                        <div style="font-weight:800; color:#9a3412; font-size:12px; margin-bottom:6px;">💰 3. मजदूरी व कच्चा माल खपत रेट:</div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
-                            <div>
-                                <label style="font-size:11px; font-weight:bold; color:#334155;">बानी रेट (₹ प्रति साड़ी):</label>
-                                <input type="number" id="altc-rate-bani" value="240" style="width:100%; padding:6px 8px; border:1.5px solid #ea580c; border-radius:4px; font-size:13px; font-weight:bold; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:11px; font-weight:bold; color:#334155;">बाना रेट (Kg/साड़ी):</label>
-                                <input type="number" step="0.001" id="altc-rate-bana" value="0.311" style="width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px; font-weight:bold; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:11px; font-weight:bold; color:#334155;">जरी रेट (Kg/साड़ी):</label>
-                                <input type="number" step="0.001" id="altc-rate-zari" value="0.110" style="width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px; font-weight:bold; box-sizing:border-box;">
-                            </div>
+                    <div style="display:grid; grid-template-columns:1.4fr 1fr 0.8fr 0.8fr; gap:8px;">
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Chukka Item :</label>
+                            <input type="text" id="altc-chukka-item" list="altc-chukka-dl" data-altc-next="altc-chukka-sancha" placeholder="Chukka Item..." class="kexp-inp" style="font-size:12px;">
+                            <datalist id="altc-chukka-dl">${chukkaOpts}</datalist>
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Chukka Maker :</label>
+                            <input type="text" id="altc-chukka-sancha" data-altc-next="altc-chukka-wazan" placeholder="Jaise: Arman" class="kexp-inp" style="font-size:12px;">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Wazan (Kg) :</label>
+                            <input type="number" step="0.01" id="altc-chukka-wazan" data-altc-next="altc-chukka-pcs" placeholder="0.00" class="kexp-inp" style="font-size:12px;">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Chukka Pcs :</label>
+                            <input type="number" id="altc-chukka-pcs" value="72" data-altc-next="altc-rate-bani" class="kexp-inp" style="font-size:12px;">
                         </div>
                     </div>
 
-                    <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px; box-sizing:border-box; width:100%;">
-                        <label style="font-size:11px; font-weight:bold; color:#b45309; display:block; margin-bottom:6px;">
-                            🎨 Tani Ke 8 Colors (Optional Matching):
-                        </label>
-                        <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; margin-bottom:6px;">
-                            <input type="text" id="altc-col-1" placeholder="1. Rani" style="width:100%; min-width:0; box-sizing:border-box; padding:6px; font-size:11.5px; font-weight:bold; border:1px solid #cbd5e1; border-radius:4px; background:#ffffff;">
-                            <input type="text" id="altc-col-2" placeholder="2. Lal" style="width:100%; min-width:0; box-sizing:border-box; padding:6px; font-size:11.5px; font-weight:bold; border:1px solid #cbd5e1; border-radius:4px; background:#ffffff;">
-                            <input type="text" id="altc-col-3" placeholder="3. Mehendi" style="width:100%; min-width:0; box-sizing:border-box; padding:6px; font-size:11.5px; font-weight:bold; border:1px solid #cbd5e1; border-radius:4px; background:#ffffff;">
-                            <input type="text" id="altc-col-4" placeholder="4. Blue" style="width:100%; min-width:0; box-sizing:border-box; padding:6px; font-size:11.5px; font-weight:bold; border:1px solid #cbd5e1; border-radius:4px; background:#ffffff;">
+                    <div class="kexp-sec-title">3. Mazdoori &amp; Consumption Rates</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Bani Rate (₹/Saree) :</label>
+                            <input type="number" id="altc-rate-bani" value="240" data-altc-next="altc-rate-bana" class="kexp-inp">
                         </div>
-                        <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px;">
-                            <input type="text" id="altc-col-5" placeholder="5. Peela" style="width:100%; min-width:0; box-sizing:border-box; padding:6px; font-size:11.5px; font-weight:bold; border:1px solid #cbd5e1; border-radius:4px; background:#ffffff;">
-                            <input type="text" id="altc-col-6" placeholder="6. Wine" style="width:100%; min-width:0; box-sizing:border-box; padding:6px; font-size:11.5px; font-weight:bold; border:1px solid #cbd5e1; border-radius:4px; background:#ffffff;">
-                            <input type="text" id="altc-col-7" placeholder="7. Firozi" style="width:100%; min-width:0; box-sizing:border-box; padding:6px; font-size:11.5px; font-weight:bold; border:1px solid #cbd5e1; border-radius:4px; background:#ffffff;">
-                            <input type="text" id="altc-col-8" placeholder="8. Mungia" style="width:100%; min-width:0; box-sizing:border-box; padding:6px; font-size:11.5px; font-weight:bold; border:1px solid #cbd5e1; border-radius:4px; background:#ffffff;">
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Bana Rate (Kg/Saree) :</label>
+                            <input type="number" step="0.001" id="altc-rate-bana" value="0.311" data-altc-next="altc-rate-zari" class="kexp-inp">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Zari Rate (Kg/Saree) :</label>
+                            <input type="number" step="0.001" id="altc-rate-zari" value="0.110" data-altc-next="altc-col-1" class="kexp-inp">
                         </div>
                     </div>
 
+                    <div class="kexp-sec-title">4. Tani Ke 8 Colors (Optional)</div>
+                    <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; margin-bottom:6px;">
+                        <input type="text" id="altc-col-1" data-altc-next="altc-col-2" placeholder="1. Rani" class="kexp-inp" style="font-size:12px;">
+                        <input type="text" id="altc-col-2" data-altc-next="altc-col-3" placeholder="2. Lal" class="kexp-inp" style="font-size:12px;">
+                        <input type="text" id="altc-col-3" data-altc-next="altc-col-4" placeholder="3. Mehendi" class="kexp-inp" style="font-size:12px;">
+                        <input type="text" id="altc-col-4" data-altc-next="altc-col-5" placeholder="4. Blue" class="kexp-inp" style="font-size:12px;">
+                    </div>
+                    <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px;">
+                        <input type="text" id="altc-col-5" data-altc-next="altc-col-6" placeholder="5. Peela" class="kexp-inp" style="font-size:12px;">
+                        <input type="text" id="altc-col-6" data-altc-next="altc-col-7" placeholder="6. Wine" class="kexp-inp" style="font-size:12px;">
+                        <input type="text" id="altc-col-7" data-altc-next="altc-col-8" placeholder="7. Firozi" class="kexp-inp" style="font-size:12px;">
+                        <input type="text" id="altc-col-8" placeholder="8. Mungia" class="kexp-inp" style="font-size:12px;">
+                    </div>
                 </div>
 
-                <div style="background:#f1f5f9; padding:12px 18px; border-top:1px solid #cbd5e1; display:flex; justify-content:space-between; align-items:center;">
-                    <button type="button" onclick="closeAltCKarigerModal()" style="background:#64748b; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-size:13px; cursor:pointer;">✕ Cancel [Esc]</button>
-                    <button type="button" onclick="saveAltCKariger()" style="background:#059669; color:#fff; border:none; padding:9px 24px; border-radius:6px; font-size:14px; font-weight:bold; cursor:pointer; box-shadow:0 2px 4px rgba(5,150,105,0.3);">
-                        💾 Kariger Save & Express me Load [Ctrl+↵]
-                    </button>
+                <div class="kexp-footer">
+                    <button type="button" class="kexp-btn-sec" onclick="closeAltCKarigerModal()">Cancel [Esc]</button>
+                    <button type="button" class="kexp-btn-save" onclick="saveAltCKariger()">Save &amp; Load in Voucher [Ctrl+Enter]</button>
                 </div>
 
             </div>
         </div>`;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
-        setTimeout(() => { document.getElementById('altc-kar-name')?.focus(); }, 100);
+
+        const altCModal = document.getElementById('alt-c-kariger-modal');
+        if (altCModal) {
+            altCModal.querySelectorAll('[data-altc-next]').forEach((el) => {
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.ctrlKey) {
+                        e.preventDefault();
+                        const nextEl = document.getElementById(el.getAttribute('data-altc-next'));
+                        if (nextEl) {
+                            nextEl.focus();
+                            if (typeof nextEl.select === 'function') nextEl.select();
+                        }
+                    }
+                });
+            });
+            const col8 = document.getElementById('altc-col-8');
+            if (col8) {
+                col8.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveAltCKariger();
+                    }
+                });
+            }
+        }
+
+        setTimeout(() => { document.getElementById('altc-kar-name')?.focus(); }, 80);
     };
 
     window.closeAltCKarigerModal = () => {
         const modal = document.getElementById('alt-c-kariger-modal');
         if (modal) modal.remove();
+        document.getElementById('kexp-kariger-input')?.focus();
     };
 
     window.saveAltCKariger = () => {
@@ -645,7 +945,7 @@
         const kGodown = document.getElementById('altc-kar-godown')?.value || 'k_main';
 
         if (!name) {
-            alert('कृपया नए कारीगर का नाम लिखिए!');
+            alert('Kripya naye Kariger ka naam likhein!');
             nameInp?.focus();
             return;
         }
@@ -653,7 +953,6 @@
         const now = Date.now();
         const newKarigerId = `kar_${now}`;
 
-        // 1. Commit to Kariger List
         const list = toArray(getFromStore('kariger_list'));
         const newKarObj = {
             id: newKarigerId,
@@ -666,7 +965,6 @@
         list.push(newKarObj);
         setToStore('kariger_list', list);
 
-        // 2. Tani 1 Sheet Setup
         const rateBani = safeNum(document.getElementById('altc-rate-bani')?.value, 240);
         const rateBana = safeNum(document.getElementById('altc-rate-bana')?.value, 0.311);
         const rateZari = safeNum(document.getElementById('altc-rate-zari')?.value, 0.110);
@@ -728,9 +1026,7 @@
         closeAltCKarigerModal();
 
         const kInp = document.getElementById('kexp-kariger-input');
-        if (kInp) {
-            kInp.value = name;
-        }
+        if (kInp) kInp.value = name;
 
         selectedKariger = newKarObj;
         currentActiveSheet = newSheetObj;
@@ -739,20 +1035,22 @@
         renderKarigerExpressTaniTabs();
         updateWeaverBannerSnapshot();
         calculateKarigerExpressLive();
+        showRightPicker('summary', '');
 
         setTimeout(() => {
             const sareeInp = document.getElementById('kexp-saree-qty');
             if (sareeInp) sareeInp.focus();
-        }, 150);
+        }, 100);
 
-        alert(`✅ Naya Kariger [${name}] Tani 1 (${taniPcs} Pcs) ke sath ban gaya aur Express me select ho gaya!`);
+        alert(`✅ Naya Kariger [${name}] Tani 1 (${taniPcs} Pcs) ke sath ban gaya aur Voucher me load ho gaya!`);
     };
 
     /* ========================================================================
-       5. ➕ NAYI TANI MODAL & MANUAL CARRIAGE
+       7. NAYI TANI MODAL (TALLY WHITE & GOLD)
        ------------------------------------------------------------------------
     ======================================================================== */
     window.openExpressNewTaniModal = () => {
+        ensureTallyExpressStyles();
         if (!selectedKariger || !currentActiveSheet) {
             return alert('Pehle koi Kariger chunein!');
         }
@@ -760,7 +1058,7 @@
         const existing = document.getElementById('express-new-tani-modal');
         if (existing) existing.remove();
 
-        const { taniOpts, chukkaOpts } = getKarigerExpressDatalists();
+        const { taniOpts } = getKarigerExpressDatalists();
         const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(selectedKariger.id) : [];
         const nextNum = sheets.length + 1;
 
@@ -773,79 +1071,72 @@
         const pBani = safeNum(calc.remainingAmt);
 
         const modalHtml = `
-        <div id="express-new-tani-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.85); z-index:1000005; display:flex; align-items:center; justify-content:center; padding:12px; box-sizing:border-box;">
-            <div style="background:#ffffff; width:100%; max-width:600px; border-radius:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); overflow:hidden; font-family:sans-serif; max-height:95vh; display:flex; flex-direction:column;">
-                
-                <div style="background:#0284c7; color:#fff; padding:12px 18px; display:flex; justify-content:space-between; align-items:center;">
-                    <h3 style="margin:0; font-size:15px;">🧵 Nayi Tani Chadhayein • Tani ${nextNum} (${esc(selectedKariger.name)})</h3>
-                    <button type="button" onclick="closeExpressNewTaniModal()" style="background:transparent; border:none; color:#fff; font-size:22px; cursor:pointer;">&times;</button>
+        <div id="express-new-tani-modal" class="kexp-overlay" style="z-index:1000005;">
+            <div class="kexp-card" style="max-width:620px;">
+
+                <div class="kexp-header">
+                    <h3 class="kexp-title">Nayi Tani Chadhayein &bull; Tani ${nextNum} (${esc(selectedKariger.name)})</h3>
+                    <button type="button" class="kexp-pill-btn" onclick="closeExpressNewTaniModal()">&larr; [Esc] Close</button>
                 </div>
 
-                <div style="padding:14px; overflow-y:auto; flex:1;">
-                    
-                    <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:10px; margin-bottom:12px;">
-                        <div style="font-size:11px; font-weight:bold; color:#15803d; margin-bottom:4px;">📦 Pichli Tani Se Aaya Baki Hisaab (Carry Forward):</div>
-                        <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:bold; color:#166534;">
-                            <span>बचा बाना: +${pBana.toFixed(2)} Kg</span>
-                            <span>बची जरी: +${pZari.toFixed(2)} Kg</span>
-                            <span>बकाया रुपया: ₹ ${pBani.toFixed(2)}</span>
+                <div style="padding:14px 18px; overflow-y:auto; flex:1;">
+                    <div style="background:#fdf6e2; border:1px solid #e5d5a7; border-radius:4px; padding:8px 12px; margin-bottom:12px;">
+                        <div style="font-size:11px; font-weight:800; color:#92400e; text-transform:uppercase; margin-bottom:4px;">Carry Forward from Previous Tani</div>
+                        <div style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:700; color:#1f2937;">
+                            <span>Bacha Bana: +${pBana.toFixed(2)} Kg</span>
+                            <span>Bachi Zari: +${pZari.toFixed(2)} Kg</span>
+                            <span>Baki Rupya: <strong style="color:#b47d00;">₹ ${pBani.toFixed(2)}</strong></span>
                         </div>
                     </div>
 
-                    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px; margin-bottom:10px;">
-                        <div style="font-weight:bold; color:#1e40af; font-size:11.5px; margin-bottom:6px;">🧵 Naya Taana / Sancha Chunein:</div>
-                        <div style="display:grid; grid-template-columns:1.5fr 1fr 0.8fr 0.8fr; gap:6px;">
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#1e3a8a;">Tani Item:</label>
-                                <input type="text" id="ntani-tani-item" list="ntani-tani-dl" placeholder="Tani Item..." style="width:100%; padding:7px; font-size:12px; font-weight:bold; border:1px solid #93c5fd; border-radius:4px; box-sizing:border-box;">
-                                <datalist id="ntani-tani-dl">${taniOpts}</datalist>
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#1e3a8a;">साँचा नाम:</label>
-                                <input type="text" id="ntani-tani-sancha" value="${esc(currentActiveSheet.taniSancha || '')}" style="width:100%; padding:7px; font-size:12px; border:1px solid #93c5fd; border-radius:4px; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#1e3a8a;">Wazan (Kg):</label>
-                                <input type="number" step="0.01" id="ntani-tani-wazan" placeholder="0.00" style="width:100%; padding:7px; font-size:12px; border:1px solid #93c5fd; border-radius:4px; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold; color:#1e3a8a;">🎯 Target:</label>
-                                <input type="number" id="ntani-tani-pcs" value="${currentActiveSheet.taniPcs || 72}" style="width:100%; padding:7px; font-size:12px; font-weight:bold; border:1.5px solid #2563eb; border-radius:4px; box-sizing:border-box;">
-                            </div>
+                    <div class="kexp-sec-title" style="margin-top:0;">Naya Taana / Sancha Details</div>
+                    <div style="display:grid; grid-template-columns:1.5fr 1fr 0.8fr 0.8fr; gap:8px; margin-bottom:10px;">
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Tani Item :</label>
+                            <input type="text" id="ntani-tani-item" list="ntani-tani-dl" placeholder="Tani Item..." class="kexp-inp" style="font-size:12px;">
+                            <datalist id="ntani-tani-dl">${taniOpts}</datalist>
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Sancha Maker :</label>
+                            <input type="text" id="ntani-tani-sancha" value="${esc(currentActiveSheet.taniSancha || '')}" class="kexp-inp" style="font-size:12px;">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Wazan (Kg) :</label>
+                            <input type="number" step="0.01" id="ntani-tani-wazan" placeholder="0.00" class="kexp-inp" style="font-size:12px;">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Target Pcs :</label>
+                            <input type="number" id="ntani-tani-pcs" value="${currentActiveSheet.taniPcs || 72}" class="kexp-inp" style="font-size:12px;">
                         </div>
                     </div>
 
-                    <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:10px;">
-                        <div style="font-weight:bold; color:#9a3412; font-size:11.5px; margin-bottom:6px;">💰 Mazdoori Rate:</div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
-                            <div>
-                                <label style="font-size:10px; font-weight:bold;">Bani (₹/Saree):</label>
-                                <input type="number" id="ntani-rate-bani" value="${currentActiveSheet.rateBani || 240}" style="width:100%; padding:6px; font-size:12px; font-weight:bold; border:1px solid #ea580c; border-radius:4px; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold;">Bana Rate:</label>
-                                <input type="number" step="0.001" id="ntani-rate-bana" value="${currentActiveSheet.rateBana || 0.311}" style="width:100%; padding:6px; font-size:12px; border:1px solid #cbd5e1; border-radius:4px; box-sizing:border-box;">
-                            </div>
-                            <div>
-                                <label style="font-size:10px; font-weight:bold;">Zari Rate:</label>
-                                <input type="number" step="0.001" id="ntani-rate-zari" value="${currentActiveSheet.rateZari || 0.110}" style="width:100%; padding:6px; font-size:12px; border:1px solid #cbd5e1; border-radius:4px; box-sizing:border-box;">
-                            </div>
+                    <div class="kexp-sec-title">Mazdoori Rates</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Bani (₹/Saree) :</label>
+                            <input type="number" id="ntani-rate-bani" value="${currentActiveSheet.rateBani || 240}" class="kexp-inp">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Bana Rate :</label>
+                            <input type="number" step="0.001" id="ntani-rate-bana" value="${currentActiveSheet.rateBana || 0.311}" class="kexp-inp">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#374151;">Zari Rate :</label>
+                            <input type="number" step="0.001" id="ntani-rate-zari" value="${currentActiveSheet.rateZari || 0.110}" class="kexp-inp">
                         </div>
                     </div>
-
                 </div>
 
-                <div style="background:#f1f5f9; padding:12px 18px; border-top:1px solid #cbd5e1; display:flex; justify-content:space-between;">
-                    <button type="button" onclick="closeExpressNewTaniModal()" style="background:#64748b; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-size:12px; cursor:pointer;">Cancel</button>
-                    <button type="button" onclick="saveExpressNewTani(${nextNum}, ${pBana}, ${pZari}, ${pBani})" style="background:#0284c7; color:#fff; border:none; padding:9px 22px; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer;">
-                        🚀 Tani ${nextNum} Chadhayein
-                    </button>
+                <div class="kexp-footer">
+                    <button type="button" class="kexp-btn-sec" onclick="closeExpressNewTaniModal()">Cancel [Esc]</button>
+                    <button type="button" class="kexp-btn-save" onclick="saveExpressNewTani(${nextNum}, ${pBana}, ${pZari}, ${pBani})">Tani ${nextNum} Chadhayein [Save]</button>
                 </div>
 
             </div>
         </div>`;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+        setTimeout(() => { document.getElementById('ntani-tani-item')?.focus(); }, 80);
     };
 
     window.closeExpressNewTaniModal = () => {
@@ -911,70 +1202,183 @@
         renderKarigerExpressTaniTabs();
         updateWeaverBannerSnapshot();
         calculateKarigerExpressLive();
+        showRightPicker('summary', '');
 
         alert(`✅ Tani ${nextNum} safalta-poorvak shuru ho gayi! Pichla hisab carry-forward ho gaya.`);
     };
 
     /* ========================================================================
-       6. ZERO-MOUSE KEYBOARD CHAINING & SHORTCUT LISTENERS
+       8. ZERO-MOUSE KEYBOARD CHAINING, PICKER NAV & SHORTCUT LISTENERS
        ------------------------------------------------------------------------
     ======================================================================== */
+    const FIELD_ORDER = [
+        'kexp-date',
+        'kexp-kariger-input',
+        'kexp-saree-qty',
+        'kexp-saree-lott',
+        'kexp-ret-bana',
+        'kexp-ret-zari',
+        'kexp-bana-name',
+        'kexp-bana-cone',
+        'kexp-bana-lesstp',
+        'kexp-zari-name',
+        'kexp-zari-qty',
+        'kexp-zari-topi',
+        'kexp-paid-amount'
+    ];
+
+    const moveField = (currentId, dir) => {
+        const idx = FIELD_ORDER.indexOf(currentId);
+        if (idx === -1) return;
+        const nextIdx = idx + dir;
+        if (nextIdx >= 0 && nextIdx < FIELD_ORDER.length) {
+            const el = document.getElementById(FIELD_ORDER[nextIdx]);
+            if (el) {
+                el.focus();
+                if (typeof el.select === 'function') el.select();
+            }
+        }
+    };
+
     const bindKarigerExpressEvents = () => {
         const modal = document.getElementById('kariger-express-modal');
         if (!modal) return;
 
         const karigerInp = document.getElementById('kexp-kariger-input');
+        const banaInp = document.getElementById('kexp-bana-name');
+        const zariInp = document.getElementById('kexp-zari-name');
         const paidInp = document.getElementById('kexp-paid-amount');
 
-        setTimeout(() => { if (karigerInp) karigerInp.focus(); }, 120);
+        setTimeout(() => { if (karigerInp) karigerInp.focus(); }, 100);
 
-        // Enter Chaining
-        const allInputs = modal.querySelectorAll('input[data-next]');
-        allInputs.forEach((inp) => {
-            inp.addEventListener('keydown', (e) => {
+        // Focus handlers to switch Right-Pane Context automatically
+        if (karigerInp) {
+            karigerInp.addEventListener('focus', () => {
+                pickerArrowUsed = false;
+                pickerActiveIdx = 0;
+                showRightPicker('kariger', karigerInp.value);
+            });
+            karigerInp.addEventListener('input', () => {
+                pickerArrowUsed = false;
+                pickerActiveIdx = 0;
+                const val = karigerInp.value.trim().toLowerCase();
+                showRightPicker('kariger', val);
+
+                const raw = toArray(getFromStore('kariger_list'));
+                const k = raw.find(x => x && x.name && x.name.toLowerCase() === val);
+                if (k) {
+                    applySelectedKariger(k);
+                } else {
+                    selectedKariger = null;
+                    currentActiveSheet = null;
+                    renderKarigerExpressTaniTabs();
+                    const banner = document.getElementById('kexp-weaver-banner');
+                    if (banner) banner.innerHTML = `<span style="font-size:12px; color:#6b7280;">Kariger chunein — tani ka poora hisab aur colors yahan dikhenge.</span>`;
+                    const rateEl = document.getElementById('kexp-disp-bani-rate');
+                    if (rateEl) rateEl.textContent = `₹ 0.00`;
+                    calculateKarigerExpressLive();
+                }
+            });
+        }
+
+        if (banaInp) {
+            banaInp.addEventListener('focus', () => {
+                pickerArrowUsed = false;
+                pickerActiveIdx = 0;
+                showRightPicker('bana', '');
+            });
+            banaInp.addEventListener('input', () => {
+                pickerArrowUsed = true;
+                pickerActiveIdx = 0;
+                showRightPicker('bana', banaInp.value);
+            });
+        }
+
+        if (zariInp) {
+            zariInp.addEventListener('focus', () => {
+                pickerArrowUsed = false;
+                pickerActiveIdx = 0;
+                showRightPicker('zari', '');
+            });
+            zariInp.addEventListener('input', () => {
+                pickerArrowUsed = true;
+                pickerActiveIdx = 0;
+                showRightPicker('zari', zariInp.value);
+            });
+        }
+
+        // All other voucher inputs switch Right Pane to Live Tani Snapshot
+        FIELD_ORDER.forEach((fid) => {
+            if (fid === 'kexp-kariger-input' || fid === 'kexp-bana-name' || fid === 'kexp-zari-name') return;
+            const el = document.getElementById(fid);
+            if (!el) return;
+            el.addEventListener('focus', () => {
+                showRightPicker('summary', '');
+            });
+        });
+
+        // Enter / Shift+Enter / ArrowUp-Down inside Voucher Inputs
+        FIELD_ORDER.forEach((fid) => {
+            const el = document.getElementById(fid);
+            if (!el) return;
+
+            el.addEventListener('keydown', (e) => {
+                // Arrow Up / Down inside Picker-linked inputs
+                if ((fid === 'kexp-kariger-input' || fid === 'kexp-bana-name' || fid === 'kexp-zari-name') &&
+                    (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                    if (pickerItems.length) {
+                        e.preventDefault();
+                        pickerArrowUsed = true;
+                        if (e.key === 'ArrowDown') {
+                            pickerActiveIdx = (pickerActiveIdx + 1) % pickerItems.length;
+                        } else {
+                            pickerActiveIdx = (pickerActiveIdx - 1 + pickerItems.length) % pickerItems.length;
+                        }
+                        renderRightPickerList();
+                    }
+                    return;
+                }
+
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    const nextId = inp.getAttribute('data-next');
-                    const nextEl = document.getElementById(nextId);
-                    if (nextEl) {
-                        nextEl.focus();
-                        if (typeof nextEl.select === 'function') nextEl.select();
+                    if (e.shiftKey) {
+                        moveField(fid, -1);
+                        return;
                     }
+
+                    // Kariger input Enter picks highlighted Kariger
+                    if (fid === 'kexp-kariger-input') {
+                        if (pickerItems.length && (pickerArrowUsed || karigerInp.value.trim() !== '' || !selectedKariger)) {
+                            window.__kexpPickItem(pickerActiveIdx);
+                            return;
+                        }
+                    }
+
+                    // Bana / Zari Enter picks if user navigated list or typed filter
+                    if ((fid === 'kexp-bana-name' || fid === 'kexp-zari-name') && pickerArrowUsed && pickerItems.length) {
+                        window.__kexpPickItem(pickerActiveIdx);
+                        return;
+                    }
+
+                    // Last field -> Submit
+                    if (fid === 'kexp-paid-amount') {
+                        submitKarigerExpress();
+                        return;
+                    }
+
+                    moveField(fid, 1);
                 }
             });
         });
 
-        // Kariger Autocomplete Selection
-        karigerInp.addEventListener('input', () => {
-            const val = karigerInp.value.trim().toLowerCase();
-            const raw = toArray(getFromStore('kariger_list'));
-            const k = raw.find(x => x && x.name && x.name.toLowerCase() === val);
-
-            if (k) {
-                selectedKariger = k;
-                const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(k.id) : [];
-                activeSheetIndex = sheets.length ? sheets.length - 1 : 0;
-                currentActiveSheet = sheets[activeSheetIndex] || null;
-
-                renderKarigerExpressTaniTabs();
-                updateWeaverBannerSnapshot();
-                calculateKarigerExpressLive();
-            } else {
-                selectedKariger = null;
-                currentActiveSheet = null;
-                renderKarigerExpressTaniTabs();
-                document.getElementById('kexp-weaver-banner').innerHTML = `<span style="font-size:12px; color:#94a3b8;">कारीगर चुनिए, तानी का पूरा हिसाब और कलर यहाँ दिखेंगे...</span>`;
-                document.getElementById('kexp-disp-bani-rate').textContent = `₹ 0.00`;
-                calculateKarigerExpressLive();
-            }
-        });
-
-        paidInp.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                submitKarigerExpress();
-            }
-        });
+        if (paidInp) {
+            paidInp.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    submitKarigerExpress();
+                }
+            });
+        }
 
         window.removeEventListener('keydown', handleKarigerExpressKeydown, true);
         window.addEventListener('keydown', handleKarigerExpressKeydown, true);
@@ -997,6 +1401,18 @@
                 e.preventDefault();
                 e.stopImmediatePropagation();
                 saveAltCKariger();
+                return;
+            }
+            return;
+        }
+
+        // If New Tani modal is open
+        const newTaniModal = document.getElementById('express-new-tani-modal');
+        if (newTaniModal) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                closeExpressNewTaniModal();
                 return;
             }
             return;
@@ -1042,6 +1458,17 @@
             printLastSavedExpressSlip();
             return;
         }
+
+        // Ctrl + A -> Direct Submit (Tally style)
+        if (e.ctrlKey && (e.key === 'a' || e.key === 'A')) {
+            const activeTag = document.activeElement?.tagName;
+            if (activeTag !== 'INPUT' || document.activeElement?.id !== 'kexp-kariger-input') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                submitKarigerExpress();
+                return;
+            }
+        }
     };
 
     window.closeKarigerExpressModal = () => {
@@ -1059,7 +1486,7 @@
         const paid = safeNum(document.getElementById('kexp-paid-amount')?.value);
 
         const rateBani = currentActiveSheet ? safeNum(currentActiveSheet.rateBani, 240) : 240;
-        
+
         let pichlaAmt = 0;
         if (currentActiveSheet && typeof window.calculateSheetTotals === 'function') {
             pichlaAmt = safeNum(window.calculateSheetTotals(currentActiveSheet).remainingAmt);
@@ -1075,7 +1502,7 @@
         if (dispGross) dispGross.textContent = `₹ ${grossBani.toFixed(2)}`;
         if (dispNet) {
             dispNet.textContent = `₹ ${netRemaining.toFixed(2)}`;
-            dispNet.style.color = netRemaining > 0 ? '#dc2626' : '#059669';
+            dispNet.style.color = netRemaining > 0 ? '#b47d00' : '#1f2937';
         }
 
         const progEl = document.getElementById('kexp-live-tani-progress');
@@ -1083,7 +1510,7 @@
             const totalTaniTarget = safeNum(currentActiveSheet.taniPcs, 72);
             const liveTotalDelivered = prevDeliveredSarees + saree;
             const liveRemainingOnLoom = Math.max(0, totalTaniTarget - liveTotalDelivered);
-            progEl.innerHTML = `🎯 कुल तानी: <strong>${totalTaniTarget} Pcs</strong> | 📥 अब तक आई: <strong style="color:#059669;">${liveTotalDelivered} Pcs</strong> | ⏳ बाकी: <strong style="color:#dc2626;">${liveRemainingOnLoom} Pcs</strong>`;
+            progEl.innerHTML = `Tani: <strong>${totalTaniTarget} Pcs</strong> &bull; Aayi: <strong>${liveTotalDelivered}</strong> &bull; Baki: <strong style="color:#b47d00;">${liveRemainingOnLoom} Pcs</strong>`;
         }
     };
 
@@ -1103,12 +1530,12 @@
     };
 
     /* ========================================================================
-       7. ATOMIC SUBMIT & AUTO-TANI COMPLETE ROLLOVER ENGINE (WITH PROMINENT ALERT)
+       9. ATOMIC SUBMIT & AUTO-TANI COMPLETE ROLLOVER ENGINE (100% PRESERVED)
        ------------------------------------------------------------------------
     ======================================================================== */
     window.submitKarigerExpress = () => {
         if (!selectedKariger) {
-            alert('कृपया कारीगर का सही नाम चुनिए (या Alt+C से नया बनाइए)!');
+            alert('Kripya Kariger ka sahi naam chunein (ya Alt+C se naya banayein)!');
             document.getElementById('kexp-kariger-input')?.focus();
             return;
         }
@@ -1134,7 +1561,7 @@
         const zariItemName = String(document.getElementById('kexp-zari-name')?.value || '').trim();
 
         if (saree === 0 && bCone === 0 && zQty === 0 && paid === 0 && retB === 0 && retZ === 0) {
-            return alert('कम से कम एक एंट्री (साड़ी, बाना, जरी या पेमेंट) भरिए!');
+            return alert('Kam se kam ek entry (Saree, Bana, Zari ya Payment) bharein!');
         }
 
         const nBana = Math.max(0, bCone - bLess);
@@ -1273,15 +1700,14 @@
             setToStore('payment_history', payList);
         }
 
-        // Totals of active sheet after entry
-        const totalsAfter = (typeof window.calculateSheetTotals === 'function') 
-            ? window.calculateSheetTotals(activeSheet) 
+        const totalsAfter = (typeof window.calculateSheetTotals === 'function')
+            ? window.calculateSheetTotals(activeSheet)
             : { remainingAmt: 0, remainingBana: 0, remainingZari: 0, totSaree: 0 };
 
         const targetTaniPcs = safeNum(activeSheet.taniPcs, 72);
         const deliveredSoFar = safeNum(totalsAfter.totSaree);
 
-        // ⭐ AUTO-TANI COMPLETE & ROLLOVER TRIGGER
+        // AUTO-TANI COMPLETE & ROLLOVER TRIGGER
         let isTaniCompleted = false;
         let completedTaniTitle = activeSheet.title;
         let nextTaniTitle = '';
@@ -1296,7 +1722,6 @@
             pZari = safeNum(totalsAfter.remainingZari);
             pBani = safeNum(totalsAfter.remainingAmt);
 
-            // Nayi Sheet create karein aur pichla hisab auto-transfer karein
             const autoNewSheet = {
                 id: `tani_${nextNum}`,
                 title: nextTaniTitle,
@@ -1359,7 +1784,6 @@
 
         if (typeof window.updateDashboardBadgeTotals === 'function') window.updateDashboardBadgeTotals();
 
-        // फॉर्म इनपुट खाली करें
         document.getElementById('kexp-saree-qty').value = '';
         document.getElementById('kexp-saree-lott').value = '';
         document.getElementById('kexp-ret-bana').value = '';
@@ -1373,18 +1797,16 @@
         const statusMsg = document.getElementById('kexp-status-msg');
         if (statusMsg) {
             if (isTaniCompleted) {
-                statusMsg.innerHTML = `🎉 <strong>${esc(kName)}</strong> ki ${esc(completedTaniTitle)} (${targetTaniPcs} Pcs) poori hui! Nayi ${esc(nextTaniTitle)} auto-create ho gayi!`;
+                statusMsg.innerHTML = `✅ ${esc(kName)} ki ${esc(completedTaniTitle)} (${targetTaniPcs} Pcs) poori hui — ${esc(nextTaniTitle)} auto-create ho gayi.`;
             } else {
-                statusMsg.innerHTML = `✅ <strong>${esc(kName)}</strong> (${esc(completedTaniTitle)}) का हिसाब जुड़ गया!`;
+                statusMsg.innerHTML = `✅ ${esc(kName)} (${esc(completedTaniTitle)}) ka hisab save ho gaya.`;
             }
         }
 
-        // ⭐ 1. अगर ताना पूरा हुआ है, तो सबसे पहले स्क्रीन पर बड़ा पॉपअप अलर्ट दिखाएं!
         if (isTaniCompleted) {
-            alert(`🎉 मुबारक!\n\n${kName} की [${completedTaniTitle}] (${targetTaniPcs} साड़ी) पूरी हो गई!\n\n✨ नई [${nextTaniTitle}] अपने आप शुरू हो गई है।\n• बचा बाना: +${pBana.toFixed(2)} Kg\n• बची जरी: +${pZari.toFixed(2)} Kg\n• बकाया रुपया: ₹ ${pBani.toFixed(2)}\nनई तानी में ट्रांसफर हो गया है!`);
+            alert(`🎉 Mubarak!\n\n${kName} ki [${completedTaniTitle}] (${targetTaniPcs} Saree) poori ho gayi!\n\n✨ Nayi [${nextTaniTitle}] apne aap shuru ho gayi hai.\n• Bacha Bana: +${pBana.toFixed(2)} Kg\n• Bachi Zari: +${pZari.toFixed(2)} Kg\n• Baki Rupya: ₹ ${pBani.toFixed(2)}\nNayi tani me transfer ho gaya hai!`);
         }
 
-        // ⭐ 2. इसके बाद पर्ची ऑटो-प्रिंट होगी
         printLastSavedExpressSlip();
 
         const kInp = document.getElementById('kexp-kariger-input');
@@ -1395,21 +1817,23 @@
         selectedKariger = null;
         currentActiveSheet = null;
         renderKarigerExpressTaniTabs();
-        document.getElementById('kexp-weaver-banner').innerHTML = `<span style="font-size:12px; color:#94a3b8;">कारीगर चुनिए, तानी का पूरा हिसाब और कलर यहाँ दिखेंगे...</span>`;
+        const banner = document.getElementById('kexp-weaver-banner');
+        if (banner) banner.innerHTML = `<span style="font-size:12px; color:#6b7280;">Kariger chunein — tani ka poora hisab aur colors yahan dikhenge.</span>`;
+        showRightPicker('kariger', '');
     };
 
     /* ========================================================================
-       8. A6 THERMAL SLIP PRINT (WITH AUTO-TANI COMPLETE BANNER)
+       10. A6 THERMAL SLIP PRINT (UNCHANGED)
        ------------------------------------------------------------------------
     ======================================================================== */
     window.printLastSavedExpressSlip = () => {
         if (!lastSavedTransaction) {
-            return alert('प्रिंट करने के लिए कोई रीसेंट हिसाब नहीं मिला!');
+            return alert('Print karne ke liye koi recent hisab nahi mila!');
         }
 
         const t = lastSavedTransaction;
-        const kGodamName = (typeof window.getKarkhanaNameById === 'function') 
-            ? window.getKarkhanaNameById(t.kGodown) 
+        const kGodamName = (typeof window.getKarkhanaNameById === 'function')
+            ? window.getKarkhanaNameById(t.kGodown)
             : 'Main Godown';
 
         const remainingOnLoom = Math.max(0, t.taniPcs - t.deliveredSarees);
@@ -1510,7 +1934,7 @@
     };
 
     /* ========================================================================
-       9. GLOBAL EXPORT
+       11. GLOBAL EXPORT
        ------------------------------------------------------------------------
     ======================================================================== */
     window.KarigerExpressEngine = {
