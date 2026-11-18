@@ -3,8 +3,9 @@
    Folder: jobwork-express / File: jobwork-express.js
    Developed for: Farhan Jawed
    Features:
+   - Clean Profile-Creation Style Single-Field-Per-Row Alignment (Zero Clipping)
    - TallyPrime White & Gold 2-Column Guided Drill-Down Voucher
-   - Right-Pane Pickers: Process -> Len-Den -> Stock Source -> Worker -> Maker (Live Stock)
+   - Right-Pane Pickers: Process -> Len-Den -> Stock Source -> Worker -> Maker
    - Always-Visible Clean Gatthi / Batch Table in Right Pane
    - Tally "End of List" (Empty Maker + Enter) & "Accept? (Yes / No)" Strip
    - Process Switch Zero-Mix Guard, Focus Tab Trap & Instant A6 Challan Print
@@ -292,39 +293,44 @@
     };
 
     /* ========================================================================
-       3. SCOPED TALLYPRIME WHITE & GOLD STYLES
+       3. SCOPED TALLYPRIME WHITE & GOLD STYLES (ZERO OVERFLOW / CLIPPING)
        ------------------------------------------------------------------------
     ======================================================================== */
     const ensureTallyJobWorkStyles = () => {
-        if (document.getElementById('jw-tally-styles')) return;
+        const old = document.getElementById('jw-tally-styles');
+        if (old) old.remove();
+
         const style = document.createElement('style');
         style.id = 'jw-tally-styles';
         style.textContent = `
             .jw-overlay {
                 position: fixed; inset: 0;
-                background: rgba(31, 41, 55, 0.38);
+                background: rgba(31, 41, 55, 0.36);
                 backdrop-filter: blur(2px);
                 z-index: 999999;
                 display: flex; align-items: center; justify-content: center;
-                padding: 12px; box-sizing: border-box;
+                padding: 16px; box-sizing: border-box;
                 font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             }
             .jw-card {
                 background: #ffffff;
-                width: 100%; max-width: 1020px;
+                width: 100%; max-width: 980px;
                 border: 1.5px solid #d9b86c;
                 border-radius: 8px;
                 box-shadow: 0 18px 42px rgba(0, 0, 0, 0.14);
                 overflow: hidden;
-                max-height: 96vh;
+                max-height: 95vh;
                 display: flex; flex-direction: column;
                 color: #1f2937;
+                box-sizing: border-box;
             }
             .jw-header {
                 background: #fdf6e2;
                 border-bottom: 1.5px solid #e5d5a7;
-                padding: 9px 18px;
-                display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+                padding: 10px 20px;
+                display: flex; justify-content: space-between; align-items: center;
+                gap: 10px; flex-wrap: wrap;
+                box-sizing: border-box;
             }
             .jw-title {
                 margin: 0; font-size: 15px; font-weight: 800; color: #1f2937;
@@ -332,8 +338,9 @@
             .jw-pill-btn {
                 background: #ffffff; color: #374151;
                 border: 1px solid #d1d5db; border-radius: 5px;
-                padding: 5px 10px; font-size: 11.5px; font-weight: 700;
+                padding: 4px 10px; font-size: 11.5px; font-weight: 700;
                 cursor: pointer; transition: all 0.12s ease;
+                white-space: nowrap;
             }
             .jw-pill-btn:hover { border-color: #d9a425; background: #fef9ea; color: #1f2937; }
             .jw-pill-btn.active {
@@ -341,36 +348,48 @@
                 border-color: #d9a425; font-weight: 800;
             }
             .jw-body {
-                display: grid; grid-template-columns: 1.35fr 1fr;
-                gap: 16px; padding: 14px 18px;
-                overflow-y: auto; flex: 1; background: #ffffff;
+                display: grid;
+                grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+                gap: 20px;
+                padding: 16px 22px;
+                overflow-y: auto;
+                overflow-x: hidden;
+                flex: 1;
+                background: #ffffff;
+                box-sizing: border-box;
             }
-            @media (max-width: 860px) {
-                .jw-body { grid-template-columns: 1fr; }
+            @media (max-width: 840px) {
+                .jw-body { grid-template-columns: minmax(0, 1fr); }
+            }
+            .jw-left-col, .jw-right-col {
+                min-width: 0;
+                box-sizing: border-box;
+            }
+            .jw-right-col {
+                display: flex; flex-direction: column; gap: 10px;
             }
             .jw-sec-title {
                 font-size: 11px; font-weight: 800; color: #92400e;
                 text-transform: uppercase; letter-spacing: 0.6px;
                 border-bottom: 1px solid #eadab0;
-                padding-bottom: 4px; margin: 10px 0 8px 0;
+                padding-bottom: 4px; margin: 12px 0 8px 0;
             }
             .jw-row {
-                display: grid; grid-template-columns: 145px 1fr;
-                align-items: center; gap: 10px; margin-bottom: 7px;
+                display: grid;
+                grid-template-columns: 145px minmax(0, 1fr);
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 7px;
+                min-width: 0;
             }
-            .jw-row-2 {
-                display: grid; grid-template-columns: 1fr 1fr;
-                gap: 10px; margin-bottom: 7px;
-            }
-            .jw-mini-row {
-                display: grid; grid-template-columns: 115px 1fr;
-                align-items: center; gap: 8px;
-            }
+            .jw-row > * { min-width: 0; }
             .jw-lbl {
                 font-size: 12.5px; font-weight: 600; color: #374151;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             }
             .jw-inp {
-                width: 100%; box-sizing: border-box;
+                width: 100%; min-width: 0; max-width: 100%;
+                box-sizing: border-box;
                 padding: 6px 10px;
                 border: 1px solid #d1d5db; border-radius: 4px;
                 font-size: 13px; font-weight: 700; color: #111827;
@@ -383,13 +402,10 @@
                 box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.22);
             }
             .jw-inp-num { text-align: right; font-variant-numeric: tabular-nums; }
-            .jw-right-col {
-                display: flex; flex-direction: column; gap: 10px; min-height: 390px;
-            }
             .jw-right-panel {
                 border: 1px solid #e5d5a7; border-radius: 6px;
                 background: #ffffff; display: flex; flex-direction: column;
-                overflow: hidden;
+                overflow: hidden; min-width: 0;
             }
             .jw-right-head {
                 background: #fdf6e2; border-bottom: 1px solid #e5d5a7;
@@ -397,10 +413,10 @@
                 display: flex; justify-content: space-between; align-items: center;
             }
             .jw-picker-list {
-                overflow-y: auto; max-height: 190px; min-height: 130px;
+                overflow-y: auto; max-height: 185px; min-height: 130px;
             }
             .jw-picker-item {
-                padding: 6px 12px; font-size: 12px; font-weight: 600; color: #1f2937;
+                padding: 7px 12px; font-size: 12.5px; font-weight: 600; color: #1f2937;
                 border-bottom: 1px solid #f3f4f6; cursor: pointer;
                 display: flex; justify-content: space-between; align-items: center; gap: 8px;
             }
@@ -417,16 +433,16 @@
             }
             .jw-batch-table th {
                 background: #fdf6e2; color: #1f2937; font-weight: 800;
-                padding: 6px 6px; text-align: left;
+                padding: 6px 8px; text-align: left;
                 border-bottom: 1px solid #e5d5a7; font-size: 11px;
                 position: sticky; top: 0;
             }
             .jw-batch-table td {
-                padding: 5px 6px; border-bottom: 1px solid #f3f4f6; color: #1f2937;
+                padding: 5px 8px; border-bottom: 1px solid #f3f4f6; color: #1f2937;
             }
             .jw-footer {
                 background: #fdf6e2; border-top: 1px solid #e5d5a7;
-                padding: 8px 18px;
+                padding: 8px 20px;
                 display: flex; justify-content: space-between; align-items: center;
                 flex-wrap: wrap; gap: 8px; font-size: 11.5px; color: #6b7280;
             }
@@ -434,14 +450,14 @@
                 background: #f2b71d; color: #1f2937;
                 border: 1px solid #d9a425; border-radius: 5px;
                 padding: 7px 18px; font-size: 13px; font-weight: 800;
-                cursor: pointer;
+                cursor: pointer; white-space: nowrap;
             }
             .jw-btn-save:hover { background: #e5aa12; }
             .jw-btn-sec {
                 background: #ffffff; color: #1f2937;
                 border: 1px solid #d1d5db; border-radius: 5px;
                 padding: 7px 13px; font-size: 12px; font-weight: 700;
-                cursor: pointer;
+                cursor: pointer; white-space: nowrap;
             }
             .jw-btn-sec:hover { border-color: #d9a425; background: #fef9ea; }
             .jw-accept-bar {
@@ -454,7 +470,7 @@
     };
 
     /* ========================================================================
-       4. OPEN JOBWORK EXPRESS MODAL (DEFAULT: 1. CUTTING)
+       4. OPEN JOBWORK EXPRESS MODAL (PROFILE-CREATION CLEAN ALIGNMENT)
        ------------------------------------------------------------------------
     ======================================================================== */
     window.openJobWorkExpressModal = () => {
@@ -482,20 +498,18 @@
         <div id="master-jobwork-express-modal" class="jw-overlay">
             <div class="jw-card">
 
-                <!-- Top Cream Header -->
+                <!-- Clean Minimal Cream Header (Like Profile Creation) -->
                 <div class="jw-header">
-                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                        <h3 class="jw-title">JobWork Express Voucher</h3>
-                        <span style="font-size:11px; background:#ffffff; border:1px solid #d9b86c; padding:3px 8px; border-radius:4px; font-weight:700; color:#92400e;">Godown: ${esc(godamName)}</span>
-                        <div style="display:flex; gap:4px; margin-left:4px;">
-                            <button type="button" tabindex="-1" id="jw-exp-cat-cutting" class="jw-pill-btn active" onclick="switchJobWorkCategory('cutting')">Cutting [F1]</button>
-                            <button type="button" tabindex="-1" id="jw-exp-cat-embroidery" class="jw-pill-btn" onclick="switchJobWorkCategory('embroidery')">Embroidery [F2]</button>
-                            <button type="button" tabindex="-1" id="jw-exp-cat-calender" class="jw-pill-btn" onclick="switchJobWorkCategory('calender')">Calender [F3]</button>
-                            <button type="button" tabindex="-1" id="jw-exp-cat-dukan" class="jw-pill-btn" onclick="switchJobWorkCategory('dukan')">Dukan [F4]</button>
-                        </div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <h3 class="jw-title">JobWork Voucher</h3>
+                        <button type="button" tabindex="-1" id="jw-exp-cat-cutting" class="jw-pill-btn active" onclick="switchJobWorkCategory('cutting')">Cutting [F1]</button>
+                        <button type="button" tabindex="-1" id="jw-exp-cat-embroidery" class="jw-pill-btn" onclick="switchJobWorkCategory('embroidery')">Embroidery [F2]</button>
+                        <button type="button" tabindex="-1" id="jw-exp-cat-calender" class="jw-pill-btn" onclick="switchJobWorkCategory('calender')">Calender [F3]</button>
+                        <button type="button" tabindex="-1" id="jw-exp-cat-dukan" class="jw-pill-btn" onclick="switchJobWorkCategory('dukan')">Dukan [F4]</button>
                     </div>
-                    <div style="display:flex; align-items:center; gap:6px;">
-                        <button type="button" tabindex="-1" id="jw-exp-btn-movement" class="jw-pill-btn" onclick="toggleMovementType()">Saree Gayi [F5]</button>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:11.5px; color:#6b7280; font-weight:700;">Godown: ${esc(godamName)}</span>
+                        <button type="button" tabindex="-1" id="jw-exp-btn-movement" style="display:none;" onclick="toggleMovementType()">Saree Gayi</button>
                         <button type="button" tabindex="-1" id="jw-exp-close-btn" class="jw-pill-btn" onclick="closeJobWorkExpressModal()">&larr; [Esc] Back</button>
                     </div>
                 </div>
@@ -503,44 +517,43 @@
                 <!-- 2-Column Split Body -->
                 <div class="jw-body">
 
-                    <!-- LEFT PANE: CLEAN TALLY VOUCHER ROWS -->
-                    <div>
+                    <!-- LEFT PANE: 1 FIELD PER ROW (ZERO CRAMPING / CLIPPING) -->
+                    <div class="jw-left-col">
                         <div class="jw-sec-title" style="margin-top:0;">1. Process, Len-Den &amp; Worker</div>
 
-                        <div class="jw-row-2">
-                            <div class="jw-mini-row">
-                                <label class="jw-lbl">Process [F1-F4] :</label>
-                                <input type="text" id="jw-exp-cat-input" value="1. Cutting" readonly class="jw-inp" style="border-color:#d9a425; cursor:pointer;">
-                            </div>
-                            <div class="jw-mini-row" id="jw-exp-movement-row">
-                                <label class="jw-lbl">Len-Den [F5] :</label>
-                                <input type="text" id="jw-exp-movement-input" value="Saree Gayi (Bheja)" readonly class="jw-inp" style="cursor:pointer;">
-                            </div>
+                        <div class="jw-row">
+                            <label class="jw-lbl">Process [F1-F4] :</label>
+                            <input type="text" id="jw-exp-cat-input" value="1. Cutting" readonly class="jw-inp" style="border-color:#d9a425; cursor:pointer;">
                         </div>
 
-                        <!-- Stock Source Row (Visible / Locked by Category) -->
+                        <div class="jw-row" id="jw-exp-movement-row">
+                            <label class="jw-lbl">Len-Den [F5] :</label>
+                            <input type="text" id="jw-exp-movement-input" value="Saree Gayi (Bheja)" readonly class="jw-inp" style="cursor:pointer;">
+                        </div>
+
                         <div id="jw-exp-source-container" class="jw-row">
                             <label class="jw-lbl">Stock Source [F6] :</label>
                             <div>
                                 <input type="text" id="jw-exp-source-input" value="Fresh Godown Stock" readonly class="jw-inp" style="display:none; cursor:pointer;">
                                 <select id="jw-exp-source-select" tabindex="-1" onchange="onExpressSourceDropdownChange(this.value)" style="display:none;"></select>
-                                <span id="jw-exp-source-locked" style="display:inline-block; width:100%; box-sizing:border-box; padding:6px 10px; background:#fdfcf7; border:1px solid #eadab0; border-radius:4px; font-size:12.5px; font-weight:700; color:#6b7280;">Fresh Godown Stock [Locked]</span>
+                                <span id="jw-exp-source-locked" style="display:block; width:100%; box-sizing:border-box; padding:6px 10px; background:#fdfcf7; border:1px solid #eadab0; border-radius:4px; font-size:12.5px; font-weight:700; color:#6b7280;">Fresh Godown Stock [Locked]</span>
                             </div>
                         </div>
 
-                        <div class="jw-row-2">
-                            <div class="jw-mini-row">
-                                <label id="jw-exp-lbl-worker" class="jw-lbl">Cutting Kariger :</label>
+                        <div class="jw-row">
+                            <label id="jw-exp-lbl-worker" class="jw-lbl">Cutting Kariger :</label>
+                            <div>
                                 <input type="text" id="jw-exp-worker-input" placeholder="Select Worker..." autocomplete="off" class="jw-inp" style="border-color:#d9a425;">
                                 <select id="jw-exp-worker" tabindex="-1" style="display:none;"></select>
                             </div>
-                            <div class="jw-mini-row">
-                                <label class="jw-lbl">Date :</label>
-                                <input type="date" id="jw-exp-date" value="${today}" class="jw-inp">
-                            </div>
                         </div>
 
-                        <!-- SECTION 2: FAST BATCH ENTRY -->
+                        <div class="jw-row">
+                            <label class="jw-lbl">Date :</label>
+                            <input type="date" id="jw-exp-date" value="${today}" class="jw-inp">
+                        </div>
+
+                        <!-- SECTION 2: BATCH ENTRY -->
                         <div class="jw-sec-title" style="display:flex; justify-content:space-between; align-items:center;">
                             <span>2. Batch Entry (Bunne Wale Ka Naam)</span>
                             <span id="jw-exp-live-stock-hint" style="color:#b47d00; font-size:11px; text-transform:none;"></span>
@@ -549,36 +562,30 @@
                         <div class="jw-row">
                             <label class="jw-lbl">Maker (Bunne Wala) :</label>
                             <div>
-                                <input type="text" id="jw-exp-maker-input" placeholder="Type Maker or &uarr;&darr; (Khali Enter = Batch Poora)" autocomplete="off" class="jw-inp" style="border-color:#d9a425;">
+                                <input type="text" id="jw-exp-maker-input" placeholder="Maker naam likhein ya &uarr;&darr; chunein..." autocomplete="off" class="jw-inp" style="border-color:#d9a425;">
                                 <datalist id="jw-exp-maker-dl"></datalist>
                             </div>
                         </div>
 
-                        <div style="display:flex; gap:10px; align-items:flex-end; margin-bottom:8px;">
-                            <div id="jw-exp-naap-container" style="display:none; width:115px; flex-shrink:0;">
-                                <label style="font-size:11px; font-weight:700; color:#374151; display:block; margin-bottom:3px;">Naap :</label>
-                                <input type="text" id="jw-exp-naap-input" value="${lastEnteredNaap}" placeholder="3.60" class="jw-inp jw-inp-num">
-                            </div>
-                            <div style="flex:1;">
-                                <label style="font-size:11px; font-weight:700; color:#374151; display:block; margin-bottom:3px;">Saree Qty (Pcs) :</label>
-                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="jw-exp-qty-input" placeholder="0" class="jw-inp jw-inp-num" style="border-color:#d9a425; font-size:15px;">
-                            </div>
-                            <div style="flex-shrink:0;">
-                                <button type="button" tabindex="-1" id="jw-exp-add-row-btn" class="jw-btn-save" style="padding:7px 14px;" onclick="addExpressBatchRow()">+ Jodein [Enter]</button>
+                        <div class="jw-row">
+                            <label class="jw-lbl">Saree Qty (Pcs) :</label>
+                            <div style="display:flex; gap:8px; align-items:center; min-width:0;">
+                                <div id="jw-exp-naap-container" style="display:none; width:88px; flex-shrink:0;">
+                                    <input type="text" id="jw-exp-naap-input" value="${lastEnteredNaap}" placeholder="Naap" title="Embroidery Naap" class="jw-inp jw-inp-num">
+                                </div>
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" id="jw-exp-qty-input" placeholder="0 Pcs" class="jw-inp jw-inp-num" style="flex:1; min-width:60px; border-color:#d9a425;">
+                                <button type="button" tabindex="-1" id="jw-exp-add-row-btn" class="jw-btn-save" style="padding:6px 12px; font-size:12px;" onclick="addExpressBatchRow()">+ Jodein</button>
                             </div>
                         </div>
 
                         <!-- SECTION 3: DAMAGE (HIDDEN IN DUKAN) -->
                         <div id="jw-exp-damage-row">
                             <div class="jw-sec-title">3. Damage / Kaat (Optional)</div>
-                            <div class="jw-row-2">
-                                <div class="jw-mini-row">
-                                    <label class="jw-lbl">Damage (Pcs) :</label>
-                                    <input type="text" inputmode="numeric" id="jw-exp-damage-pcs" placeholder="0" class="jw-inp jw-inp-num">
-                                </div>
-                                <div class="jw-mini-row">
-                                    <label class="jw-lbl">Damage Fine (₹) :</label>
-                                    <input type="text" inputmode="decimal" id="jw-exp-damage-amt" placeholder="0.00" class="jw-inp jw-inp-num">
+                            <div class="jw-row">
+                                <label class="jw-lbl">Damage &amp; Fine :</label>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; min-width:0;">
+                                    <input type="text" inputmode="numeric" id="jw-exp-damage-pcs" placeholder="Damage Pcs (0)" class="jw-inp jw-inp-num">
+                                    <input type="text" inputmode="decimal" id="jw-exp-damage-amt" placeholder="Fine ₹ (0.00)" class="jw-inp jw-inp-num">
                                 </div>
                             </div>
                         </div>
@@ -952,7 +959,7 @@
         const attachStepPicker = (el, modeName, isFilterable) => {
             if (!el) return;
             el.addEventListener('focus', () => {
-                showJwRightPicker(modeName, isFilterable ? '' : '');
+                showJwRightPicker(modeName, '');
             });
             if (isFilterable) {
                 el.addEventListener('input', () => {
@@ -1037,7 +1044,6 @@
                         return;
                     }
                     const typed = makerInp.value.trim();
-                    // Tally "End of List": if batch already has items & maker is empty & user didn't pick with arrows
                     if (!typed && expressBatchItems.length > 0 && !jwMakerArrowUsed) {
                         if (activeCategory !== 'dukan' && dmgPcsInp && dmgPcsInp.offsetParent !== null) {
                             dmgPcsInp.focus();
@@ -1321,13 +1327,10 @@
             if (activeCategory === 'dukan') {
                 movementType = 'gayi';
                 btnMov.textContent = 'Dukan Bheja';
-                btnMov.classList.add('active');
             } else if (movementType === 'gayi') {
                 btnMov.textContent = 'Saree Gayi [F5]';
-                btnMov.classList.add('active');
             } else {
                 btnMov.textContent = 'Wapas Aayi [F5]';
-                btnMov.classList.remove('active');
             }
         }
 
@@ -1346,7 +1349,7 @@
             } else if (activeCategory === 'cutting') {
                 srcContainer.style.display = 'grid';
                 srcInp.style.display = 'none';
-                srcLocked.style.display = 'inline-block';
+                srcLocked.style.display = 'block';
                 srcLocked.textContent = 'Fresh Godown Stock [Locked]';
             } else if (activeCategory === 'embroidery') {
                 srcContainer.style.display = 'grid';
