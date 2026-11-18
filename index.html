@@ -6,13 +6,14 @@
     <title>Welcome to Simplicity - ERP by Farhan Jawed</title>
 
     <!-- PWA & Mobile Meta Tags -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="manifest.json?v=3.3">
     <meta name="theme-color" content="#ffffff">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Simplicity ERP">
-    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=3.3">
+    <link rel="apple-touch-icon" href="icon-192.png?v=3.3">
 
     <!-- Stylesheets with Cache-Busting Version 3.2 -->
     <link rel="stylesheet" href="style.css?v=3.2">
@@ -2591,8 +2592,8 @@
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js?v=3.2')
-                    .then(() => console.log('✅ [PWA] Service Worker Active v3.2.'))
+                navigator.serviceWorker.register('sw.js?v=3.3')
+                    .then(() => console.log('✅ [PWA] Service Worker Active v3.3.'))
                     .catch((err) => console.warn('⚠️ [PWA] SW Registration failed:', err));
             });
         }
