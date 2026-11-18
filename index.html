@@ -311,10 +311,15 @@
                             <div class="gw-section-title">Masters &amp; Stock</div>
                             <button type="button" class="gw-item" data-gw-key="m" onclick="slGwClick(this, openKarigerModule)"><span>Kariger <span class="gw-key">M</span>aster</span><span class="gw-val" id="btn-total-kariger">Total: 0</span></button>
                             <button type="button" class="gw-item" data-gw-key="i" onclick="slGwClick(this, openInfoLedgerModule)"><span><span class="gw-key">I</span>nfo Ledger</span><span class="gw-val" id="btn-total-info">Total: 0</span></button>
-                            <button type="button" class="gw-item" data-gw-key="b" onclick="slGwClick(this, openBanaModule)"><span><span class="gw-key">B</span>ana Stock</span><span class="gw-val" id="btn-total-bana">Bacha: 0</span></button>
-                            <button type="button" class="gw-item" data-gw-key="z" onclick="slGwClick(this, openZariModule)"><span><span class="gw-key">Z</span>ari Stock</span><span class="gw-val" id="btn-total-zari">Bacha: 0</span></button>
-                            <button type="button" class="gw-item" data-gw-key="e" onclick="slGwClick(this, openSareeModule)"><span>Sare<span class="gw-key">e</span> Stock</span><span class="gw-val" id="btn-total-saree">Stock: 0</span></button>
-                            <button type="button" class="gw-item" data-gw-key="n" onclick="slGwClick(this, openSanchaModule)"><span>Sa<span class="gw-key">n</span>cha (Tani)</span><span class="gw-val" id="btn-total-sancha">Bacha: 0</span></button>
+                            <button type="button" class="gw-item" data-gw-key="u" onclick="slGwClick(this, openStockSummaryModule)"><span>Stock S<span class="gw-key">u</span>mmary</span><span class="gw-val" id="btn-total-stock-summary">4 Groups</span></button>
+
+                            <!-- Hidden Zero-Break Stock Badges (Watched by Live Stock Card & Stock Summary) -->
+                            <div style="display:none;" aria-hidden="true">
+                                <span id="btn-total-bana">Bacha: 0</span>
+                                <span id="btn-total-zari">Bacha: 0</span>
+                                <span id="btn-total-saree">Stock: 0</span>
+                                <span id="btn-total-sancha">Bacha: 0</span>
+                            </div>
 
                             <div class="gw-divider"></div>
                             <div class="gw-section-title">Accounts &amp; Orders</div>
@@ -323,13 +328,16 @@
                             <button type="button" class="gw-item" data-gw-key="d" onclick="slGwClick(this, openDayBookModule)"><span>Rozana <span class="gw-key">D</span>ay-Book</span><span class="gw-val">Daily Register</span></button>
                             <button type="button" class="gw-item" data-gw-key="o" onclick="slGwClick(this, openTaniOrderModule)"><span>Tani <span class="gw-key">O</span>rder &amp; Rangai</span><span class="gw-val" id="btn-total-tani-orders">0 Parchi</span></button>
                         </div>
-                        <div class="gateway-footer-tip">[C] Create · [A] Alter · ↑ ↓ Arrow · [Enter] Kholein</div>
+                        <div class="gateway-footer-tip">[C] Create · [A] Alter · [U] Stock · ↑ ↓ Arrow · [Enter] Kholein</div>
                     </aside>
                 </div>
             </section>
 
             <!-- MODULE 0: TALLY MASTER CREATE & ALTER (Loaded cleanly from core/tally-master.js) -->
             <section id="tally-master-section" class="module-section" style="display:none;"></section>
+
+            <!-- MODULE 0B: TALLY STOCK SUMMARY HUB (Loaded cleanly from core/tally-master.js) -->
+            <section id="stock-summary-section" class="module-section" style="display:none;"></section>
 
             <!-- MODULE: ROZANA DAY-BOOK -->
             <section id="daybook-section" class="module-section" style="display:none;">
@@ -761,6 +769,6 @@
     <script src="express-switcher/express-switcher.js?v=3.2"></script>
 
     <!-- 🏛️ TALLY DASHBOARD, GATEWAY SHORTCUTS & CREATE/ALTER MASTER -->
-    <script src="core/tally-master.js?v=3.4"></script>
+    <script src="core/tally-master.js?v=3.5"></script>
 </body>
 </html>
