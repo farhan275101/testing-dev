@@ -1,27 +1,21 @@
 /* ============================================================================
-   SIMPLICITY ERP - HIGH-PERFORMANCE EMBROIDERY UI & SHEET ENGINE
+   SIMPLICITY ERP - EMBROIDERY UI & SHEET ENGINE
    File: embroidery/embroidery-ui.js • Developed by Farhan Jawed
-   Architecture: Lightweight Clean List (No Pagination) | Synced with JobWorkEngine
+   Theme: Pure White & Gold (Synced with JobWorkEngine, Zero Duplicate Listeners)
 ============================================================================ */
 
 (() => {
     'use strict';
 
-    /* ========================================================================
-       1. GLOBAL STATE & CONTEXT POOL
-       ======================================================================== */
     window.activeEmbroideryWorkerId = null;
     window.activeEmbroiderySheetId = null;
     window.activeEmbroiderySheetIndex = 0;
 
-    let workerSearchDebounceTimer = null;
-
-    /* ========================================================================
-       2. SAFE DOM & DATA SANITIZATION UTILITIES
-       ======================================================================== */
     const esc = (s) => {
         if (typeof window.sanitizeHTML === 'function') return window.sanitizeHTML(s);
-        return String(s || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        return String(s || '').replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
     };
 
     const safeNum = (val, fallback = 0) => {
@@ -35,37 +29,26 @@
     };
 
     const setDisplay = (id, val) => {
-        if (typeof window.setDisplay === 'function') {
-            window.setDisplay(id, val);
-        } else {
+        if (typeof window.setDisplay === 'function') window.setDisplay(id, val);
+        else {
             const el = document.getElementById(id);
             if (el) el.style.display = val;
         }
     };
 
     const setText = (id, val) => {
-        if (typeof window.setElementText === 'function') {
-            window.setElementText(id, val);
-        } else {
-            const el = document.getElementById(id);
-            if (el) el.textContent = (val !== undefined && val !== null) ? val : '';
-        }
-    };
-
-    const getToday = () => {
-        return (typeof window.getTodayDate === 'function') 
-            ? window.getTodayDate() 
-            : new Date().toISOString().split('T')[0];
+        const el = document.getElementById(id);
+        if (el) el.textContent = (val !== undefined && val !== null) ? String(val) : '';
     };
 
     const formatDisplay = (d) => {
-        return (typeof window.formatDateDisplay === 'function') 
-            ? window.formatDateDisplay(d) 
+        return (typeof window.formatDateDisplay === 'function')
+            ? window.formatDateDisplay(d)
             : (d || '-');
     };
 
     /* ========================================================================
-       3. INTER-MODULE DATA BRIDGES
+       DATA BRIDGES
        ======================================================================== */
     const getEmbroideryWorkers = () => {
         if (typeof window.getJobWorkers === 'function') {
@@ -102,27 +85,19 @@
         };
     };
 
-    const triggerCacheInvalidation = (workerId) => {
-        if (typeof window.invalidateEmbroideryCalcCache === 'function') {
-            window.invalidateEmbroideryCalcCache();
-        }
-        if (typeof window.invalidateJobWorkCache === 'function') {
-            window.invalidateJobWorkCache(workerId);
-        }
-        if (typeof window.invalidateSareeCalcCache === 'function') {
-            window.invalidateSareeCalcCache();
-        }
-    };
-
     /* ========================================================================
-       4. NAVIGATION & DIRECTORY CONTROLLER
+       NAVIGATION & DIRECTORY
        ======================================================================== */
     const openEmbroideryModule = () => {
         window.currentJobWorkMode = 'embroidery';
-
         if (typeof window.hideAllSections === 'function') window.hideAllSections();
-
         setDisplay('jobwork-section', 'block');
+
+        if (window.JobWorkEngine && typeof window.JobWorkEngine.openJobWorkSubSection === 'function') {
+            window.JobWorkEngine.openJobWorkSubSection('embroidery');
+            return;
+        }
+
         setDisplay('jw-hub-view', 'none');
         setDisplay('jw-sheet-view', 'none');
         setDisplay('jw-dukan-view', 'none');
@@ -130,192 +105,120 @@
         setDisplay('jw-movement-view', 'none');
         setDisplay('jw-workers-view', 'block');
 
-        const titleEl = document.getElementById('jw-workers-title');
-        if (titleEl) titleEl.textContent = '🪡 Embroidery Workers List';
-
-        const addBtnEl = document.getElementById('jw-add-worker-btn-text');
-        if (addBtnEl) addBtnEl.textContent = '+ Naya Embroidery Kariger';
-
+        setText('jw-workers-title', 'Embroidery Workers');
+        setText('jw-add-worker-btn-text', '+ Naya Embroidery Kariger [Alt+N]');
         renderEmbroideryWorkersTable();
     };
 
-    /* ========================================================================
-       5. WORKER TABLE RENDERER (CLEAN NO-PAGINATION LIST)
-       ======================================================================== */
     const renderEmbroideryWorkersTable = () => {
+        window.currentJobWorkMode = 'embroidery';
+        if (window.JobWorkEngine && typeof window.JobWorkEngine.renderJobWorkWorkersTable === 'function') {
+            window.JobWorkEngine.renderJobWorkWorkersTable();
+            return;
+        }
+
         const tbody = document.getElementById('jw-workers-table-body');
         if (!tbody) return;
 
         let list = getEmbroideryWorkers();
-
-        const searchInput = document.getElementById('jw-search-worker-input');
-        const txt = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        const txt = (document.getElementById('jw-search-worker-input')?.value || '').toLowerCase().trim();
         if (txt) {
-            list = list.filter((w) => 
-                `${w.name || ''} ${w.address || ''} ${w.mobile || ''}`.toLowerCase().includes(txt)
-            );
+            list = list.filter((w) => `${w.name || ''} ${w.address || ''} ${w.mobile || ''}`.toLowerCase().includes(txt));
         }
-
-        const absentFilterEl = document.getElementById('jw-absent-filter');
-        const minDays = safeInt(absentFilterEl ? absentFilterEl.value : 0);
+        const minDays = safeInt(document.getElementById('jw-absent-filter')?.value);
         if (minDays > 0) {
             list = list.filter((w) => getEmbroideryWorkerAbsentInfo(w.id).daysAbsent >= minDays);
         }
 
         let totGayi = 0, totAayi = 0, totDmg = 0;
-        const allEmb = getEmbroideryWorkers();
-        allEmb.forEach((w) => {
+        getEmbroideryWorkers().forEach((w) => {
             const sum = getEmbroideryWorkerOverallSummary(w.id);
             totGayi += safeNum(sum.totGayi);
             totAayi += safeNum(sum.totAayi);
-            totDmg  += safeNum(sum.totDmg);
+            totDmg += safeNum(sum.totDmg);
         });
-
         setText('jw-stat-total-gayi', `${totGayi} Pcs`);
         setText('jw-stat-total-aayi', `${totAayi} Pcs`);
         setText('jw-stat-total-damage', `${totDmg} Pcs`);
 
-        // Pager remove karein taaki calender/cutting jaisa clean dikhe
-        const existingPager = document.getElementById('calender-pagination-controls') || 
-                              document.getElementById('cutting-pagination-controls') ||
-                              document.getElementById('embroidery-pagination-controls');
-        if (existingPager) existingPager.innerHTML = '';
-
         if (!list.length) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#888;">Koi Embroidery Kariger nahi mila.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#6b7280;">Koi Embroidery Kariger nahi mila.</td></tr>';
             return;
         }
 
         let html = '';
         list.forEach((w) => {
             const act = getEmbroideryWorkerAbsentInfo(w.id);
-            let statusBadge = '';
-            if (act.daysAbsent >= 30) {
-                statusBadge = `<span class="badge-red" style="font-size:11px;">⚠️ ${act.daysAbsent} Din se gayab</span>`;
-            } else if (act.daysAbsent >= 15) {
-                statusBadge = `<span style="background:#fff7ed; color:#ea580c; border:1px solid #fed7aa; padding:2px 6px; border-radius:20px; font-weight:700; font-size:11px;">🟠 ${act.daysAbsent} Din hue</span>`;
-            } else {
-                statusBadge = '<span class="badge-green" style="font-size:11px;">🟢 Active</span>';
-            }
+            const sum = getEmbroideryWorkerOverallSummary(w.id);
+            const statusHtml = (act.daysAbsent >= 15)
+                ? `<span class="jw-status-pill absent">${act.daysAbsent} Din Absent (${sum.pendingSaree} Pcs)</span>`
+                : `<span class="jw-status-pill">Active (${sum.pendingSaree} Pcs)</span>`;
 
-            const tagadaBtn = (act.daysAbsent >= 15)
-                ? ` <button type="button" class="quick-btn btn-out" style="font-size:11px;" onclick="sendEmbroideryTagadaWhatsApp('${esc(w.id)}', ${act.daysAbsent})">📲 तगादा</button>`
-                : '';
-
-            html += `<tr>
+            html += `<tr class="jw-nav-row" onclick="openEmbroiderySheet('${esc(w.id)}')">
                 <td>${formatDisplay(w.date)}</td>
                 <td><strong>${esc(w.name)}</strong></td>
                 <td>${esc(w.address || '-')}</td>
                 <td>${esc(w.mobile || '-')}</td>
-                <td>${statusBadge}</td>
-                <td style="text-align:center; white-space:nowrap;">
-                    <button type="button" class="sheet-btn" onclick="openEmbroiderySheet('${esc(w.id)}')">📊 Khata Sheet</button>
-                    ${tagadaBtn}
-                    <button type="button" class="edit-btn" onclick="editEmbroideryWorker('${esc(w.id)}')">✏️</button>
-                    <button type="button" class="delete-btn" onclick="deleteEmbroideryWorker('${esc(w.id)}')">🗑️</button>
-                </td>
+                <td>${statusHtml}</td>
+                <td style="text-align:right;"><span class="jw-open-ind">Open &rarr;</span></td>
             </tr>`;
         });
-
         tbody.innerHTML = html;
     };
 
     /* ========================================================================
-       6. WORKER CRUD CONTROLLER
+       CRUD & SHEET BRIDGES
        ======================================================================== */
     const toggleEmbroideryWorkerForm = () => {
-        if (typeof window.toggleJobWorkerForm === 'function') {
-            window.toggleJobWorkerForm();
-            return;
-        }
-        const f = document.getElementById('add-jw-worker-form');
-        if (!f) return;
-        f.style.display = (f.style.display !== 'block') ? 'block' : 'none';
+        if (typeof window.toggleJobWorkerForm === 'function') window.toggleJobWorkerForm();
     };
 
     const cancelEmbroideryWorkerEdit = () => {
-        if (typeof window.cancelJobWorkerEdit === 'function') {
-            window.cancelJobWorkerEdit();
-            return;
-        }
+        if (typeof window.cancelJobWorkerEdit === 'function') window.cancelJobWorkerEdit();
     };
 
     const saveEmbroideryWorker = () => {
-        if (typeof window.saveNewJobWorker === 'function') {
-            window.saveNewJobWorker();
-            return;
-        }
+        if (typeof window.saveNewJobWorker === 'function') window.saveNewJobWorker();
     };
 
     const editEmbroideryWorker = (id) => {
-        if (typeof window.editJobWorker === 'function') {
-            window.editJobWorker(id);
-            return;
-        }
+        if (typeof window.editJobWorker === 'function') window.editJobWorker(id);
     };
 
     const deleteEmbroideryWorker = (id) => {
-        if (typeof window.deleteJobWorker === 'function') {
-            window.deleteJobWorker(id);
-            return;
-        }
+        if (typeof window.deleteJobWorker === 'function') window.deleteJobWorker(id);
     };
 
-    /* ========================================================================
-       7. OPEN EMBROIDERY SHEET
-       ======================================================================== */
     const openEmbroiderySheet = (id) => {
         window.activeEmbroideryWorkerId = id;
         window.activeJobWorkerId = id;
-
         if (window.JobWorkEngine && typeof window.JobWorkEngine.openJobWorkerSheet === 'function') {
             window.JobWorkEngine.openJobWorkerSheet(id);
-            return;
-        }
-        if (typeof window.openJobWorkerSheet === 'function') {
+        } else if (typeof window.openJobWorkerSheet === 'function') {
             window.openJobWorkerSheet(id);
-            return;
         }
-
-        const w = getEmbroideryWorkers().find((x) => String(x.id) === String(id));
-        if (!w) return alert('Kariger nahi mila!');
-
-        setDisplay('jw-workers-view', 'none');
-        setDisplay('jw-sheet-view', 'block');
-
-        const banner = document.getElementById('jw-sheet-banner-name');
-        if (banner) banner.textContent = `${w.name} (Embroidery Khata)`;
-
-        loadCurrentEmbroiderySheetData();
     };
 
     const loadCurrentEmbroiderySheetData = () => {
         if (window.JobWorkEngine && typeof window.JobWorkEngine.loadCurrentJobWorkSheet === 'function') {
             window.JobWorkEngine.loadCurrentJobWorkSheet();
-            return;
-        }
-        if (typeof window.loadCurrentJobWorkSheet === 'function') {
-            window.loadCurrentJobWorkSheet();
-            return;
         }
     };
 
-    const deleteEmbroideryRow = (rowId) => {
+    const deleteEmbroideryRow = (idx) => {
         if (typeof window.deleteJobWorkBatchRow === 'function') {
-            window.deleteJobWorkBatchRow(rowId);
-            return;
+            window.deleteJobWorkBatchRow(idx);
         }
     };
 
     const sendEmbroideryTagadaWhatsApp = (workerId, days) => {
         if (typeof window.sendJobWorkerTagadaWhatsApp === 'function') {
             window.sendJobWorkerTagadaWhatsApp(workerId, days);
-            return;
         }
     };
 
     /* ========================================================================
-       8. GLOBAL EXPORTS
+       EXPORTS
        ======================================================================== */
     const embroideryUIAPI = {
         openEmbroideryModule,
@@ -340,20 +243,6 @@
     });
 
     window.EmbroideryUIEngine = embroideryUIAPI;
-
-    document.addEventListener('DOMContentLoaded', () => {
-        const searchInput = document.getElementById('jw-search-worker-input');
-        if (searchInput) {
-            searchInput.addEventListener('input', () => {
-                clearTimeout(workerSearchDebounceTimer);
-                workerSearchDebounceTimer = setTimeout(() => {
-                    if (window.currentJobWorkMode === 'embroidery') {
-                        renderEmbroideryWorkersTable();
-                    }
-                }, 200);
-            });
-        }
-    });
 
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = embroideryUIAPI;
