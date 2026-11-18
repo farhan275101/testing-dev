@@ -53,7 +53,7 @@
         }
 
         /* ====================================================================
-           DRIBBBLE-STYLE SPLIT LOGIN UI (STRICTLY SCOPED TO #login-wrapper)
+           DRIBBBLE-STYLE SPLIT LOGIN UI (DESKTOP UNTOUCHED + MOBILE TUNED)
         ==================================================================== */
         #login-wrapper {
             --sl-brand: #f2b71d;
@@ -75,7 +75,7 @@
         }
 
         #login-wrapper .sl-left {
-            padding: 34px 36px 24px;
+            padding: 40px 36px 24px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -89,7 +89,7 @@
             gap: 10px;
             text-decoration: none;
             color: #1f2937;
-            margin-top: 6px;
+            padding-top: 6px;
         }
 
         #login-wrapper .sl-logo-badge {
@@ -128,7 +128,6 @@
             padding: 24px 0;
         }
 
-        /* Override default .card cleanly only inside #login-wrapper */
         #login-wrapper .card {
             background: transparent;
             border: none;
@@ -150,12 +149,12 @@
         #login-wrapper .card-subtitle {
             font-size: 12.5px;
             color: #9ca3af;
-            margin-bottom: 24px;
+            margin-bottom: 22px;
         }
 
         #login-wrapper .sl-input-wrap {
             position: relative;
-            margin-bottom: 14px;
+            margin-bottom: 13px;
             text-align: left;
         }
 
@@ -212,8 +211,8 @@
             align-items: center;
             justify-content: space-between;
             gap: 14px;
-            margin-top: 20px;
-            margin-bottom: 22px;
+            margin-top: 18px;
+            margin-bottom: 20px;
         }
 
         #login-wrapper .sl-btn-primary {
@@ -265,7 +264,6 @@
             text-decoration: underline;
         }
 
-        /* Clean styling for Signup & Forgot boxes + dynamically injected Gmail OTP UI */
         #login-wrapper #signup-box .input-group,
         #login-wrapper #forgot-box .input-group {
             margin-bottom: 11px;
@@ -333,7 +331,7 @@
             color: #374151;
         }
 
-        /* Right Panel (Dribbble Organic Artwork + Floating Card) */
+        /* Right Panel (Dribbble Organic Artwork + Floating Card - DESKTOP EXACT SAME) */
         #login-wrapper .sl-right {
             padding: 24px 28px 24px 0;
             display: flex;
@@ -345,7 +343,8 @@
             position: relative;
             width: 100%;
             height: 100%;
-            min-height: 590px;
+            min-height: 580px;
+            max-height: 860px;
             max-width: 680px;
             border-radius: 14px;
             overflow: hidden;
@@ -449,15 +448,90 @@
             transform: scale(1.25);
         }
 
-        @media (max-width: 900px) {
-            #login-wrapper .sl-split {
-                grid-template-columns: 1fr;
+        /* ====================================================================
+           MOBILE VIEW ONLY: FORM UPAR + GOLDEN PATTI & SLIDESHOW NICHE
+           (Desktop 1024px+ par bilkul same side-by-side rahega)
+        ==================================================================== */
+        @media (max-width: 1023px), (hover: none) and (pointer: coarse) and (orientation: portrait) {
+            #login-wrapper {
+                flex-direction: column;
+                min-height: 100vh;
             }
-            #login-wrapper .sl-right {
-                display: none;
+            #login-wrapper .sl-split {
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                min-height: 100vh;
             }
             #login-wrapper .sl-left {
-                padding: 28px 20px 20px;
+                padding: 14px 20px 8px;
+                justify-content: flex-start;
+                flex: 0 0 auto;
+            }
+            #login-wrapper .sl-brand-top {
+                padding-top: 0;
+            }
+            #login-wrapper .sl-form-slot {
+                margin: 0 auto;
+                padding: 16px 0 4px;
+            }
+            #login-wrapper .card h2 {
+                font-size: 20px;
+                margin-bottom: 4px;
+            }
+            #login-wrapper .card-subtitle {
+                margin-bottom: 16px;
+            }
+            #login-wrapper .sl-action-row {
+                margin-top: 14px;
+                margin-bottom: 14px;
+            }
+            #login-wrapper .sl-left-footer {
+                margin-top: 10px;
+            }
+
+            /* Niche Golden Patti + Slideshow Card */
+            #login-wrapper .sl-right {
+                display: flex;
+                flex: 1 0 auto;
+                align-items: flex-end;
+                padding: 10px 0 0;
+                width: 100%;
+            }
+            #login-wrapper .sl-art-stage {
+                width: 100%;
+                max-width: 100%;
+                min-height: 315px;
+                height: auto;
+                max-height: none;
+                border-radius: 26px 26px 0 0;
+                padding: 26px 16px 22px;
+                background: #fef3d6;
+                box-shadow: 0 -8px 28px rgba(242, 183, 29, 0.12);
+            }
+            #login-wrapper .sl-promo-card {
+                width: 100%;
+                max-width: 285px;
+                padding: 20px 18px 18px;
+            }
+            #login-wrapper .sl-promo-circle {
+                width: 64px;
+                height: 64px;
+                font-size: 28px;
+                margin-bottom: 10px;
+            }
+            #login-wrapper .sl-promo-card h3 {
+                font-size: 15px;
+                margin-bottom: 6px;
+            }
+            #login-wrapper .sl-promo-card p {
+                min-height: auto;
+                margin-bottom: 14px;
+                font-size: 12px;
+                line-height: 1.5;
+            }
+            #login-wrapper .sl-dots {
+                margin-top: 16px;
             }
         }
     </style>
@@ -572,7 +646,7 @@
                 </div>
             </div>
 
-            <!-- RIGHT SIDE: ORGANIC GOLDEN SHAPE + FLOATING FEATURE CARD -->
+            <!-- RIGHT SIDE (DESKTOP) / BOTTOM GOLDEN SLIDESHOW (MOBILE) -->
             <div class="sl-right">
                 <div class="sl-art-stage">
                     <svg class="sl-bg-svg" viewBox="0 0 600 660" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
