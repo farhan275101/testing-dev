@@ -4,7 +4,8 @@
    Developed for: Farhan Jawed
    Features:
    - TallyPrime White & Gold 2-Column Voucher Layout (Matching Profile Creation)
-   - Dynamic Right-Pane Picker (List of Karigers / Bana Stock / Zari Stock)
+   - Dynamic Right-Pane Picker in Main Voucher, Alt+C (Naya Kariger) & Alt+N
+   - Full Profile Creation Fields in Alt+C (Mohalla, Join Date, karkhanaName)
    - Auto-Tani Detection & Carry-Forward Rollover
    - Zero-Mouse Enter Chaining, Shift+Enter Back, Arrow Navigation & A6 Print
 ============================================================================ */
@@ -18,14 +19,27 @@
     let prevDeliveredSarees = 0;
     let lastSavedTransaction = null;
 
-    // Right-Pane Tally Picker State
-    let pickerMode = 'summary'; // 'kariger' | 'bana' | 'zari' | 'summary'
+    // Main Voucher Right-Pane Picker State
+    let pickerMode = 'kariger'; // 'kariger' | 'bana' | 'zari' | 'summary'
     let pickerItems = [];
     let pickerActiveIdx = 0;
     let pickerArrowUsed = false;
 
+    // Alt+C Modal Right-Pane Picker State
+    let altcPickerMode = 'preview'; // 'dup_kariger' | 'karkhana' | 'design' | 'tani' | 'chukka' | 'preview'
+    let altcPickerItems = [];
+    let altcPickerActiveIdx = 0;
+    let altcPickerArrowUsed = false;
+
+    // Alt+N Modal Right-Pane Picker State
+    let ntaniPickerMode = 'tani'; // 'tani' | 'preview'
+    let ntaniPickerItems = [];
+    let ntaniPickerActiveIdx = 0;
+    let ntaniPickerArrowUsed = false;
+    let ntaniSaveParams = { nextNum: 2, pBana: 0, pZari: 0, pBani: 0 };
+
     /* ========================================================================
-       1. SAFE HELPERS & DATA STORES (UNCHANGED)
+       1. SAFE HELPERS & DATA STORES
        ------------------------------------------------------------------------
     ======================================================================== */
     const toArray = (v) => {
@@ -69,6 +83,17 @@
             : new Date().toISOString().split('T')[0];
     };
 
+    const getSafeKarkhanas = () => {
+        let karkhanas = (typeof window.getKarkhanasSafe === 'function')
+            ? window.getKarkhanasSafe()
+            : toArray(getFromStore('karkhana_list'));
+        karkhanas = toArray(karkhanas).filter(k => k && k.id && k.name);
+        if (!karkhanas.length) {
+            karkhanas = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
+        }
+        return karkhanas;
+    };
+
     const getBanaStockBacha = (itemName, kGodown) => {
         if (!itemName) return 0;
         if (typeof window.getBanaItemStats === 'function') {
@@ -89,6 +114,35 @@
         const item = raw.find(x => x && x.name && x.name.toLowerCase() === itemName.toLowerCase() &&
             ((!x.karkhanaId && kGodown === 'k_main') || String(x.karkhanaId) === String(kGodown)));
         return item ? safeNum(item.bacha) : 0;
+    };
+
+    const getSanchaStockList = (category, kGodown, queryText = '') => {
+        const rawSancha = toArray(getFromStore('sancha_items'));
+        const q = String(queryText || '').trim().toLowerCase();
+        const catTarget = String(category || 'tani').toLowerCase();
+        const seen = new Map();
+
+        rawSancha.forEach((s) => {
+            if (!s || !s.name) return;
+            const cat = String(s.category || 'tani').toLowerCase();
+            if (cat !== catTarget) return;
+
+            const matchKid = !kGodown || (!s.karkhanaId && kGodown === 'k_main') || String(s.karkhanaId) === String(kGodown);
+            if (!matchKid) return;
+
+            const nm = s.name.trim();
+            const key = nm.toLowerCase();
+            if (q && !key.includes(q)) return;
+
+            const bacha = safeNum(s.bacha !== undefined ? s.bacha : (safeNum(s.aaya) - safeNum(s.gaya)));
+            if (seen.has(key)) {
+                seen.get(key).bacha += bacha;
+            } else {
+                seen.set(key, { name: nm, bacha });
+            }
+        });
+
+        return Array.from(seen.values());
     };
 
     const getKarigerExpressDatalists = () => {
@@ -239,10 +293,10 @@
                 font-size: 11px; font-weight: 800; color: #92400e;
                 text-transform: uppercase; letter-spacing: 0.6px;
                 border-bottom: 1px solid #eadab0;
-                padding-bottom: 4px; margin: 12px 0 8px 0;
+                padding-bottom: 4px; margin: 11px 0 8px 0;
             }
             .kexp-row {
-                display: grid; grid-template-columns: 155px 1fr;
+                display: grid; grid-template-columns: 150px 1fr;
                 align-items: center; gap: 10px; margin-bottom: 7px;
             }
             .kexp-row-2 {
@@ -260,7 +314,7 @@
                 width: 100%; box-sizing: border-box;
                 padding: 6px 10px;
                 border: 1px solid #d1d5db; border-radius: 4px;
-                font-size: 13.5px; font-weight: 700; color: #111827;
+                font-size: 13px; font-weight: 700; color: #111827;
                 background: #ffffff; outline: none;
                 transition: border-color 0.12s, background 0.12s;
             }
@@ -281,7 +335,7 @@
                 display: flex; justify-content: space-between; align-items: center;
             }
             .kexp-picker-list {
-                flex: 1; overflow-y: auto; max-height: 360px;
+                flex: 1; overflow-y: auto; max-height: 390px;
             }
             .kexp-picker-item {
                 padding: 7px 12px; font-size: 12.5px; font-weight: 600; color: #1f2937;
@@ -316,6 +370,11 @@
                 cursor: pointer;
             }
             .kexp-btn-sec:hover { border-color: #d9a425; background: #fef9ea; }
+            .kexp-accept-bar {
+                background: #fdf6e2; border: 1.5px solid #d9a425; border-radius: 5px;
+                padding: 8px 12px; margin-top: 10px;
+                display: flex; justify-content: space-between; align-items: center; gap: 10px;
+            }
         `;
         document.head.appendChild(style);
     };
@@ -466,10 +525,8 @@
                             <span id="kexp-right-hint" style="font-size:11px; color:#6b7280; font-weight:600;">&uarr;&darr; + Enter</span>
                         </div>
 
-                        <!-- Dynamic Picker List (Visible when Kariger / Bana / Zari focused) -->
                         <div id="kexp-right-picker" class="kexp-picker-list"></div>
 
-                        <!-- Weaver Snapshot Banner (Always in DOM, visible when entering quantities) -->
                         <div id="kexp-weaver-banner" style="display:none; padding:12px; font-size:12.5px; line-height:1.5; flex:1; overflow-y:auto;">
                             <span style="color:#6b7280;">Kariger chunein — tani ka poora hisab aur 8 colors yahan dikhenge.</span>
                         </div>
@@ -494,7 +551,7 @@
     };
 
     /* ========================================================================
-       4. RIGHT-PANE CONTEXTUAL PICKER (TALLY LIST OF KARIGERS / STOCK)
+       4. MAIN VOUCHER RIGHT-PANE CONTEXTUAL PICKER
        ------------------------------------------------------------------------
     ======================================================================== */
     const showRightPicker = (mode, queryText) => {
@@ -764,133 +821,434 @@
     };
 
     /* ========================================================================
-       6. ALT + C MODAL: NEW WEAVER SETUP (TALLY WHITE & GOLD)
+       6. ALT + C MODAL: 2-COLUMN TALLY NAYA KARIGER & TANI 1 SETUP
        ------------------------------------------------------------------------
     ======================================================================== */
+    const ALTC_FIELD_ORDER = [
+        'altc-kar-name',
+        'altc-kar-godown',
+        'altc-kar-saree',
+        'altc-kar-mobile',
+        'altc-kar-mohalla',
+        'altc-kar-date',
+        'altc-tani-item',
+        'altc-tani-sancha',
+        'altc-tani-wazan',
+        'altc-tani-pcs',
+        'altc-chukka-item',
+        'altc-chukka-sancha',
+        'altc-chukka-wazan',
+        'altc-chukka-pcs',
+        'altc-rate-bani',
+        'altc-rate-bana',
+        'altc-rate-zari',
+        'altc-col-1',
+        'altc-col-2',
+        'altc-col-3',
+        'altc-col-4',
+        'altc-col-5',
+        'altc-col-6',
+        'altc-col-7',
+        'altc-col-8'
+    ];
+
+    const moveAltCField = (currentId, dir) => {
+        const idx = ALTC_FIELD_ORDER.indexOf(currentId);
+        if (idx === -1) return;
+        const nextIdx = idx + dir;
+        if (nextIdx >= 0 && nextIdx < ALTC_FIELD_ORDER.length) {
+            const el = document.getElementById(ALTC_FIELD_ORDER[nextIdx]);
+            if (el) {
+                el.focus();
+                if (typeof el.select === 'function') el.select();
+            }
+        }
+    };
+
+    const getSelectedAltcKarkhanaObj = () => {
+        const karkhanas = getSafeKarkhanas();
+        const inp = document.getElementById('altc-kar-godown');
+        const kidAttr = inp ? inp.getAttribute('data-kid') : '';
+        const val = String(inp?.value || '').trim().toLowerCase();
+
+        let matched = null;
+        if (kidAttr) {
+            matched = karkhanas.find(k => String(k.id) === String(kidAttr));
+        }
+        if (!matched && val) {
+            matched = karkhanas.find(k => String(k.name).trim().toLowerCase() === val);
+        }
+        if (!matched && val) {
+            matched = karkhanas.find(k => String(k.name).trim().toLowerCase().includes(val));
+        }
+        return matched || karkhanas[0];
+    };
+
+    const showAltCRightPicker = (mode, queryText) => {
+        altcPickerMode = mode;
+        const pickerEl = document.getElementById('altc-right-picker');
+        const previewEl = document.getElementById('altc-right-preview');
+        const titleEl = document.getElementById('altc-right-title');
+        const hintEl = document.getElementById('altc-right-hint');
+        if (!pickerEl || !previewEl) return;
+
+        if (mode === 'preview') {
+            pickerEl.style.display = 'none';
+            previewEl.style.display = 'block';
+            if (titleEl) titleEl.textContent = 'Account Preview';
+            if (hintEl) hintEl.textContent = 'Live Summary';
+            updateAltCAccountPreview();
+            return;
+        }
+
+        pickerEl.style.display = 'block';
+        previewEl.style.display = 'none';
+
+        const q = String(queryText || '').trim().toLowerCase();
+        const activeK = getSelectedAltcKarkhanaObj();
+        const activeKid = activeK ? activeK.id : 'k_main';
+        altcPickerItems = [];
+
+        if (mode === 'dup_kariger') {
+            if (titleEl) titleEl.textContent = 'Existing Karigers (Check)';
+            if (hintEl) hintEl.textContent = 'Duplicate Check';
+            const list = toArray(getFromStore('kariger_list')).filter(k => k && k.name);
+            list.forEach((k) => {
+                const nm = String(k.name || '').trim();
+                if (!q || nm.toLowerCase().includes(q)) {
+                    altcPickerItems.push({
+                        label: nm,
+                        sub: k.saree || 'Kariger',
+                        data: k,
+                        readOnly: true
+                    });
+                }
+            });
+        } else if (mode === 'karkhana') {
+            if (titleEl) titleEl.textContent = 'List of Karkhanas';
+            if (hintEl) hintEl.textContent = '↑↓ + Enter';
+            const list = getSafeKarkhanas();
+            list.forEach((k) => {
+                if (!q || String(k.name).toLowerCase().includes(q)) {
+                    altcPickerItems.push({
+                        label: k.name,
+                        sub: (k.id === 'k_main' || k.isDefault) ? 'Default' : 'Branch',
+                        data: k
+                    });
+                }
+            });
+        } else if (mode === 'design') {
+            if (titleEl) titleEl.textContent = 'List of Saree Designs';
+            if (hintEl) hintEl.textContent = '↑↓ + Enter or Type New';
+            const seen = new Set();
+            const addDesign = (d) => {
+                const nm = String(d || '').trim();
+                if (!nm) return;
+                const key = nm.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                if (!q || key.includes(q)) {
+                    altcPickerItems.push({ label: nm, sub: 'Design', data: nm });
+                }
+            };
+            toArray(getFromStore('kariger_list')).forEach(k => k && addDesign(k.saree));
+            toArray(getFromStore('saree_history')).forEach(s => s && addDesign(s.sareeName));
+        } else if (mode === 'tani') {
+            if (titleEl) titleEl.textContent = `List of Tani Stock (${activeK?.name || 'Godown'})`;
+            if (hintEl) hintEl.textContent = '↑↓ + Enter';
+            const list = getSanchaStockList('tani', activeKid, q);
+            list.forEach((item) => {
+                altcPickerItems.push({
+                    label: item.name,
+                    sub: `${item.bacha.toFixed(2)} Kg`,
+                    data: item.name
+                });
+            });
+        } else if (mode === 'chukka') {
+            if (titleEl) titleEl.textContent = `List of Chukka Stock (${activeK?.name || 'Godown'})`;
+            if (hintEl) hintEl.textContent = '↑↓ + Enter';
+            const list = getSanchaStockList('chukka', activeKid, q);
+            list.forEach((item) => {
+                altcPickerItems.push({
+                    label: item.name,
+                    sub: `${item.bacha.toFixed(2)} Kg`,
+                    data: item.name
+                });
+            });
+        }
+
+        if (altcPickerActiveIdx >= altcPickerItems.length) altcPickerActiveIdx = 0;
+        if (altcPickerActiveIdx < 0) altcPickerActiveIdx = 0;
+        renderAltCRightPickerList();
+    };
+
+    const renderAltCRightPickerList = () => {
+        const pickerEl = document.getElementById('altc-right-picker');
+        if (!pickerEl) return;
+
+        if (!altcPickerItems.length) {
+            const emptyMsg = altcPickerMode === 'dup_kariger'
+                ? 'Koi matching purana Kariger nahi mila (Naya naam safe hai).'
+                : (altcPickerMode === 'design'
+                    ? 'Naya Saree Design seedha type karein.'
+                    : 'Is Godam me koi stock item nahi mila.');
+            pickerEl.innerHTML = `<div style="padding:18px 12px; text-align:center; color:#6b7280; font-size:12px;">${emptyMsg}</div>`;
+            return;
+        }
+
+        let html = '';
+        altcPickerItems.forEach((item, idx) => {
+            const isHighlighted = !item.readOnly && idx === altcPickerActiveIdx;
+            const cls = isHighlighted ? 'kexp-picker-item active' : 'kexp-picker-item';
+            const actionAttr = item.readOnly
+                ? ''
+                : `onmousedown="event.preventDefault(); window.__altcPickItem(${idx})"`;
+
+            html += `<div class="${cls}" ${actionAttr}>
+                <span>${esc(item.label)}</span>
+                <span class="kexp-picker-sub">${esc(item.sub)}</span>
+            </div>`;
+        });
+        pickerEl.innerHTML = html;
+
+        const activeEl = pickerEl.querySelector('.kexp-picker-item.active');
+        if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+    };
+
+    window.__altcPickItem = (idx) => {
+        const item = altcPickerItems[idx];
+        if (!item || item.readOnly) return;
+
+        if (altcPickerMode === 'karkhana') {
+            const k = item.data;
+            const inp = document.getElementById('altc-kar-godown');
+            if (inp) {
+                inp.value = k.name;
+                inp.setAttribute('data-kid', k.id);
+            }
+            moveAltCField('altc-kar-godown', 1);
+        } else if (altcPickerMode === 'design') {
+            const inp = document.getElementById('altc-kar-saree');
+            if (inp) inp.value = item.data;
+            moveAltCField('altc-kar-saree', 1);
+        } else if (altcPickerMode === 'tani') {
+            const inp = document.getElementById('altc-tani-item');
+            if (inp) inp.value = item.data;
+            moveAltCField('altc-tani-item', 1);
+        } else if (altcPickerMode === 'chukka') {
+            const inp = document.getElementById('altc-chukka-item');
+            if (inp) inp.value = item.data;
+            moveAltCField('altc-chukka-item', 1);
+        }
+        updateAltCAccountPreview();
+    };
+
+    const updateAltCAccountPreview = () => {
+        const previewEl = document.getElementById('altc-right-preview');
+        if (!previewEl) return;
+
+        const nm = String(document.getElementById('altc-kar-name')?.value || '').trim().toUpperCase() || '-';
+        const godownObj = getSelectedAltcKarkhanaObj();
+        const saree = String(document.getElementById('altc-kar-saree')?.value || '').trim() || 'General Saree';
+        const mobile = String(document.getElementById('altc-kar-mobile')?.value || '').trim() || '-';
+        const mohalla = String(document.getElementById('altc-kar-mohalla')?.value || '').trim() || '-';
+        const joinDate = document.getElementById('altc-kar-date')?.value || getToday();
+        const taniItem = String(document.getElementById('altc-tani-item')?.value || '').trim() || '-';
+        const taniPcs = safeNum(document.getElementById('altc-tani-pcs')?.value, 72);
+        const rateBani = safeNum(document.getElementById('altc-rate-bani')?.value, 240);
+
+        previewEl.innerHTML = `
+            <div style="border-bottom:1px solid #eadab0; padding-bottom:8px; margin-bottom:8px;">
+                <div style="font-size:14px; font-weight:800; color:#1f2937;">${esc(nm)}</div>
+                <div style="font-size:11.5px; color:#6b7280;">Group: <strong style="color:#b47d00;">Kariger (Weaver)</strong></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Karkhana:</span><strong>${esc(godownObj?.name || 'Main Godown')}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Saree Design:</span><strong>${esc(saree)}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Mobile:</span><strong>${esc(mobile)}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Mohalla:</span><strong>${esc(mohalla)}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Join Date:</span><strong>${esc(joinDate)}</strong>
+            </div>
+            <div style="background:#fdf6e2; border:1px solid #e5d5a7; border-radius:4px; padding:8px; margin-top:10px; font-size:12px;">
+                <div>Tani 1: <strong>${esc(taniItem)}</strong> (${taniPcs} Pcs)</div>
+                <div style="margin-top:3px;">Bani Rate: <strong style="color:#b47d00;">₹ ${rateBani.toFixed(2)} / Saree</strong></div>
+            </div>
+        `;
+    };
+
+    const showAltcAcceptPrompt = (show) => {
+        const bar = document.getElementById('altc-accept-strip');
+        if (!bar) return;
+        bar.style.display = show ? 'flex' : 'none';
+        if (show) {
+            const yesBtn = document.getElementById('altc-accept-yes');
+            if (yesBtn) yesBtn.focus();
+        }
+    };
+
     window.openAltCKarigerModal = () => {
         ensureTallyExpressStyles();
         const existing = document.getElementById('alt-c-kariger-modal');
         if (existing) existing.remove();
 
+        altcPickerMode = 'dup_kariger';
+        altcPickerItems = [];
+        altcPickerActiveIdx = 0;
+        altcPickerArrowUsed = false;
+
         const { taniOpts, chukkaOpts } = getKarigerExpressDatalists();
         const activeKid = (selectedKariger && selectedKariger.karkhanaId) ? selectedKariger.karkhanaId : 'k_main';
-
-        let karkhanas = (typeof window.getKarkhanasSafe === 'function')
-            ? window.getKarkhanasSafe()
-            : toArray(getFromStore('karkhana_list'));
-        if (!karkhanas.length) karkhanas = [{ id: 'k_main', name: 'Main Godown', isDefault: true }];
-
-        let karkhanaOptions = '';
-        karkhanas.forEach((k) => {
-            const isSel = (String(k.id) === String(activeKid));
-            karkhanaOptions += `<option value="${esc(k.id)}" ${isSel ? 'selected' : ''}>${esc(k.name)}</option>`;
-        });
+        const karkhanas = getSafeKarkhanas();
+        const defaultK = karkhanas.find(k => String(k.id) === String(activeKid)) || karkhanas[0];
+        const today = getToday();
 
         const modalHtml = `
         <div id="alt-c-kariger-modal" class="kexp-overlay" style="z-index:1000005;">
-            <div class="kexp-card" style="max-width:720px;">
+            <div class="kexp-card" style="max-width:940px;">
 
                 <div class="kexp-header">
                     <div>
-                        <h3 class="kexp-title">Naya Kariger &amp; Tani 1 Setup (Alt+C)</h3>
-                        <span style="font-size:11px; color:#6b7280;">[Enter] Next Field &bull; [Ctrl+Enter] Save &amp; Load &bull; [Esc] Close</span>
+                        <h3 class="kexp-title">Naya Kariger &amp; Tani 1 Setup (Tally Style &bull; Alt+C)</h3>
+                        <span style="font-size:11px; color:#6b7280;">[Enter] Next &bull; [Shift+Enter] Prev &bull; [&uarr;&darr;] Select List &bull; [Ctrl+Enter] Save &bull; [Esc] Back</span>
                     </div>
-                    <button type="button" class="kexp-pill-btn" onclick="closeAltCKarigerModal()">&larr; [Esc] Cancel</button>
+                    <button type="button" class="kexp-pill-btn" onclick="closeAltCKarigerModal()">&larr; [Esc] Back</button>
                 </div>
 
-                <div style="padding:14px 18px; overflow-y:auto; flex:1;">
-                    <div class="kexp-sec-title" style="margin-top:0;">1. Kariger Master Details</div>
-                    <div class="kexp-row-2">
-                        <div class="kexp-mini-row">
+                <div class="kexp-body">
+
+                    <!-- LEFT PANE: FULL PROFILE CREATION + TANI 1 SETUP -->
+                    <div>
+                        <div class="kexp-sec-title" style="margin-top:0;">1. Kariger Master Details</div>
+                        <div class="kexp-row">
                             <label class="kexp-lbl">Kariger Name :</label>
-                            <input type="text" id="altc-kar-name" data-altc-next="altc-kar-saree" placeholder="Jaise: GUDDU ANSARI" autocomplete="off" class="kexp-inp" style="border-color:#d9a425;">
+                            <input type="text" id="altc-kar-name" placeholder="Jaise: FARHAN" autocomplete="off" class="kexp-inp" style="border-color:#d9a425;">
                         </div>
-                        <div class="kexp-mini-row">
-                            <label class="kexp-lbl">Saree Design :</label>
-                            <input type="text" id="altc-kar-saree" data-altc-next="altc-kar-mobile" placeholder="Jaise: Satan" class="kexp-inp">
+                        <div class="kexp-row-2">
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Karkhana :</label>
+                                <input type="text" id="altc-kar-godown" value="${esc(defaultK.name)}" data-kid="${esc(defaultK.id)}" placeholder="Select Karkhana..." autocomplete="off" class="kexp-inp">
+                            </div>
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Saree Design :</label>
+                                <input type="text" id="altc-kar-saree" placeholder="Jaise: Banarasi Katan" autocomplete="off" class="kexp-inp">
+                            </div>
                         </div>
-                    </div>
-                    <div class="kexp-row-2">
-                        <div class="kexp-mini-row">
-                            <label class="kexp-lbl">Mobile No. :</label>
-                            <input type="tel" id="altc-kar-mobile" data-altc-next="altc-kar-godown" placeholder="10-digit Mobile" class="kexp-inp">
+                        <div class="kexp-row-2">
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Mobile No. :</label>
+                                <input type="tel" id="altc-kar-mobile" placeholder="10-digit Mobile" class="kexp-inp">
+                            </div>
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Address / Mohalla :</label>
+                                <input type="text" id="altc-kar-mohalla" placeholder="Mohalla / City" class="kexp-inp">
+                            </div>
                         </div>
-                        <div class="kexp-mini-row">
-                            <label class="kexp-lbl">Karkhana :</label>
-                            <select id="altc-kar-godown" data-altc-next="altc-tani-item" class="kexp-inp">${karkhanaOptions}</select>
+                        <div class="kexp-row">
+                            <label class="kexp-lbl">Join Date :</label>
+                            <input type="date" id="altc-kar-date" value="${today}" class="kexp-inp">
+                        </div>
+
+                        <div class="kexp-sec-title">2. Taana &amp; Chukka Setup (Tani 1)</div>
+                        <div style="display:grid; grid-template-columns:1.4fr 1fr 0.8fr 0.8fr; gap:8px; margin-bottom:8px;">
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Tani Item :</label>
+                                <input type="text" id="altc-tani-item" placeholder="Select Tani..." autocomplete="off" class="kexp-inp" style="font-size:12px;">
+                                <datalist id="altc-tani-dl">${taniOpts}</datalist>
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Sancha Maker :</label>
+                                <input type="text" id="altc-tani-sancha" placeholder="Jaise: Azhar" class="kexp-inp" style="font-size:12px;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Wazan (Kg) :</label>
+                                <input type="number" step="0.01" id="altc-tani-wazan" placeholder="0.00" class="kexp-inp kexp-inp-num" style="font-size:12px;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Tani Saree :</label>
+                                <input type="number" id="altc-tani-pcs" value="72" class="kexp-inp kexp-inp-num" style="font-size:12px;">
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:1.4fr 1fr 0.8fr 0.8fr; gap:8px;">
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Chukka Item :</label>
+                                <input type="text" id="altc-chukka-item" placeholder="Select Chukka..." autocomplete="off" class="kexp-inp" style="font-size:12px;">
+                                <datalist id="altc-chukka-dl">${chukkaOpts}</datalist>
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Chukka Maker :</label>
+                                <input type="text" id="altc-chukka-sancha" placeholder="Jaise: Arman" class="kexp-inp" style="font-size:12px;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Wazan (Kg) :</label>
+                                <input type="number" step="0.01" id="altc-chukka-wazan" placeholder="0.00" class="kexp-inp kexp-inp-num" style="font-size:12px;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Chukka Pcs :</label>
+                                <input type="number" id="altc-chukka-pcs" value="72" class="kexp-inp kexp-inp-num" style="font-size:12px;">
+                            </div>
+                        </div>
+
+                        <div class="kexp-sec-title">3. Mazdoori &amp; Consumption Rates</div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Bani Rate (₹/Saree) :</label>
+                                <input type="number" id="altc-rate-bani" value="240" class="kexp-inp kexp-inp-num">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Bana Rate (Kg/Saree) :</label>
+                                <input type="number" step="0.001" id="altc-rate-bana" value="0.311" class="kexp-inp kexp-inp-num">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Zari Rate (Kg/Saree) :</label>
+                                <input type="number" step="0.001" id="altc-rate-zari" value="0.110" class="kexp-inp kexp-inp-num">
+                            </div>
+                        </div>
+
+                        <div class="kexp-sec-title">4. Tani Ke 8 Colors (Optional)</div>
+                        <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; margin-bottom:6px;">
+                            <input type="text" id="altc-col-1" placeholder="1. Rani" class="kexp-inp" style="font-size:12px;">
+                            <input type="text" id="altc-col-2" placeholder="2. Lal" class="kexp-inp" style="font-size:12px;">
+                            <input type="text" id="altc-col-3" placeholder="3. Mehendi" class="kexp-inp" style="font-size:12px;">
+                            <input type="text" id="altc-col-4" placeholder="4. Blue" class="kexp-inp" style="font-size:12px;">
+                        </div>
+                        <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px;">
+                            <input type="text" id="altc-col-5" placeholder="5. Peela" class="kexp-inp" style="font-size:12px;">
+                            <input type="text" id="altc-col-6" placeholder="6. Wine" class="kexp-inp" style="font-size:12px;">
+                            <input type="text" id="altc-col-7" placeholder="7. Firozi" class="kexp-inp" style="font-size:12px;">
+                            <input type="text" id="altc-col-8" placeholder="8. Mungia" class="kexp-inp" style="font-size:12px;">
+                        </div>
+
+                        <!-- Tally Accept? (Yes / No) Confirmation Bar -->
+                        <div id="altc-accept-strip" class="kexp-accept-bar" style="display:none;">
+                            <span style="font-size:13px; font-weight:800; color:#1f2937;">Accept? Naya Kariger Save Karein?</span>
+                            <div style="display:flex; gap:8px;">
+                                <button type="button" id="altc-accept-yes" class="kexp-btn-save" style="padding:5px 14px;" onclick="saveAltCKariger()">Yes [Y / Enter]</button>
+                                <button type="button" id="altc-accept-no" class="kexp-btn-sec" style="padding:5px 14px;" onclick="window.__altcCancelAccept()">No [N / Esc]</button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="kexp-sec-title">2. Taana &amp; Sancha Setup (Tani 1)</div>
-                    <div style="display:grid; grid-template-columns:1.4fr 1fr 0.8fr 0.8fr; gap:8px; margin-bottom:8px;">
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Tani Item :</label>
-                            <input type="text" id="altc-tani-item" list="altc-tani-dl" data-altc-next="altc-tani-sancha" placeholder="Tani Item..." class="kexp-inp" style="font-size:12px;">
-                            <datalist id="altc-tani-dl">${taniOpts}</datalist>
+                    <!-- RIGHT PANE: TALLY CONTEXTUAL LIST / LIVE PREVIEW -->
+                    <div class="kexp-right-panel">
+                        <div class="kexp-right-head">
+                            <span id="altc-right-title">Existing Karigers (Check)</span>
+                            <span id="altc-right-hint" style="font-size:11px; color:#6b7280; font-weight:600;">Duplicate Check</span>
                         </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Sancha Maker :</label>
-                            <input type="text" id="altc-tani-sancha" data-altc-next="altc-tani-wazan" placeholder="Jaise: Azhar" class="kexp-inp" style="font-size:12px;">
-                        </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Wazan (Kg) :</label>
-                            <input type="number" step="0.01" id="altc-tani-wazan" data-altc-next="altc-tani-pcs" placeholder="0.00" class="kexp-inp" style="font-size:12px;">
-                        </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Tani Saree :</label>
-                            <input type="number" id="altc-tani-pcs" value="72" data-altc-next="altc-chukka-item" class="kexp-inp" style="font-size:12px;">
-                        </div>
+
+                        <div id="altc-right-picker" class="kexp-picker-list"></div>
+
+                        <div id="altc-right-preview" style="display:none; padding:12px; font-size:12.5px; flex:1; overflow-y:auto;"></div>
                     </div>
 
-                    <div style="display:grid; grid-template-columns:1.4fr 1fr 0.8fr 0.8fr; gap:8px;">
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Chukka Item :</label>
-                            <input type="text" id="altc-chukka-item" list="altc-chukka-dl" data-altc-next="altc-chukka-sancha" placeholder="Chukka Item..." class="kexp-inp" style="font-size:12px;">
-                            <datalist id="altc-chukka-dl">${chukkaOpts}</datalist>
-                        </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Chukka Maker :</label>
-                            <input type="text" id="altc-chukka-sancha" data-altc-next="altc-chukka-wazan" placeholder="Jaise: Arman" class="kexp-inp" style="font-size:12px;">
-                        </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Wazan (Kg) :</label>
-                            <input type="number" step="0.01" id="altc-chukka-wazan" data-altc-next="altc-chukka-pcs" placeholder="0.00" class="kexp-inp" style="font-size:12px;">
-                        </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Chukka Pcs :</label>
-                            <input type="number" id="altc-chukka-pcs" value="72" data-altc-next="altc-rate-bani" class="kexp-inp" style="font-size:12px;">
-                        </div>
-                    </div>
-
-                    <div class="kexp-sec-title">3. Mazdoori &amp; Consumption Rates</div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Bani Rate (₹/Saree) :</label>
-                            <input type="number" id="altc-rate-bani" value="240" data-altc-next="altc-rate-bana" class="kexp-inp">
-                        </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Bana Rate (Kg/Saree) :</label>
-                            <input type="number" step="0.001" id="altc-rate-bana" value="0.311" data-altc-next="altc-rate-zari" class="kexp-inp">
-                        </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Zari Rate (Kg/Saree) :</label>
-                            <input type="number" step="0.001" id="altc-rate-zari" value="0.110" data-altc-next="altc-col-1" class="kexp-inp">
-                        </div>
-                    </div>
-
-                    <div class="kexp-sec-title">4. Tani Ke 8 Colors (Optional)</div>
-                    <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; margin-bottom:6px;">
-                        <input type="text" id="altc-col-1" data-altc-next="altc-col-2" placeholder="1. Rani" class="kexp-inp" style="font-size:12px;">
-                        <input type="text" id="altc-col-2" data-altc-next="altc-col-3" placeholder="2. Lal" class="kexp-inp" style="font-size:12px;">
-                        <input type="text" id="altc-col-3" data-altc-next="altc-col-4" placeholder="3. Mehendi" class="kexp-inp" style="font-size:12px;">
-                        <input type="text" id="altc-col-4" data-altc-next="altc-col-5" placeholder="4. Blue" class="kexp-inp" style="font-size:12px;">
-                    </div>
-                    <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px;">
-                        <input type="text" id="altc-col-5" data-altc-next="altc-col-6" placeholder="5. Peela" class="kexp-inp" style="font-size:12px;">
-                        <input type="text" id="altc-col-6" data-altc-next="altc-col-7" placeholder="6. Wine" class="kexp-inp" style="font-size:12px;">
-                        <input type="text" id="altc-col-7" data-altc-next="altc-col-8" placeholder="7. Firozi" class="kexp-inp" style="font-size:12px;">
-                        <input type="text" id="altc-col-8" placeholder="8. Mungia" class="kexp-inp" style="font-size:12px;">
-                    </div>
                 </div>
 
                 <div class="kexp-footer">
@@ -903,30 +1261,105 @@
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-        const altCModal = document.getElementById('alt-c-kariger-modal');
-        if (altCModal) {
-            altCModal.querySelectorAll('[data-altc-next]').forEach((el) => {
-                el.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' && !e.ctrlKey) {
-                        e.preventDefault();
-                        const nextEl = document.getElementById(el.getAttribute('data-altc-next'));
-                        if (nextEl) {
-                            nextEl.focus();
-                            if (typeof nextEl.select === 'function') nextEl.select();
-                        }
-                    }
-                });
+        window.__altcCancelAccept = () => {
+            showAltcAcceptPrompt(false);
+            document.getElementById('altc-col-8')?.focus();
+        };
+
+        const yesBtn = document.getElementById('altc-accept-yes');
+        if (yesBtn) {
+            yesBtn.addEventListener('keydown', (e) => {
+                if (e.key === 'y' || e.key === 'Y' || e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    saveAltCKariger();
+                } else if (e.key === 'n' || e.key === 'N' || e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.__altcCancelAccept();
+                }
             });
-            const col8 = document.getElementById('altc-col-8');
-            if (col8) {
-                col8.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        saveAltCKariger();
-                    }
-                });
-            }
         }
+
+        const pickerFocusMap = {
+            'altc-kar-name': 'dup_kariger',
+            'altc-kar-godown': 'karkhana',
+            'altc-kar-saree': 'design',
+            'altc-tani-item': 'tani',
+            'altc-chukka-item': 'chukka'
+        };
+
+        ALTC_FIELD_ORDER.forEach((fid) => {
+            const el = document.getElementById(fid);
+            if (!el) return;
+
+            el.addEventListener('focus', () => {
+                altcPickerArrowUsed = false;
+                altcPickerActiveIdx = 0;
+                const mode = pickerFocusMap[fid] || 'preview';
+                const qVal = (fid === 'altc-kar-godown') ? '' : el.value;
+                showAltCRightPicker(mode, qVal);
+            });
+
+            el.addEventListener('input', () => {
+                if (fid === 'altc-kar-godown') {
+                    el.removeAttribute('data-kid');
+                    altcPickerArrowUsed = true;
+                } else if (fid === 'altc-tani-item' || fid === 'altc-chukka-item' || fid === 'altc-kar-saree') {
+                    // Only treat as list selection if user presses arrows or clicks
+                }
+                altcPickerActiveIdx = 0;
+                const mode = pickerFocusMap[fid] || 'preview';
+                showAltCRightPicker(mode, el.value);
+            });
+
+            el.addEventListener('keydown', (e) => {
+                const mode = pickerFocusMap[fid];
+                const isNavList = (mode === 'karkhana' || mode === 'design' || mode === 'tani' || mode === 'chukka');
+
+                if (isNavList && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                    if (altcPickerItems.length) {
+                        e.preventDefault();
+                        altcPickerArrowUsed = true;
+                        if (e.key === 'ArrowDown') {
+                            altcPickerActiveIdx = (altcPickerActiveIdx + 1) % altcPickerItems.length;
+                        } else {
+                            altcPickerActiveIdx = (altcPickerActiveIdx - 1 + altcPickerItems.length) % altcPickerItems.length;
+                        }
+                        renderAltCRightPickerList();
+                    }
+                    return;
+                }
+
+                if (e.key === 'Enter' && !e.ctrlKey) {
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        moveAltCField(fid, -1);
+                        return;
+                    }
+
+                    // For Karkhana: pick matched/highlighted if user typed or navigated
+                    if (fid === 'altc-kar-godown' && altcPickerArrowUsed && altcPickerItems.length) {
+                        window.__altcPickItem(altcPickerActiveIdx);
+                        return;
+                    }
+
+                    // For Design / Tani / Chukka: only pick from list if user navigated with arrows
+                    if ((fid === 'altc-kar-saree' || fid === 'altc-tani-item' || fid === 'altc-chukka-item') &&
+                        altcPickerArrowUsed && altcPickerItems.length) {
+                        window.__altcPickItem(altcPickerActiveIdx);
+                        return;
+                    }
+
+                    if (fid === 'altc-col-8') {
+                        showAltcAcceptPrompt(true);
+                        return;
+                    }
+
+                    moveAltCField(fid, 1);
+                }
+            });
+        });
 
         setTimeout(() => { document.getElementById('altc-kar-name')?.focus(); }, 80);
     };
@@ -942,9 +1375,15 @@
         const name = String(nameInp?.value || '').trim().toUpperCase();
         const saree = String(document.getElementById('altc-kar-saree')?.value || '').trim();
         const mobile = String(document.getElementById('altc-kar-mobile')?.value || '').trim();
-        const kGodown = document.getElementById('altc-kar-godown')?.value || 'k_main';
+        const mohalla = String(document.getElementById('altc-kar-mohalla')?.value || '').trim();
+        const joinDate = document.getElementById('altc-kar-date')?.value || getToday();
+
+        const godownObj = getSelectedAltcKarkhanaObj();
+        const kGodown = godownObj ? godownObj.id : 'k_main';
+        const kGodownName = godownObj ? godownObj.name : 'Main Godown';
 
         if (!name) {
+            showAltcAcceptPrompt(false);
             alert('Kripya naye Kariger ka naam likhein!');
             nameInp?.focus();
             return;
@@ -959,8 +1398,10 @@
             name: name,
             saree: saree || 'General Saree',
             mobile: mobile,
-            date: getToday(),
-            karkhanaId: kGodown
+            mohalla: mohalla,
+            date: joinDate,
+            karkhanaId: kGodown,
+            karkhanaName: kGodownName
         };
         list.push(newKarObj);
         setToStore('kariger_list', list);
@@ -1023,6 +1464,10 @@
             deductSanchaStockItem(chukkaItem, 'chukka', chukkaWazan, kGodown, `${newKarigerId}_tani_1_c`, name);
         }
 
+        if (typeof window.updateDashboardBadgeTotals === 'function') {
+            window.updateDashboardBadgeTotals();
+        }
+
         closeAltCKarigerModal();
 
         const kInp = document.getElementById('kexp-kariger-input');
@@ -1046,9 +1491,97 @@
     };
 
     /* ========================================================================
-       7. NAYI TANI MODAL (TALLY WHITE & GOLD)
+       7. NAYI TANI MODAL (2-COLUMN TALLY WHITE & GOLD WITH PICKER)
        ------------------------------------------------------------------------
     ======================================================================== */
+    const NTANI_FIELD_ORDER = [
+        'ntani-tani-item',
+        'ntani-tani-sancha',
+        'ntani-tani-wazan',
+        'ntani-tani-pcs',
+        'ntani-rate-bani',
+        'ntani-rate-bana',
+        'ntani-rate-zari'
+    ];
+
+    const moveNtaniField = (currentId, dir) => {
+        const idx = NTANI_FIELD_ORDER.indexOf(currentId);
+        if (idx === -1) return;
+        const nextIdx = idx + dir;
+        if (nextIdx >= 0 && nextIdx < NTANI_FIELD_ORDER.length) {
+            const el = document.getElementById(NTANI_FIELD_ORDER[nextIdx]);
+            if (el) {
+                el.focus();
+                if (typeof el.select === 'function') el.select();
+            }
+        }
+    };
+
+    const showNtaniRightPicker = (mode, queryText) => {
+        ntaniPickerMode = mode;
+        const pickerEl = document.getElementById('ntani-right-picker');
+        const previewEl = document.getElementById('ntani-right-preview');
+        const titleEl = document.getElementById('ntani-right-title');
+        const hintEl = document.getElementById('ntani-right-hint');
+        if (!pickerEl || !previewEl) return;
+
+        if (mode === 'preview') {
+            pickerEl.style.display = 'none';
+            previewEl.style.display = 'block';
+            if (titleEl) titleEl.textContent = 'Carry Forward & Tani Summary';
+            if (hintEl) hintEl.textContent = 'Preview';
+            return;
+        }
+
+        pickerEl.style.display = 'block';
+        previewEl.style.display = 'none';
+        if (titleEl) titleEl.textContent = 'List of Tani Stock';
+        if (hintEl) hintEl.textContent = '↑↓ + Enter';
+
+        const kGodown = selectedKariger ? (selectedKariger.karkhanaId || 'k_main') : 'k_main';
+        const list = getSanchaStockList('tani', kGodown, queryText);
+        ntaniPickerItems = list.map(item => ({
+            label: item.name,
+            sub: `${item.bacha.toFixed(2)} Kg`,
+            data: item.name
+        }));
+
+        if (ntaniPickerActiveIdx >= ntaniPickerItems.length) ntaniPickerActiveIdx = 0;
+        if (ntaniPickerActiveIdx < 0) ntaniPickerActiveIdx = 0;
+        renderNtaniRightPickerList();
+    };
+
+    const renderNtaniRightPickerList = () => {
+        const pickerEl = document.getElementById('ntani-right-picker');
+        if (!pickerEl) return;
+
+        if (!ntaniPickerItems.length) {
+            pickerEl.innerHTML = `<div style="padding:18px 12px; text-align:center; color:#6b7280; font-size:12px;">Is Godam me koi Tani stock item nahi mila.</div>`;
+            return;
+        }
+
+        let html = '';
+        ntaniPickerItems.forEach((item, idx) => {
+            const cls = idx === ntaniPickerActiveIdx ? 'kexp-picker-item active' : 'kexp-picker-item';
+            html += `<div class="${cls}" onmousedown="event.preventDefault(); window.__ntaniPickItem(${idx})">
+                <span>${esc(item.label)}</span>
+                <span class="kexp-picker-sub">${esc(item.sub)}</span>
+            </div>`;
+        });
+        pickerEl.innerHTML = html;
+
+        const activeEl = pickerEl.querySelector('.kexp-picker-item.active');
+        if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+    };
+
+    window.__ntaniPickItem = (idx) => {
+        const item = ntaniPickerItems[idx];
+        if (!item) return;
+        const inp = document.getElementById('ntani-tani-item');
+        if (inp) inp.value = item.data;
+        moveNtaniField('ntani-tani-item', 1);
+    };
+
     window.openExpressNewTaniModal = () => {
         ensureTallyExpressStyles();
         if (!selectedKariger || !currentActiveSheet) {
@@ -1057,6 +1590,11 @@
 
         const existing = document.getElementById('express-new-tani-modal');
         if (existing) existing.remove();
+
+        ntaniPickerMode = 'tani';
+        ntaniPickerItems = [];
+        ntaniPickerActiveIdx = 0;
+        ntaniPickerArrowUsed = false;
 
         const { taniOpts } = getKarigerExpressDatalists();
         const sheets = (typeof window.getKarigerSheets === 'function') ? window.getKarigerSheets(selectedKariger.id) : [];
@@ -1069,62 +1607,83 @@
         const pBana = safeNum(calc.remainingBana);
         const pZari = safeNum(calc.remainingZari);
         const pBani = safeNum(calc.remainingAmt);
+        ntaniSaveParams = { nextNum, pBana, pZari, pBani };
 
         const modalHtml = `
         <div id="express-new-tani-modal" class="kexp-overlay" style="z-index:1000005;">
-            <div class="kexp-card" style="max-width:620px;">
+            <div class="kexp-card" style="max-width:860px;">
 
                 <div class="kexp-header">
-                    <h3 class="kexp-title">Nayi Tani Chadhayein &bull; Tani ${nextNum} (${esc(selectedKariger.name)})</h3>
+                    <div>
+                        <h3 class="kexp-title">Nayi Tani Chadhayein &bull; Tani ${nextNum} (${esc(selectedKariger.name)})</h3>
+                        <span style="font-size:11px; color:#6b7280;">[Enter] Next &bull; [Shift+Enter] Prev &bull; [&uarr;&darr;] Select Stock &bull; [Ctrl+Enter] Save &bull; [Esc] Close</span>
+                    </div>
                     <button type="button" class="kexp-pill-btn" onclick="closeExpressNewTaniModal()">&larr; [Esc] Close</button>
                 </div>
 
-                <div style="padding:14px 18px; overflow-y:auto; flex:1;">
-                    <div style="background:#fdf6e2; border:1px solid #e5d5a7; border-radius:4px; padding:8px 12px; margin-bottom:12px;">
-                        <div style="font-size:11px; font-weight:800; color:#92400e; text-transform:uppercase; margin-bottom:4px;">Carry Forward from Previous Tani</div>
-                        <div style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:700; color:#1f2937;">
-                            <span>Bacha Bana: +${pBana.toFixed(2)} Kg</span>
-                            <span>Bachi Zari: +${pZari.toFixed(2)} Kg</span>
-                            <span>Baki Rupya: <strong style="color:#b47d00;">₹ ${pBani.toFixed(2)}</strong></span>
-                        </div>
-                    </div>
+                <div class="kexp-body">
 
-                    <div class="kexp-sec-title" style="margin-top:0;">Naya Taana / Sancha Details</div>
-                    <div style="display:grid; grid-template-columns:1.5fr 1fr 0.8fr 0.8fr; gap:8px; margin-bottom:10px;">
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Tani Item :</label>
-                            <input type="text" id="ntani-tani-item" list="ntani-tani-dl" placeholder="Tani Item..." class="kexp-inp" style="font-size:12px;">
+                    <!-- LEFT PANE -->
+                    <div>
+                        <div class="kexp-sec-title" style="margin-top:0;">Naya Taana / Sancha Details</div>
+                        <div class="kexp-row">
+                            <label class="kexp-lbl">Tani Item :</label>
+                            <input type="text" id="ntani-tani-item" placeholder="Select Tani Stock..." autocomplete="off" class="kexp-inp" style="border-color:#d9a425;">
                             <datalist id="ntani-tani-dl">${taniOpts}</datalist>
                         </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Sancha Maker :</label>
-                            <input type="text" id="ntani-tani-sancha" value="${esc(currentActiveSheet.taniSancha || '')}" class="kexp-inp" style="font-size:12px;">
+                        <div class="kexp-row">
+                            <label class="kexp-lbl">Sancha Maker :</label>
+                            <input type="text" id="ntani-tani-sancha" value="${esc(currentActiveSheet.taniSancha || '')}" class="kexp-inp">
                         </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Wazan (Kg) :</label>
-                            <input type="number" step="0.01" id="ntani-tani-wazan" placeholder="0.00" class="kexp-inp" style="font-size:12px;">
+                        <div class="kexp-row-2">
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Wazan (Kg) :</label>
+                                <input type="number" step="0.01" id="ntani-tani-wazan" placeholder="0.00" class="kexp-inp kexp-inp-num">
+                            </div>
+                            <div class="kexp-mini-row">
+                                <label class="kexp-lbl">Target Pcs :</label>
+                                <input type="number" id="ntani-tani-pcs" value="${currentActiveSheet.taniPcs || 72}" class="kexp-inp kexp-inp-num">
+                            </div>
                         </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Target Pcs :</label>
-                            <input type="number" id="ntani-tani-pcs" value="${currentActiveSheet.taniPcs || 72}" class="kexp-inp" style="font-size:12px;">
+
+                        <div class="kexp-sec-title">Mazdoori Rates</div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Bani (₹/Saree) :</label>
+                                <input type="number" id="ntani-rate-bani" value="${currentActiveSheet.rateBani || 240}" class="kexp-inp kexp-inp-num">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Bana Rate :</label>
+                                <input type="number" step="0.001" id="ntani-rate-bana" value="${currentActiveSheet.rateBana || 0.311}" class="kexp-inp kexp-inp-num">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:#374151;">Zari Rate :</label>
+                                <input type="number" step="0.001" id="ntani-rate-zari" value="${currentActiveSheet.rateZari || 0.110}" class="kexp-inp kexp-inp-num">
+                            </div>
                         </div>
                     </div>
 
-                    <div class="kexp-sec-title">Mazdoori Rates</div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Bani (₹/Saree) :</label>
-                            <input type="number" id="ntani-rate-bani" value="${currentActiveSheet.rateBani || 240}" class="kexp-inp">
+                    <!-- RIGHT PANE -->
+                    <div class="kexp-right-panel" style="min-height:260px;">
+                        <div class="kexp-right-head">
+                            <span id="ntani-right-title">List of Tani Stock</span>
+                            <span id="ntani-right-hint" style="font-size:11px; color:#6b7280; font-weight:600;">&uarr;&darr; + Enter</span>
                         </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Bana Rate :</label>
-                            <input type="number" step="0.001" id="ntani-rate-bana" value="${currentActiveSheet.rateBana || 0.311}" class="kexp-inp">
-                        </div>
-                        <div>
-                            <label style="font-size:11px; font-weight:700; color:#374151;">Zari Rate :</label>
-                            <input type="number" step="0.001" id="ntani-rate-zari" value="${currentActiveSheet.rateZari || 0.110}" class="kexp-inp">
+                        <div id="ntani-right-picker" class="kexp-picker-list"></div>
+                        <div id="ntani-right-preview" style="display:none; padding:12px; font-size:12.5px;">
+                            <div style="font-size:11px; font-weight:800; color:#92400e; text-transform:uppercase; margin-bottom:8px;">Carry Forward from Previous Tani</div>
+                            <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #f3f4f6;">
+                                <span style="color:#6b7280;">Bacha Bana:</span><strong>+${pBana.toFixed(2)} Kg</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #f3f4f6;">
+                                <span style="color:#6b7280;">Bachi Zari:</span><strong>+${pZari.toFixed(2)} Kg</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; padding:5px 0;">
+                                <span style="color:#6b7280;">Baki Rupya:</span><strong style="color:#b47d00;">₹ ${pBani.toFixed(2)}</strong>
+                            </div>
                         </div>
                     </div>
+
                 </div>
 
                 <div class="kexp-footer">
@@ -1136,12 +1695,65 @@
         </div>`;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        NTANI_FIELD_ORDER.forEach((fid) => {
+            const el = document.getElementById(fid);
+            if (!el) return;
+
+            el.addEventListener('focus', () => {
+                ntaniPickerArrowUsed = false;
+                ntaniPickerActiveIdx = 0;
+                showNtaniRightPicker(fid === 'ntani-tani-item' ? 'tani' : 'preview', el.value);
+            });
+
+            if (fid === 'ntani-tani-item') {
+                el.addEventListener('input', () => {
+                    ntaniPickerActiveIdx = 0;
+                    showNtaniRightPicker('tani', el.value);
+                });
+            }
+
+            el.addEventListener('keydown', (e) => {
+                if (fid === 'ntani-tani-item' && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                    if (ntaniPickerItems.length) {
+                        e.preventDefault();
+                        ntaniPickerArrowUsed = true;
+                        if (e.key === 'ArrowDown') {
+                            ntaniPickerActiveIdx = (ntaniPickerActiveIdx + 1) % ntaniPickerItems.length;
+                        } else {
+                            ntaniPickerActiveIdx = (ntaniPickerActiveIdx - 1 + ntaniPickerItems.length) % ntaniPickerItems.length;
+                        }
+                        renderNtaniRightPickerList();
+                    }
+                    return;
+                }
+
+                if (e.key === 'Enter' && !e.ctrlKey) {
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        moveNtaniField(fid, -1);
+                        return;
+                    }
+                    if (fid === 'ntani-tani-item' && ntaniPickerArrowUsed && ntaniPickerItems.length) {
+                        window.__ntaniPickItem(ntaniPickerActiveIdx);
+                        return;
+                    }
+                    if (fid === 'ntani-rate-zari') {
+                        saveExpressNewTani(nextNum, pBana, pZari, pBani);
+                        return;
+                    }
+                    moveNtaniField(fid, 1);
+                }
+            });
+        });
+
         setTimeout(() => { document.getElementById('ntani-tani-item')?.focus(); }, 80);
     };
 
     window.closeExpressNewTaniModal = () => {
         const modal = document.getElementById('express-new-tani-modal');
         if (modal) modal.remove();
+        document.getElementById('kexp-saree-qty')?.focus();
     };
 
     window.saveExpressNewTani = (nextNum, pBana, pZari, pBani) => {
@@ -1251,7 +1863,6 @@
 
         setTimeout(() => { if (karigerInp) karigerInp.focus(); }, 100);
 
-        // Focus handlers to switch Right-Pane Context automatically
         if (karigerInp) {
             karigerInp.addEventListener('focus', () => {
                 pickerArrowUsed = false;
@@ -1307,7 +1918,6 @@
             });
         }
 
-        // All other voucher inputs switch Right Pane to Live Tani Snapshot
         FIELD_ORDER.forEach((fid) => {
             if (fid === 'kexp-kariger-input' || fid === 'kexp-bana-name' || fid === 'kexp-zari-name') return;
             const el = document.getElementById(fid);
@@ -1317,13 +1927,11 @@
             });
         });
 
-        // Enter / Shift+Enter / ArrowUp-Down inside Voucher Inputs
         FIELD_ORDER.forEach((fid) => {
             const el = document.getElementById(fid);
             if (!el) return;
 
             el.addEventListener('keydown', (e) => {
-                // Arrow Up / Down inside Picker-linked inputs
                 if ((fid === 'kexp-kariger-input' || fid === 'kexp-bana-name' || fid === 'kexp-zari-name') &&
                     (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
                     if (pickerItems.length) {
@@ -1339,14 +1947,13 @@
                     return;
                 }
 
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && !e.ctrlKey) {
                     e.preventDefault();
                     if (e.shiftKey) {
                         moveField(fid, -1);
                         return;
                     }
 
-                    // Kariger input Enter picks highlighted Kariger
                     if (fid === 'kexp-kariger-input') {
                         if (pickerItems.length && (pickerArrowUsed || karigerInp.value.trim() !== '' || !selectedKariger)) {
                             window.__kexpPickItem(pickerActiveIdx);
@@ -1354,13 +1961,11 @@
                         }
                     }
 
-                    // Bana / Zari Enter picks if user navigated list or typed filter
                     if ((fid === 'kexp-bana-name' || fid === 'kexp-zari-name') && pickerArrowUsed && pickerItems.length) {
                         window.__kexpPickItem(pickerActiveIdx);
                         return;
                     }
 
-                    // Last field -> Submit
                     if (fid === 'kexp-paid-amount') {
                         submitKarigerExpress();
                         return;
@@ -1394,7 +1999,13 @@
             if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopImmediatePropagation();
-                closeAltCKarigerModal();
+                const acceptBar = document.getElementById('altc-accept-strip');
+                if (acceptBar && acceptBar.style.display !== 'none') {
+                    showAltcAcceptPrompt(false);
+                    document.getElementById('altc-col-8')?.focus();
+                } else {
+                    closeAltCKarigerModal();
+                }
                 return;
             }
             if (e.ctrlKey && e.key === 'Enter') {
@@ -1415,10 +2026,15 @@
                 closeExpressNewTaniModal();
                 return;
             }
+            if (e.ctrlKey && e.key === 'Enter') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                saveExpressNewTani(ntaniSaveParams.nextNum, ntaniSaveParams.pBana, ntaniSaveParams.pZari, ntaniSaveParams.pBani);
+                return;
+            }
             return;
         }
 
-        // Escape -> Close Kariger Express
         if (e.key === 'Escape') {
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -1426,7 +2042,6 @@
             return;
         }
 
-        // Alt + C -> Naya Kariger Form
         if (e.altKey && (e.key === 'c' || e.key === 'C')) {
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -1434,7 +2049,6 @@
             return;
         }
 
-        // Alt + N -> Nayi Tani Modal
         if (e.altKey && (e.key === 'n' || e.key === 'N')) {
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -1442,7 +2056,6 @@
             return;
         }
 
-        // F2 -> Search Kariger
         if (e.key === 'F2') {
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -1451,7 +2064,6 @@
             return;
         }
 
-        // Alt + P -> Print
         if (e.altKey && (e.key === 'p' || e.key === 'P')) {
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -1459,10 +2071,15 @@
             return;
         }
 
-        // Ctrl + A -> Direct Submit (Tally style)
+        if (e.ctrlKey && e.key === 'Enter') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            submitKarigerExpress();
+            return;
+        }
+
         if (e.ctrlKey && (e.key === 'a' || e.key === 'A')) {
-            const activeTag = document.activeElement?.tagName;
-            if (activeTag !== 'INPUT' || document.activeElement?.id !== 'kexp-kariger-input') {
+            if (document.activeElement?.id !== 'kexp-kariger-input') {
                 e.preventDefault();
                 e.stopImmediatePropagation();
                 submitKarigerExpress();
