@@ -1,10 +1,9 @@
 /* ============================================================================
-   SIMPLICITY ERP - TANI ORDER EXPRESS ENGINE (TALLYPRIME WHITE & GOLD)
+   SIMPLICITY ERP - TANI ORDER EXPRESS ENGINE (2-STEP TALLYPRIME WHITE & GOLD)
    Folder: tani / File: tani-express.js • Developed for: Farhan Jawed
-   Layout:
-   - Top-Left: Order Details (Zero Native Dropdowns, Zero Number Spinners)
-   - Top-Right: Live Contextual Picker (Karigers / Sanchas / Rangi / Learned Colors)
-   - Bottom Full-Width: Compact 2x4 8-Colors Matching Matrix + Contrast Strip
+   Layout (Option A - Clean 2-Step 2-Column Voucher):
+   - Step 1: Order & Loom Details (Left) + Kariger/Sancha/Rangi Picker (Right)
+   - Step 2: Single 8-Row Colors Table (Left) + Full-Height Learned Colors Picker (Right)
    - Tally Accept Bar: Save & Print [Y/Enter] | Only Save [S] | Edit [N/Esc]
    - 100% Preserved: Sancha Portal Sync, Tani Order List, Urdu A6 Print & WhatsApp
 ============================================================================ */
@@ -14,7 +13,8 @@
 
     let lastSavedTaniExpressOrder = null;
 
-    // Contextual Picker State
+    // Step & Contextual Picker State
+    let currentStep = 1; // 1 = Order Details, 2 = 8-Colors Matching
     let activePickerKind = 'kariger'; // 'kariger' | 'sancha' | 'rangi' | 'color' | 'summary'
     let activeTargetInputId = 'texp-kariger';
     let pickerFilteredItems = [];
@@ -177,7 +177,7 @@
             return getLearnedColors().map(c => ({
                 value: c,
                 label: c,
-                sub: 'Saved Color'
+                sub: 'Color'
             }));
         }
 
@@ -201,9 +201,10 @@
         activePickerKind = kind;
         activeTargetInputId = inputId;
 
-        const titleEl = document.getElementById('texp-picker-title');
-        const hintEl = document.getElementById('texp-picker-hint');
-        const listEl = document.getElementById('texp-picker-list');
+        const suffix = (currentStep === 2) ? '2' : '1';
+        const titleEl = document.getElementById(`texp-picker-title-${suffix}`);
+        const hintEl = document.getElementById(`texp-picker-hint-${suffix}`);
+        const listEl = document.getElementById(`texp-picker-list-${suffix}`);
         if (!titleEl || !listEl) return;
 
         const titleMap = {
@@ -218,6 +219,7 @@
         if (kind === 'summary') {
             if (hintEl) hintEl.textContent = '[Enter] Next';
             const kName = document.getElementById('texp-kariger')?.value || '-';
+            const moh = document.getElementById('texp-mohalla')?.value || '-';
             const sName = document.getElementById('texp-sancha')?.value || '-';
             const rName = document.getElementById('texp-rangi')?.value || '-';
             const mtr = document.getElementById('texp-meter')?.value || '0';
@@ -227,15 +229,17 @@
             const bana = document.getElementById('texp-bana')?.value || '-';
 
             listEl.innerHTML = `
-                <div style="padding:10px 12px; font-size:12px; line-height:1.7; color:#374151;">
-                    <div><strong>Kariger :</strong> <span style="color:#92400e;">${esc(kName)}</span></div>
+                <div style="padding:12px 14px; font-size:12.5px; line-height:1.8; color:#374151;">
+                    <div><strong>Kariger :</strong> <span style="color:#92400e; font-weight:800;">${esc(kName)}</span></div>
+                    <div><strong>Mohalla :</strong> ${esc(moh)}</div>
                     <div><strong>Sancha :</strong> ${esc(sName)}</div>
-                    <div><strong>Rangi :</strong> ${esc(rName)}</div>
+                    <div><strong>Rangi Wala :</strong> ${esc(rName)}</div>
                     <div><strong>Meter / Pcs :</strong> ${esc(mtr)} Mtr · <strong style="color:#b47d00;">${esc(pcs)} Pcs</strong></div>
-                    <div><strong>Paai / Border :</strong> ${esc(paai)} · ${esc(brd)}</div>
+                    <div><strong>Paai :</strong> ${esc(paai)}</div>
+                    <div><strong>Border :</strong> ${esc(brd)}</div>
                     <div><strong>Bana Spec :</strong> ${esc(bana)}</div>
-                    <div style="margin-top:8px; padding-top:6px; border-top:1px dashed #e5d5a7; font-size:11px; color:#6b7280;">
-                        Tip: Kisi bhi Color box me pehla akshar type karein (jaise <strong>R</strong>), learned colors turant aa jayenge. <strong>[Ctrl+Enter]</strong> se seedha Save bar khulega.
+                    <div style="margin-top:10px; padding-top:8px; border-top:1px dashed #e5d5a7; font-size:11.5px; color:#6b7280;">
+                        <strong>Bana</strong> ke baad <strong>[Enter]</strong> dabane par seedha <strong>Step 2 (8-Colors Matching)</strong> khul jayega.
                     </div>
                 </div>
             `;
@@ -252,8 +256,8 @@
 
         if (!pickerFilteredItems.length) {
             listEl.innerHTML = `
-                <div style="padding:14px 12px; text-align:center; font-size:12px; color:#6b7280;">
-                    ${queryText ? `<strong>"${esc(queryText)}"</strong> naya naam hai — [Enter] dabakar aage badhein (auto-save ho jayega).` : 'Koi saved record nahi mila.'}
+                <div style="padding:18px 14px; text-align:center; font-size:12.5px; color:#6b7280; line-height:1.6;">
+                    ${queryText ? `<strong>"${esc(queryText)}"</strong> naya naam hai — [Enter] dabakar aage badhein (save hone par yaad ho jayega).` : 'Koi saved record nahi mila.'}
                 </div>
             `;
             return;
@@ -278,6 +282,23 @@
         activeRow?.scrollIntoView({ block: 'nearest' });
     };
 
+    const advanceToNextTarget = (nextId) => {
+        if (!nextId) return;
+        if (nextId === 'texp-step-2') {
+            setTaniStep(2, 'texp-col-saree-1');
+            return;
+        }
+        if (nextId === 'texp-accept-bar') {
+            showTaniAcceptBar(true);
+            return;
+        }
+        const nxt = document.getElementById(nextId);
+        if (nxt) {
+            nxt.focus();
+            if (typeof nxt.select === 'function') nxt.select();
+        }
+    };
+
     const applyPickerSelection = (idx, advanceFocus = true) => {
         const chosen = pickerFilteredItems[idx];
         const inp = document.getElementById(activeTargetInputId);
@@ -292,18 +313,35 @@
         pickerNavigated = false;
 
         if (advanceFocus) {
-            const nextId = inp.getAttribute('data-next');
-            if (nextId === 'texp-accept-bar') {
-                showTaniAcceptBar(true);
-            } else if (nextId) {
-                const nxt = document.getElementById(nextId);
-                if (nxt) {
-                    nxt.focus();
-                    if (typeof nxt.select === 'function') nxt.select();
-                }
-            }
+            advanceToNextTarget(inp.getAttribute('data-next'));
         }
         return true;
+    };
+
+    const setTaniStep = (stepNum, focusFieldId = null) => {
+        currentStep = (stepNum === 2) ? 2 : 1;
+        const s1 = document.getElementById('texp-step-1');
+        const s2 = document.getElementById('texp-step-2');
+        const t1 = document.getElementById('texp-step-tab-1');
+        const t2 = document.getElementById('texp-step-tab-2');
+        const backBtn = document.getElementById('texp-header-back-btn');
+
+        if (s1) s1.style.display = (currentStep === 1) ? 'grid' : 'none';
+        if (s2) s2.style.display = (currentStep === 2) ? 'grid' : 'none';
+        if (t1) t1.classList.toggle('active', currentStep === 1);
+        if (t2) t2.classList.toggle('active', currentStep === 2);
+        if (backBtn) backBtn.textContent = (currentStep === 2) ? '← [Esc] Step 1' : '← [Esc] Back';
+
+        showTaniAcceptBar(false);
+
+        const targetId = focusFieldId || (currentStep === 1 ? 'texp-kariger' : 'texp-col-saree-1');
+        setTimeout(() => {
+            const el = document.getElementById(targetId);
+            if (el) {
+                el.focus();
+                el.select?.();
+            }
+        }, 30);
     };
 
     const showTaniAcceptBar = (show) => {
@@ -317,12 +355,12 @@
 
     const hideTaniAcceptBarToEdit = () => {
         showTaniAcceptBar(false);
-        const target = document.getElementById('texp-col-saree-1') || document.getElementById('texp-kariger');
+        const target = document.getElementById(currentStep === 2 ? 'texp-col-saree-1' : 'texp-kariger');
         if (target) { target.focus(); target.select?.(); }
     };
 
     /* ========================================================================
-       3. OPEN TANI EXPRESS MODAL (TALLYPRIME WHITE & GOLD 2-COL + 2x4 MATRIX)
+       3. OPEN TANI EXPRESS MODAL (OPTION A: 2-STEP PURE 2-COLUMN TALLY VOUCHER)
        ======================================================================== */
     window.openTaniExpressModal = () => {
         const existing = document.getElementById('master-tani-express-modal');
@@ -330,23 +368,21 @@
 
         const today = getToday();
         const nextOrderNo = getNextParchiNumber();
+        currentStep = 1;
 
-        const build4ColorRows = (startIdx, endIdx) => {
-            let html = '';
-            for (let i = startIdx; i <= endIdx; i++) {
-                const nextSaree = `texp-col-border-${i}`;
-                const nextBorder = `texp-col-bana-${i}`;
-                const nextBana = (i === 8) ? 'texp-accept-bar' : `texp-col-saree-${i + 1}`;
-                html += `
+        let colorRowsHtml = '';
+        for (let i = 1; i <= 8; i++) {
+            const nextSaree = `texp-col-border-${i}`;
+            const nextBorder = `texp-col-bana-${i}`;
+            const nextBana = (i === 8) ? 'texp-accept-bar' : `texp-col-saree-${i + 1}`;
+            colorRowsHtml += `
                 <tr>
                     <td class="texp-td-num">${i}</td>
-                    <td><input type="text" id="texp-col-saree-${i}" class="texp-c-inp" data-picker="color" data-next="${nextSaree}" autocomplete="off"></td>
-                    <td><input type="text" id="texp-col-border-${i}" class="texp-c-inp" data-picker="color" data-next="${nextBorder}" autocomplete="off"></td>
-                    <td><input type="text" id="texp-col-bana-${i}" class="texp-c-inp" data-picker="color" data-next="${nextBana}" autocomplete="off"></td>
+                    <td><input type="text" id="texp-col-saree-${i}" class="texp-c-inp" data-step="2" data-picker="color" data-next="${nextSaree}" autocomplete="off"></td>
+                    <td><input type="text" id="texp-col-border-${i}" class="texp-c-inp" data-step="2" data-picker="color" data-next="${nextBorder}" autocomplete="off"></td>
+                    <td><input type="text" id="texp-col-bana-${i}" class="texp-c-inp" data-step="2" data-picker="color" data-next="${nextBana}" autocomplete="off"></td>
                 </tr>`;
-            }
-            return html;
-        };
+        }
 
         const modalHtml = `
         <div id="master-tani-express-modal" class="texp-overlay">
@@ -360,25 +396,25 @@
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    padding: 10px;
+                    padding: 12px;
                     box-sizing: border-box;
                     font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
                 }
                 .texp-dialog {
                     background: #ffffff;
                     width: 100%;
-                    max-width: 980px;
+                    max-width: 900px;
                     border: 1.5px solid #d9b86c;
                     border-radius: 8px;
                     box-shadow: 0 22px 48px rgba(0, 0, 0, 0.22);
                     overflow: hidden;
-                    max-height: 95vh;
-                    max-height: 95dvh;
+                    max-height: 94vh;
+                    max-height: 94dvh;
                     display: flex;
                     flex-direction: column;
                     color: #1f2937;
                 }
-                .texp-dialog * { box-sizing: border-box; }
+                .texp-dialog * { box-sizing: border-box !important; }
                 .texp-header {
                     background: #fdf6e2;
                     border-bottom: 1.5px solid #e5d5a7;
@@ -387,6 +423,7 @@
                     justify-content: space-between;
                     align-items: center;
                     gap: 10px;
+                    flex-wrap: wrap;
                     flex-shrink: 0;
                 }
                 .texp-header-left {
@@ -408,6 +445,27 @@
                     border-radius: 4px;
                     padding: 2px 9px;
                     font-size: 12px;
+                    font-weight: 800;
+                }
+                .texp-step-tabs {
+                    display: flex;
+                    gap: 5px;
+                    margin-left: 4px;
+                }
+                .texp-step-tab {
+                    background: #ffffff;
+                    color: #374151;
+                    border: 1px solid #d1d5db;
+                    border-radius: 4px;
+                    padding: 4px 10px;
+                    font-size: 11.5px;
+                    font-weight: 700;
+                    cursor: pointer;
+                }
+                .texp-step-tab.active {
+                    background: #f2b71d;
+                    color: #1f2937;
+                    border-color: #d9a425;
                     font-weight: 800;
                 }
                 .texp-btn-plain {
@@ -443,23 +501,28 @@
                     outline: 2px solid #92400e;
                 }
                 .texp-body {
-                    padding: 12px 14px;
+                    padding: 12px 16px;
                     overflow-y: auto;
+                    overflow-x: hidden;
                     flex: 1;
                     background: #ffffff;
                 }
-                .texp-top-split {
+                .texp-split {
                     display: grid;
-                    grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.9fr);
-                    gap: 12px;
-                    margin-bottom: 10px;
+                    grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
+                    gap: 14px;
                     align-items: stretch;
+                    width: 100%;
                 }
-                .texp-left-form {
+                .texp-left-pane {
                     background: #ffffff;
                     border: 1px solid #e5d5a7;
                     border-radius: 6px;
-                    padding: 10px 12px;
+                    padding: 11px 13px;
+                    min-width: 0;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
                 }
                 .texp-sec-lbl {
                     font-size: 10.5px;
@@ -467,33 +530,26 @@
                     text-transform: uppercase;
                     letter-spacing: 0.4px;
                     color: #92400e;
-                    margin: 0 0 7px 0;
+                    margin: 0 0 8px 0;
                     padding-bottom: 4px;
                     border-bottom: 1px solid #fdf6e2;
                 }
-                .texp-row-1 {
+                .texp-row {
                     display: grid;
-                    grid-template-columns: 112px minmax(0, 1fr);
+                    grid-template-columns: 122px minmax(0, 1fr);
                     align-items: center;
+                    gap: 10px;
+                    margin-bottom: 7px;
+                    min-width: 0;
+                }
+                .texp-row-pair {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
                     gap: 8px;
-                    margin-bottom: 6px;
+                    min-width: 0;
                 }
-                .texp-row-2 {
-                    display: grid;
-                    grid-template-columns: 112px minmax(0, 1fr) 72px minmax(0, 1fr);
-                    align-items: center;
-                    gap: 8px;
-                    margin-bottom: 6px;
-                }
-                .texp-row-3 {
-                    display: grid;
-                    grid-template-columns: 112px minmax(0, 1fr) 72px minmax(0, 1fr) 52px minmax(0, 0.8fr);
-                    align-items: center;
-                    gap: 6px;
-                    margin-bottom: 6px;
-                }
-                .texp-left-form label {
-                    font-size: 11.5px;
+                .texp-left-pane label {
+                    font-size: 12px;
                     font-weight: 700;
                     color: #374151;
                     white-space: nowrap;
@@ -501,8 +557,8 @@
                 .texp-inp {
                     width: 100%;
                     min-width: 0;
-                    height: 30px;
-                    padding: 4px 8px;
+                    height: 31px;
+                    padding: 4px 9px;
                     border: 1px solid #d1d5db;
                     border-radius: 4px;
                     font-size: 12.5px;
@@ -516,6 +572,25 @@
                     background: #fffdf5;
                     box-shadow: 0 0 0 2px rgba(242, 183, 29, 0.22);
                 }
+                .texp-contrast-box {
+                    display: flex;
+                    gap: 12px;
+                    flex-wrap: wrap;
+                    align-items: center;
+                    font-size: 11.5px;
+                    font-weight: 700;
+                    color: #374151;
+                    background: #fdfcf7;
+                    border: 1px solid #e5d5a7;
+                    border-radius: 4px;
+                    padding: 5px 9px;
+                }
+                .texp-contrast-box label {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    cursor: pointer;
+                }
                 .texp-right-picker {
                     background: #fdfcf7;
                     border: 1.5px solid #d9b86c;
@@ -523,16 +598,17 @@
                     display: flex;
                     flex-direction: column;
                     overflow: hidden;
-                    min-height: 224px;
-                    max-height: 248px;
+                    min-width: 0;
+                    height: 356px;
                 }
                 .texp-picker-head {
                     background: #fdf6e2;
                     border-bottom: 1.5px solid #e5d5a7;
-                    padding: 7px 11px;
+                    padding: 8px 12px;
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
+                    flex-shrink: 0;
                 }
                 .texp-picker-head strong {
                     font-size: 12.5px;
@@ -549,7 +625,7 @@
                     flex: 1;
                 }
                 .texp-pick-row {
-                    padding: 6px 11px;
+                    padding: 7px 12px;
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
@@ -567,70 +643,31 @@
                 .texp-pick-sub { font-size: 11px; color: #6b7280; font-weight: 600; }
                 .texp-pick-row.active .texp-pick-sub { color: #1f2937; }
 
-                /* --- BOTTOM 8-COLORS COMPACT 2x4 MATRIX --- */
-                .texp-colors-card {
-                    border: 1px solid #e5d5a7;
-                    border-radius: 6px;
-                    overflow: hidden;
-                    background: #ffffff;
+                /* --- STEP 2: SINGLE CLEAN 8-ROW TABLE (OVERRIDES GLOBAL style.css table min-width) --- */
+                #master-tani-express-modal table.texp-table {
+                    width: 100% !important;
+                    min-width: 0 !important;
+                    border-collapse: collapse !important;
+                    table-layout: fixed !important;
+                    border: 1px solid #e5d5a7 !important;
+                    background: #ffffff !important;
+                    margin: 0 !important;
                 }
-                .texp-colors-head {
-                    background: #fdf6e2;
-                    border-bottom: 1px solid #e5d5a7;
-                    padding: 6px 12px;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    flex-wrap: wrap;
-                    gap: 10px;
+                #master-tani-express-modal table.texp-table th {
+                    background: #fdf6e2 !important;
+                    color: #92400e !important;
+                    font-size: 11.5px !important;
+                    font-weight: 800 !important;
+                    padding: 6px 6px !important;
+                    border-bottom: 1.5px solid #e5d5a7 !important;
+                    text-align: center !important;
                 }
-                .texp-colors-head strong {
-                    font-size: 12px;
-                    font-weight: 800;
-                    color: #1f2937;
-                }
-                .texp-contrast-inline {
-                    display: flex;
-                    gap: 14px;
-                    align-items: center;
-                    flex-wrap: wrap;
-                    font-size: 11.5px;
-                    font-weight: 700;
-                    color: #374151;
-                }
-                .texp-contrast-inline label {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 4px;
-                    cursor: pointer;
-                }
-                .texp-matrix-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 10px;
-                    padding: 8px 10px;
-                }
-                .texp-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    table-layout: fixed;
-                    border: 1px solid #e5d5a7;
-                }
-                .texp-table th {
-                    background: #fdfcf7;
-                    color: #92400e;
-                    font-size: 11px;
-                    font-weight: 800;
-                    padding: 5px 4px;
-                    border-bottom: 1px solid #e5d5a7;
-                    text-align: center;
-                }
-                .texp-table td {
-                    padding: 2px;
-                    border-bottom: 1px solid #f3f4f6;
+                #master-tani-express-modal table.texp-table td {
+                    padding: 3px !important;
+                    border-bottom: 1px solid #f3f4f6 !important;
                 }
                 .texp-td-num {
-                    width: 24px;
+                    width: 28px;
                     text-align: center;
                     font-size: 11.5px;
                     font-weight: 800;
@@ -639,11 +676,12 @@
                 }
                 .texp-c-inp {
                     width: 100%;
-                    height: 27px;
-                    padding: 3px 6px;
+                    min-width: 0;
+                    height: 30px;
+                    padding: 3px 7px;
                     border: 1px solid #d1d5db;
-                    border-radius: 3px;
-                    font-size: 12px;
+                    border-radius: 4px;
+                    font-size: 12.5px;
                     font-weight: 700;
                     color: #111827;
                     background: #ffffff;
@@ -657,7 +695,7 @@
 
                 /* --- ACCEPT BAR & FOOTER --- */
                 .texp-accept-bar {
-                    margin-top: 9px;
+                    margin-top: 10px;
                     background: #fdf6e2;
                     border: 1.5px solid #d9a425;
                     border-radius: 6px;
@@ -671,7 +709,7 @@
                 .texp-footer {
                     background: #fdf6e2;
                     border-top: 1.5px solid #e5d5a7;
-                    padding: 8px 14px;
+                    padding: 8px 16px;
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
@@ -686,10 +724,10 @@
                     align-items: center;
                 }
 
-                @media (max-width: 840px) {
-                    .texp-top-split { grid-template-columns: 1fr; }
-                    .texp-matrix-grid { grid-template-columns: 1fr; }
-                    .texp-row-2, .texp-row-3 { grid-template-columns: 100px minmax(0, 1fr); }
+                @media (max-width: 780px) {
+                    .texp-split { grid-template-columns: 1fr; }
+                    .texp-right-picker { height: 220px; }
+                    .texp-row { grid-template-columns: 100px minmax(0, 1fr); }
                 }
             </style>
 
@@ -698,90 +736,124 @@
                     <div class="texp-header-left">
                         <h3>Tani Order Voucher</h3>
                         <span class="texp-parchi-pill" id="texp-parchi-badge">Parchi #${nextOrderNo}</span>
+                        <div class="texp-step-tabs">
+                            <button type="button" id="texp-step-tab-1" class="texp-step-tab active" onclick="window.__texpGoStep(1)">[1] Order Details</button>
+                            <button type="button" id="texp-step-tab-2" class="texp-step-tab" onclick="window.__texpGoStep(2)">[2] 8-Colors Matching</button>
+                        </div>
                     </div>
-                    <button type="button" class="texp-btn-plain" onclick="closeTaniExpressModal()">← [Esc] Back</button>
+                    <button type="button" id="texp-header-back-btn" class="texp-btn-plain" onclick="window.__texpHeaderBack()">← [Esc] Back</button>
                 </div>
 
                 <div class="texp-body">
-                    <div class="texp-top-split">
-                        <!-- TOP-LEFT: ORDER DETAILS -->
-                        <div class="texp-left-form">
-                            <div class="texp-sec-lbl">Order &amp; Loom Specifications</div>
+                    <!-- STEP 1: ORDER DETAILS (LEFT) + CONTEXTUAL PICKER (RIGHT) -->
+                    <div id="texp-step-1" class="texp-split">
+                        <div class="texp-left-pane">
+                            <div>
+                                <div class="texp-sec-lbl">Step 1: Order &amp; Loom Specifications</div>
 
-                            <div class="texp-row-2">
-                                <label for="texp-order-no">Parchi No :</label>
-                                <input type="text" id="texp-order-no" class="texp-inp" value="${nextOrderNo}" readonly style="background:#fdf6e2; border-color:#d9b86c; color:#92400e; text-align:center; cursor:not-allowed;">
-                                <label for="texp-order-date">Date :</label>
-                                <input type="date" id="texp-order-date" class="texp-inp" value="${today}" data-picker="summary" data-next="texp-kariger">
+                                <div class="texp-row">
+                                    <label>Parchi / Date :</label>
+                                    <div class="texp-row-pair">
+                                        <input type="text" id="texp-order-no" class="texp-inp" value="${nextOrderNo}" readonly style="background:#fdf6e2; border-color:#d9b86c; color:#92400e; text-align:center; cursor:not-allowed;">
+                                        <input type="date" id="texp-order-date" class="texp-inp" value="${today}" data-step="1" data-picker="summary" data-next="texp-kariger">
+                                    </div>
+                                </div>
+
+                                <div class="texp-row">
+                                    <label for="texp-kariger">Kariger :</label>
+                                    <input type="text" id="texp-kariger" class="texp-inp" data-step="1" data-picker="kariger" data-next="texp-mohalla" autocomplete="off">
+                                </div>
+
+                                <div class="texp-row">
+                                    <label for="texp-mohalla">Mohalla / Pata :</label>
+                                    <input type="text" id="texp-mohalla" class="texp-inp" data-step="1" data-picker="summary" data-next="texp-sancha" autocomplete="off">
+                                </div>
+
+                                <div class="texp-row">
+                                    <label for="texp-sancha">Sancha :</label>
+                                    <input type="text" id="texp-sancha" class="texp-inp" data-step="1" data-picker="sancha" data-next="texp-rangi" autocomplete="off">
+                                </div>
+
+                                <div class="texp-row">
+                                    <label for="texp-rangi">Rangi Wala :</label>
+                                    <input type="text" id="texp-rangi" class="texp-inp" data-step="1" data-picker="rangi" data-next="texp-meter" autocomplete="off">
+                                </div>
+
+                                <div class="texp-row">
+                                    <label>Meter / Pcs :</label>
+                                    <div class="texp-row-pair">
+                                        <input type="text" inputmode="decimal" id="texp-meter" class="texp-inp" data-step="1" data-picker="summary" data-next="texp-pcs" placeholder="Meter" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9.]/g,'').replace(/(\\..*)\\./g,'$1')" style="text-align:right;">
+                                        <input type="text" inputmode="numeric" id="texp-pcs" class="texp-inp" data-step="1" data-picker="summary" data-next="texp-paai" placeholder="Saree Pcs" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')" style="text-align:right; color:#b47d00;">
+                                    </div>
+                                </div>
+
+                                <div class="texp-row">
+                                    <label>Paai / Border :</label>
+                                    <div class="texp-row-pair">
+                                        <input type="text" id="texp-paai" class="texp-inp" data-step="1" data-picker="summary" data-next="texp-border" placeholder="Paai" autocomplete="off">
+                                        <input type="text" id="texp-border" class="texp-inp" data-step="1" data-picker="summary" data-next="texp-bana" placeholder="Border" autocomplete="off">
+                                    </div>
+                                </div>
+
+                                <div class="texp-row">
+                                    <label for="texp-bana">Bana Spec :</label>
+                                    <input type="text" id="texp-bana" class="texp-inp" data-step="1" data-picker="summary" data-next="texp-step-2" autocomplete="off">
+                                </div>
+
+                                <div class="texp-row" style="margin-bottom:0;">
+                                    <label>Matching Style :</label>
+                                    <div class="texp-contrast-box">
+                                        <label><input type="checkbox" name="texp_contrast" value="aanchal_blouse" checked> Aanchal Blouse</label>
+                                        <label><input type="checkbox" name="texp_contrast" value="border_only"> Sirf Border</label>
+                                        <label><input type="checkbox" name="texp_contrast" value="self"> Self</label>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div class="texp-row-1">
-                                <label for="texp-kariger">Kariger :</label>
-                                <input type="text" id="texp-kariger" class="texp-inp" data-picker="kariger" data-next="texp-mohalla" autocomplete="off">
-                            </div>
-
-                            <div class="texp-row-1">
-                                <label for="texp-mohalla">Mohalla :</label>
-                                <input type="text" id="texp-mohalla" class="texp-inp" data-picker="summary" data-next="texp-sancha" autocomplete="off">
-                            </div>
-
-                            <div class="texp-row-2">
-                                <label for="texp-sancha">Sancha :</label>
-                                <input type="text" id="texp-sancha" class="texp-inp" data-picker="sancha" data-next="texp-rangi" autocomplete="off">
-                                <label for="texp-rangi">Rangi :</label>
-                                <input type="text" id="texp-rangi" class="texp-inp" data-picker="rangi" data-next="texp-meter" autocomplete="off">
-                            </div>
-
-                            <div class="texp-row-3">
-                                <label for="texp-meter">Meter / Pcs :</label>
-                                <input type="text" inputmode="decimal" id="texp-meter" class="texp-inp" data-picker="summary" data-next="texp-pcs" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9.]/g,'').replace(/(\\..*)\\./g,'$1')" style="text-align:right;">
-                                <label for="texp-pcs">Saree Pcs :</label>
-                                <input type="text" inputmode="numeric" id="texp-pcs" class="texp-inp" data-picker="summary" data-next="texp-paai" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')" style="text-align:right; color:#b47d00;">
-                                <label for="texp-paai">Paai :</label>
-                                <input type="text" id="texp-paai" class="texp-inp" data-picker="summary" data-next="texp-border" autocomplete="off" style="text-align:center;">
-                            </div>
-
-                            <div class="texp-row-2" style="margin-bottom:0;">
-                                <label for="texp-border">Border :</label>
-                                <input type="text" id="texp-border" class="texp-inp" data-picker="summary" data-next="texp-bana" autocomplete="off">
-                                <label for="texp-bana">Bana :</label>
-                                <input type="text" id="texp-bana" class="texp-inp" data-picker="summary" data-next="texp-col-saree-1" autocomplete="off">
+                            <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+                                <button type="button" class="texp-btn-gold" onclick="window.__texpGoStep(2)">Next: 8-Colors Matching [PgDn] →</button>
                             </div>
                         </div>
 
-                        <!-- TOP-RIGHT: LIVE CONTEXTUAL PICKER -->
                         <div class="texp-right-picker">
                             <div class="texp-picker-head">
-                                <strong id="texp-picker-title">List of Karigers</strong>
-                                <small id="texp-picker-hint">↑ ↓ + Enter</small>
+                                <strong id="texp-picker-title-1">List of Karigers</strong>
+                                <small id="texp-picker-hint-1">↑ ↓ + Enter</small>
                             </div>
-                            <div class="texp-picker-list" id="texp-picker-list"></div>
+                            <div class="texp-picker-list" id="texp-picker-list-1"></div>
                         </div>
                     </div>
 
-                    <!-- BOTTOM FULL-WIDTH: COMPACT 2x4 8-COLORS MATRIX + CONTRAST -->
-                    <div class="texp-colors-card">
-                        <div class="texp-colors-head">
-                            <strong>8-Colors Matching Table (Type Color Letter &rarr; Right Picker &rarr; Enter)</strong>
-                            <div class="texp-contrast-inline">
-                                <label><input type="checkbox" name="texp_contrast" value="aanchal_blouse" checked> Aanchal Blouse</label>
-                                <label><input type="checkbox" name="texp_contrast" value="border_only"> Sirf Border</label>
-                                <label><input type="checkbox" name="texp_contrast" value="self"> Self</label>
+                    <!-- STEP 2: SINGLE 8-COLORS TABLE (LEFT) + FULL-HEIGHT LEARNED COLORS PICKER (RIGHT) -->
+                    <div id="texp-step-2" class="texp-split" style="display:none;">
+                        <div class="texp-left-pane">
+                            <div>
+                                <div class="texp-sec-lbl">Step 2: 8-Colors Matching Table (Type Letter &rarr; Right Picker &rarr; Enter)</div>
+                                <table class="texp-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:28px;">#</th>
+                                            <th>Saree</th>
+                                            <th>Border</th>
+                                            <th>Bana</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${colorRowsHtml}</tbody>
+                                </table>
+                            </div>
+
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:8px;">
+                                <button type="button" class="texp-btn-plain" onclick="window.__texpGoStep(1)">← Back to Order Details [PgUp]</button>
+                                <button type="button" class="texp-btn-gold" onclick="window.__texpOpenAccept()">Accept / Save [Ctrl+Enter]</button>
                             </div>
                         </div>
-                        <div class="texp-matrix-grid">
-                            <table class="texp-table">
-                                <thead>
-                                    <tr><th style="width:24px;">#</th><th>Saree</th><th>Border</th><th>Bana</th></tr>
-                                </thead>
-                                <tbody>${build4ColorRows(1, 4)}</tbody>
-                            </table>
-                            <table class="texp-table">
-                                <thead>
-                                    <tr><th style="width:24px;">#</th><th>Saree</th><th>Border</th><th>Bana</th></tr>
-                                </thead>
-                                <tbody>${build4ColorRows(5, 8)}</tbody>
-                            </table>
+
+                        <div class="texp-right-picker">
+                            <div class="texp-picker-head">
+                                <strong id="texp-picker-title-2">Learned Colors</strong>
+                                <small id="texp-picker-hint-2">↑ ↓ + Enter</small>
+                            </div>
+                            <div class="texp-picker-list" id="texp-picker-list-2"></div>
                         </div>
                     </div>
 
@@ -797,20 +869,26 @@
                 </div>
 
                 <div class="texp-footer">
-                    <div id="texp-status-msg" style="font-size:12px; font-weight:700; color:#92400e;">[↑ ↓ + Enter] Picker Select · [Ctrl+Enter] Accept Bar · [Alt+P] Urdu A6 Print · [Alt+W] WhatsApp</div>
+                    <div id="texp-status-msg" style="font-size:12px; font-weight:700; color:#92400e;">[↑ ↓ + Enter] Picker Select · [PgDn/PgUp] Step Switch · [Ctrl+Enter] Save Bar · [Alt+P] A6 Print</div>
                     <div class="texp-footer-actions">
-                        <button type="button" class="texp-btn-plain" onclick="closeTaniExpressModal()">Cancel [Esc]</button>
+                        <button type="button" class="texp-btn-plain" onclick="closeTaniExpressModal()">Close</button>
                         <button type="button" class="texp-btn-plain" onclick="sendTaniExpressWhatsApp()">WhatsApp [Alt+W]</button>
                         <button type="button" class="texp-btn-plain" onclick="printLastSavedTaniExpressSlip()">A6 Print [Alt+P]</button>
-                        <button type="button" id="texp-submit-btn" class="texp-btn-gold" onclick="window.__texpOpenAccept()">Accept / Save [Ctrl+Enter]</button>
+                        <button type="button" id="texp-submit-btn" class="texp-btn-gold" onclick="window.__texpOpenAccept()">Accept [Ctrl+Enter]</button>
                     </div>
                 </div>
             </div>
         </div>`;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+        window.__texpGoStep = (n) => setTaniStep(n);
+        window.__texpHeaderBack = () => {
+            if (currentStep === 2) setTaniStep(1);
+            else closeTaniExpressModal();
+        };
         window.__texpOpenAccept = () => showTaniAcceptBar(true);
         window.__texpHideAccept = hideTaniAcceptBarToEdit;
+
         bindTaniExpressEvents();
     };
 
@@ -856,6 +934,20 @@
                     return;
                 }
 
+                if (e.key === 'PageDown' && currentStep === 1) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setTaniStep(2, 'texp-col-saree-1');
+                    return;
+                }
+
+                if (e.key === 'PageUp' && currentStep === 2) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setTaniStep(1, 'texp-bana');
+                    return;
+                }
+
                 if (isPickerActive && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -864,7 +956,8 @@
                     pickerSelectedIdx = (e.key === 'ArrowDown')
                         ? (pickerSelectedIdx + 1) % len
                         : (pickerSelectedIdx - 1 + len) % len;
-                    const rows = document.querySelectorAll('#texp-picker-list .texp-pick-row');
+                    const suffix = (currentStep === 2) ? '2' : '1';
+                    const rows = document.querySelectorAll(`#texp-picker-list-${suffix} .texp-pick-row`);
                     rows.forEach((r, rIdx) => r.classList.toggle('active', rIdx === pickerSelectedIdx));
                     rows[pickerSelectedIdx]?.scrollIntoView({ block: 'nearest' });
                     return;
@@ -876,34 +969,26 @@
 
                     if (e.shiftKey) {
                         if (idx > 0) {
-                            fields[idx - 1].focus();
-                            fields[idx - 1].select?.();
+                            const prev = fields[idx - 1];
+                            const prevStep = parseInt(prev.getAttribute('data-step') || '1', 10);
+                            if (prevStep !== currentStep) setTaniStep(prevStep, prev.id);
+                            else { prev.focus(); prev.select?.(); }
                         }
                         return;
                     }
 
-                    // Pick from Right Contextual Picker if navigated OR user typed a matching query
                     const typedNonEmpty = inp.value.trim() !== '';
                     if (isPickerActive && (pickerNavigated || typedNonEmpty)) {
                         applyPickerSelection(pickerSelectedIdx, true);
                         return;
                     }
 
-                    const nextId = inp.getAttribute('data-next');
-                    if (nextId === 'texp-accept-bar') {
-                        showTaniAcceptBar(true);
-                    } else if (nextId) {
-                        const nxt = document.getElementById(nextId);
-                        if (nxt) {
-                            nxt.focus();
-                            nxt.select?.();
-                        }
-                    }
+                    advanceToNextTarget(inp.getAttribute('data-next'));
                 }
             });
         });
 
-        // Accept bar keyboard shortcuts (Y / Enter -> Save & Print | S -> Only Save | N -> Edit)
+        // Accept Bar Keyboard Flow
         const acceptBar = document.getElementById('texp-accept-bar');
         if (acceptBar) {
             acceptBar.addEventListener('keydown', (e) => {
@@ -956,6 +1041,10 @@
                 hideTaniAcceptBarToEdit();
                 return;
             }
+            if (currentStep === 2) {
+                setTaniStep(1, 'texp-bana');
+                return;
+            }
             closeTaniExpressModal();
             return;
         }
@@ -1001,7 +1090,7 @@
         const bana = String(document.getElementById('texp-bana')?.value || '').trim();
 
         if (!kariger) {
-            showTaniAcceptBar(false);
+            setTaniStep(1, 'texp-kariger');
             alert('कृपया कारीगर का नाम चुनिए!');
             document.getElementById('texp-kariger')?.focus();
             return;
@@ -1010,7 +1099,7 @@
         const allKarigers = toArray(getFromStore('kariger_list'));
         const karigerExists = allKarigers.some(k => k && String(k.name || '').trim().toUpperCase() === kariger);
         if (!karigerExists) {
-            showTaniAcceptBar(false);
+            setTaniStep(1, 'texp-kariger');
             alert('चुना गया कारीगर Master Sheet में नहीं है! कृपया सही कारीगर चुनें।');
             document.getElementById('texp-kariger')?.focus();
             return;
@@ -1122,8 +1211,7 @@
         if (noEl) noEl.value = nextNum;
         if (badgeEl) badgeEl.textContent = `Parchi #${nextNum}`;
 
-        const kInp = document.getElementById('texp-kariger');
-        if (kInp) kInp.value = '';
+        document.getElementById('texp-kariger').value = '';
         document.getElementById('texp-mohalla').value = '';
         document.getElementById('texp-sancha').value = '';
         document.getElementById('texp-rangi').value = '';
@@ -1142,17 +1230,14 @@
             if (bnEl) bnEl.value = '';
         }
 
+        setTaniStep(1, 'texp-kariger');
+
         if (shouldPrint === true) {
             printLastSavedTaniExpressSlip();
         } else if (shouldPrint === null) {
             if (confirm(`✅ Parchi #${orderNo} save ho gayi!\n\nKya aap iski Urdu A6 Parchi print karna chahte hain?`)) {
                 printLastSavedTaniExpressSlip();
             }
-        }
-
-        if (kInp) {
-            kInp.focus();
-            renderContextualPicker('kariger', 'texp-kariger', '');
         }
     };
 
