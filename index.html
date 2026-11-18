@@ -742,7 +742,7 @@
         #dashboard-view .tally-left-pane {
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 14px;
         }
 
         /* Reuse .welcome-banner cleanly as soft white User & Period card */
@@ -750,7 +750,7 @@
             background: rgba(255, 255, 255, 0.96);
             border: 1px solid var(--border-soft);
             border-radius: 10px;
-            padding: 15px 20px;
+            padding: 14px 20px;
             margin-bottom: 0;
             display: flex;
             justify-content: space-between;
@@ -821,9 +821,9 @@
             flex-wrap: wrap;
         }
         #dashboard-view #cloud-status-badge.sync-badge {
-            background: rgba(255, 255, 255, 0.96);
-            color: var(--text-body);
-            border: 1px solid var(--border-soft);
+            background: rgba(255, 255, 255, 0.96) !important;
+            color: var(--text-body) !important;
+            border: 1px solid var(--border-soft) !important;
             font-size: 11px;
             font-weight: 600;
             padding: 5px 11px;
@@ -844,11 +844,12 @@
             border-color: var(--brand);
         }
 
-        /* 2 Clean Summary Cards (5-Stock Bars + Tani Circle) */
+        /* 4 Clean Half-Height Gold Cards (2x2 Grid) */
         #dashboard-view .visual-row {
             display: grid;
-            grid-template-columns: 1.25fr 0.95fr;
-            gap: 18px;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 16px;
             align-items: stretch;
             flex: 1;
         }
@@ -857,21 +858,29 @@
             background: #ffffff;
             border: 1px solid var(--border-soft);
             border-radius: 10px;
-            padding: 20px 18px;
+            padding: 15px 18px;
             box-shadow: var(--card-shadow);
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            transition: border-color 0.15s, transform 0.15s;
+        }
+        #dashboard-view .v-card.sl-clickable-card {
+            cursor: pointer;
+        }
+        #dashboard-view .v-card.sl-clickable-card:hover {
+            border-color: var(--brand);
+            transform: translateY(-1px);
         }
 
         #dashboard-view .v-card-head {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 14px;
+            margin-bottom: 10px;
         }
         #dashboard-view .v-card-head strong {
-            font-size: 14px;
+            font-size: 13.5px;
             font-weight: 700;
             color: var(--text-title);
         }
@@ -885,9 +894,9 @@
             display: flex;
             align-items: flex-end;
             justify-content: space-between;
-            height: 215px;
-            gap: 10px;
-            padding: 10px 6px 2px;
+            height: 145px;
+            gap: 8px;
+            padding: 4px 4px 0;
             margin: auto 0;
         }
 
@@ -898,19 +907,19 @@
             flex-direction: column;
             align-items: center;
             justify-content: flex-end;
-            gap: 6px;
+            gap: 4px;
             cursor: pointer;
             min-width: 0;
         }
         #dashboard-view .s-bar-col small {
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 600;
             color: var(--text-title);
             white-space: nowrap;
         }
         #dashboard-view .s-bar-fill {
             width: 100%;
-            max-width: 34px;
+            max-width: 30px;
             min-height: 14%;
             border-radius: 6px 6px 2px 2px;
             transition: height 0.35s ease, transform 0.15s;
@@ -924,28 +933,30 @@
         #dashboard-view .s-bar-fill.saree  { background: linear-gradient(180deg, #fbe6a6 0%, #f3b722 100%); }
 
         #dashboard-view .s-bar-col span {
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 500;
             color: var(--text-muted);
         }
 
+        /* Compact Horizontal Tani Order Ring */
         #dashboard-view .ring-wrap {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             align-items: center;
-            justify-content: center;
+            justify-content: space-between;
             gap: 16px;
             margin: auto 0;
         }
         #dashboard-view .ring-box {
             position: relative;
-            width: 122px;
-            height: 122px;
+            width: 104px;
+            height: 104px;
+            flex-shrink: 0;
             cursor: pointer;
         }
         #dashboard-view .ring-box svg {
-            width: 122px;
-            height: 122px;
+            width: 104px;
+            height: 104px;
         }
         #dashboard-view .ring-center {
             position: absolute;
@@ -955,8 +966,8 @@
             align-items: center;
             justify-content: center;
         }
-        #dashboard-view .ring-center strong { font-size: 20px; font-weight: 700; color: var(--text-title); }
-        #dashboard-view .ring-center span { font-size: 10px; color: var(--text-muted); font-weight: 500; }
+        #dashboard-view .ring-center strong { font-size: 17px; font-weight: 700; color: var(--text-title); }
+        #dashboard-view .ring-center span { font-size: 9.5px; color: var(--text-muted); font-weight: 500; }
 
         #dashboard-view .ring-legend {
             width: 100%;
@@ -965,13 +976,17 @@
             gap: 7px;
             font-size: 12px;
             color: var(--text-body);
-            border-top: 1px solid var(--border-soft);
-            padding-top: 11px;
         }
         #dashboard-view .ring-legend div {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding-bottom: 5px;
+            border-bottom: 1px dashed var(--border-soft);
+        }
+        #dashboard-view .ring-legend div:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
         }
         #dashboard-view .ring-legend strong { font-weight: 600; color: var(--text-title); }
         #dashboard-view .dot-sq {
@@ -980,6 +995,94 @@
             border-radius: 50%;
             display: inline-block;
             margin-right: 6px;
+        }
+
+        /* Box 3: Kariger Master Card */
+        #dashboard-view .sl-kariger-body {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 12px;
+            margin: auto 0;
+        }
+        #dashboard-view .sl-kar-hero {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: var(--brand-tint);
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 12px 14px;
+        }
+        #dashboard-view .sl-kar-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 1.5px solid var(--brand);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(242, 183, 29, 0.18);
+        }
+        #dashboard-view .sl-kar-num {
+            display: block;
+            font-size: 24px;
+            font-weight: 800;
+            line-height: 1.1;
+            color: var(--text-dark);
+        }
+        #dashboard-view .sl-kar-sub {
+            font-size: 11px;
+            font-weight: 600;
+            color: #b45309;
+        }
+
+        /* Box 4: Payments Card */
+        #dashboard-view .sl-pay-body {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 11px;
+            margin: auto 0;
+        }
+        #dashboard-view .sl-pay-top {
+            background: var(--brand-tint);
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 10px 12px;
+        }
+        #dashboard-view .sl-pay-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 7px;
+        }
+        #dashboard-view .sl-pay-top-row small {
+            font-size: 11px;
+            font-weight: 600;
+            color: #b45309;
+        }
+        #dashboard-view .sl-pay-top-row strong {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--text-dark);
+        }
+        #dashboard-view .sl-pay-track {
+            width: 100%;
+            height: 7px;
+            background: #ffffff;
+            border: 1px solid #fde68a;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        #dashboard-view .sl-pay-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f3b722 0%, #e0a60d 100%);
+            border-radius: 999px;
+            transition: width 0.35s ease;
         }
 
         /* Right Pane: Gateway of Simplicity */
@@ -1040,10 +1143,11 @@
             color: var(--brand-hover);
             font-weight: 700;
         }
-        #dashboard-view .gw-item .gw-val {
+        #dashboard-view .gw-item .gw-val,
+        #dashboard-view .gw-item .gw-val * {
             font-size: 11.5px;
-            font-weight: 500;
-            color: var(--text-muted);
+            font-weight: 600;
+            color: #b47d00 !important;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1060,8 +1164,10 @@
         #dashboard-view .gw-item:hover .gw-key,
         #dashboard-view .gw-item.active .gw-key,
         #dashboard-view .gw-item:hover .gw-val,
-        #dashboard-view .gw-item.active .gw-val {
-            color: #ffffff;
+        #dashboard-view .gw-item:hover .gw-val *,
+        #dashboard-view .gw-item.active .gw-val,
+        #dashboard-view .gw-item.active .gw-val * {
+            color: #ffffff !important;
         }
 
         #dashboard-view .gw-divider { height: 1px; background: var(--border-soft); margin: 6px 16px; }
@@ -1081,7 +1187,10 @@
                 display: block;
                 padding: 16px;
             }
-            #dashboard-view .visual-row { grid-template-columns: 1fr; }
+            #dashboard-view .visual-row {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+            }
         }
         @media (max-width: 560px) {
             #dashboard-view { padding: 14px; }
@@ -1270,7 +1379,7 @@
                 </svg>
 
                 <div class="tally-workspace-grid">
-                    <!-- LEFT SIDE: USER NAME + KARKHANA TABS + 2 CLEAN CARDS (STOCK BARS & TANI CIRCLE) -->
+                    <!-- LEFT SIDE: USER NAME + KARKHANA TABS + 4 HALF-HEIGHT GOLD CARDS (2x2) -->
                     <div class="tally-left-pane">
                         <div class="welcome-banner sl-user-meta-card">
                             <div class="sl-user-left">
@@ -1295,8 +1404,9 @@
                             </div>
                         </div>
 
-                        <!-- ONLY 2 CLEAN CARDS: (1) LIVE STOCK 5-BARS & (2) TANI ORDER CIRCLE -->
+                        <!-- 4 CLEAN GOLD CARDS (2x2 GRID): LIVE STOCK, TANI ORDER, KARIGER MASTER, PAYMENTS -->
                         <div class="visual-row">
+                            <!-- BOX 1: LIVE STOCK -->
                             <div class="v-card">
                                 <div class="v-card-head">
                                     <strong>Live Stock</strong>
@@ -1331,14 +1441,15 @@
                                 </div>
                             </div>
 
-                            <div class="v-card">
+                            <!-- BOX 2: TANI ORDER -->
+                            <div class="v-card sl-clickable-card" onclick="openTaniOrderModule()">
                                 <div class="v-card-head">
                                     <strong>Tani Order</strong>
                                     <span id="sl-tani-total-lbl">0 Parchi</span>
                                 </div>
                                 <div class="ring-wrap">
-                                    <div class="ring-box" onclick="openTaniOrderModule()">
-                                        <svg viewBox="0 0 100 100" width="122" height="122">
+                                    <div class="ring-box">
+                                        <svg viewBox="0 0 100 100" width="104" height="104">
                                             <circle cx="50" cy="50" r="38" fill="none" stroke="#fdf6e2" stroke-width="11"/>
                                             <circle id="sl-ring-ready" cx="50" cy="50" r="38" fill="none" stroke="#f3b722" stroke-width="11"
                                                     stroke-dasharray="0 239" stroke-linecap="round" transform="rotate(-90 50 50)"/>
@@ -1354,6 +1465,51 @@
                                         <div><span><i class="dot-sq" style="background:#f3b722;"></i>Ready</span><strong id="sl-leg-ready">0</strong></div>
                                         <div><span><i class="dot-sq" style="background:#fbe094;"></i>Rangai</span><strong id="sl-leg-rangai">0</strong></div>
                                         <div><span><i class="dot-sq" style="background:#fef3d6; border:1px solid #f3b722;"></i>Sancha</span><strong id="sl-leg-sancha">0</strong></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- BOX 3: KARIGER MASTER -->
+                            <div class="v-card sl-clickable-card" onclick="openKarigerModule()">
+                                <div class="v-card-head">
+                                    <strong>Kariger Master</strong>
+                                    <span>Active Staff</span>
+                                </div>
+                                <div class="sl-kariger-body">
+                                    <div class="sl-kar-hero">
+                                        <div class="sl-kar-icon">🧵</div>
+                                        <div>
+                                            <strong class="sl-kar-num" id="sl-kariger-count">0</strong>
+                                            <small class="sl-kar-sub">Kul Kariger</small>
+                                        </div>
+                                    </div>
+                                    <div class="ring-legend">
+                                        <div><span><i class="dot-sq" style="background:#f3b722;"></i>Karkhana</span><strong id="sl-kariger-unit">Sabhi Karkhane</strong></div>
+                                        <div><span><i class="dot-sq" style="background:#fbe094;"></i>Loom Directory</span><strong style="color:#d99b07;">Kholein →</strong></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- BOX 4: PAYMENTS -->
+                            <div class="v-card sl-clickable-card" onclick="openPaymentModule()">
+                                <div class="v-card-head">
+                                    <strong>Payments</strong>
+                                    <span id="sl-pay-pct-pill">0% Paid</span>
+                                </div>
+                                <div class="sl-pay-body">
+                                    <div class="sl-pay-top">
+                                        <div class="sl-pay-top-row">
+                                            <small>Baki Dena</small>
+                                            <strong id="sl-pay-baki-hero">₹ 0</strong>
+                                        </div>
+                                        <div class="sl-pay-track">
+                                            <div class="sl-pay-fill" id="sl-pay-bar-fill" style="width:0%;"></div>
+                                        </div>
+                                    </div>
+                                    <div class="ring-legend">
+                                        <div><span><i class="dot-sq" style="background:#f3b722;"></i>Kul Dena</span><strong id="sl-pay-total">₹ 0</strong></div>
+                                        <div><span><i class="dot-sq" style="background:#fbe096;"></i>Diya (Paid)</span><strong id="sl-pay-paid">₹ 0</strong></div>
+                                        <div><span><i class="dot-sq" style="background:#fef3d6; border:1px solid #f3b722;"></i>Baki</span><strong id="sl-pay-baki">₹ 0</strong></div>
                                     </div>
                                 </div>
                             </div>
@@ -2282,10 +2438,48 @@
             if (elLR) elLR.textContent = String(readyC);
             if (elLRg) elLRg.textContent = String(rangaiC);
             if (elLS) elLS.textContent = String(sanchaC);
+
+            // Box 3: Kariger Master Count & Unit
+            const karTxt = (document.getElementById('btn-total-kariger')?.textContent) || '';
+            const karCount = Math.max(0, Math.round(slParseNum(karTxt)));
+            const karCountEl = document.getElementById('sl-kariger-count');
+            if (karCountEl) karCountEl.textContent = String(karCount);
+
+            const kSel = document.getElementById('app-karkhana-select');
+            const karUnitEl = document.getElementById('sl-kariger-unit');
+            if (kSel && karUnitEl && kSel.selectedIndex >= 0) {
+                karUnitEl.textContent = kSel.options[kSel.selectedIndex].textContent.replace(/^[\s🌐🏢🏭]+/, '').trim() || 'Sabhi Karkhane';
+            }
+
+            // Box 4: Payments (Kul Dena, Diya, Baki)
+            const payTxt = (document.getElementById('btn-total-payment')?.textContent) || '';
+            const diyaM = payTxt.match(/Diya:\s*₹?\s*([-+]?\d+(?:,\d+)*(?:\.\d+)?)/i);
+            const bakiM = payTxt.match(/Baki:\s*₹?\s*([-+]?\d+(?:,\d+)*(?:\.\d+)?)/i);
+            const diyaVal = diyaM ? (parseFloat(diyaM[1].replace(/,/g, '')) || 0) : 0;
+            const bakiVal = bakiM ? (parseFloat(bakiM[1].replace(/,/g, '')) || 0) : 0;
+            const kulDena = diyaVal + Math.max(0, bakiVal);
+            const payPct = kulDena > 0 ? Math.max(0, Math.min(100, Math.round((diyaVal / kulDena) * 100))) : 0;
+
+            const fmtInr = (n) => '₹ ' + Math.round(n).toLocaleString('en-IN');
+            const elPayHero = document.getElementById('sl-pay-baki-hero');
+            const elPayTot = document.getElementById('sl-pay-total');
+            const elPayPaid = document.getElementById('sl-pay-paid');
+            const elPayBaki = document.getElementById('sl-pay-baki');
+            const elPayPill = document.getElementById('sl-pay-pct-pill');
+            const elPayFill = document.getElementById('sl-pay-bar-fill');
+            if (elPayHero) elPayHero.textContent = fmtInr(bakiVal);
+            if (elPayTot) elPayTot.textContent = fmtInr(kulDena);
+            if (elPayPaid) elPayPaid.textContent = fmtInr(diyaVal);
+            if (elPayBaki) elPayBaki.textContent = fmtInr(bakiVal);
+            if (elPayPill) elPayPill.textContent = payPct + '% Paid';
+            if (elPayFill) elPayFill.style.width = payPct + '%';
         }
 
         function slInitBadgeObserver() {
-            const watchIds = ['btn-total-bana', 'btn-total-zari', 'btn-total-sancha', 'btn-total-saree', 'btn-total-tani-orders'];
+            const watchIds = [
+                'btn-total-bana', 'btn-total-zari', 'btn-total-sancha', 'btn-total-saree',
+                'btn-total-tani-orders', 'btn-total-kariger', 'btn-total-payment'
+            ];
             const obs = new MutationObserver(() => slSyncDashboardCharts());
             watchIds.forEach((id) => {
                 const el = document.getElementById(id);
