@@ -4,6 +4,7 @@
    Preserved 100%:
    - Auto-Loads Sancha Portal 2-Way Sync (sancha-portal-sync.js)
    - Push / Pull / Delete / Rangai Notifications & Injected Portal Buttons
+   - New '5. Loom Par' Tab (Mounted tanis move cleanly out of active tabs into Loom tab)
    - Auto-Increment Serial #1, Learned Colors/Rangi Memory, Kariger Mohalla Fill
    - Urdu RTL A6 Physical Slip Print & WhatsApp Parchi Sharing
    - Kariger Sheet Gatekeeper Bridge (getAvailableReadyTanis / markTaniMountedOnLoom)
@@ -429,6 +430,11 @@
                 border-color: #d9a425;
                 color: #1f2937;
             }
+            .tani-pill.loom {
+                background: #fdf6e2;
+                border-color: #d9b86c;
+                color: #1f2937;
+            }
             .tani-pill-sub {
                 display: inline-block;
                 margin-top: 3px;
@@ -623,7 +629,7 @@
     };
 
     /* ========================================================================
-       6. SMART INLINE SUGGESTIONS & 100% MOHALLA AUTO-FILL (NO DATALIST CLUTTER)
+       6. SMART INLINE SUGGESTIONS & 100% MOHALLA AUTO-FILL
        ======================================================================== */
     const getTaniSuggestList = (fieldId) => {
         if (fieldId === 'tani-order-kariger') {
@@ -862,12 +868,24 @@
     };
 
     /* ========================================================================
-       8. VIEW CONTROLLER (LIST vs INLINE DETAIL) & CHROME
+       8. VIEW CONTROLLER (LIST vs INLINE DETAIL) + 5. LOOM PAR TAB INJECTION
        ======================================================================== */
     const ensureTaniOrderChrome = () => {
         ensureTaniOrderTallyStyles();
         const sec = document.getElementById('tani-order-section');
         if (!sec) return;
+
+        // Inject 5. Loom Par Tab right after 4. Karkhana Ready (without editing index.html)
+        const readyTab = document.getElementById('tab-tani-ready');
+        if (readyTab && readyTab.parentElement && !document.getElementById('tab-tani-loom')) {
+            const loomBtn = document.createElement('button');
+            loomBtn.type = 'button';
+            loomBtn.className = 'sheet-tab';
+            loomBtn.id = 'tab-tani-loom';
+            loomBtn.textContent = '5. Loom Par (0)';
+            loomBtn.onclick = () => switchTaniOrderTab('loom');
+            readyTab.parentElement.appendChild(loomBtn);
+        }
 
         if (!sec.dataset.taniChromeBuilt) {
             sec.dataset.taniChromeBuilt = '1';
@@ -969,7 +987,7 @@
             baithak: '2. Baithak Me Padi',
             rangai: '3. Rangai Par',
             ready: '4. Karkhana Ready!',
-            loom: 'Loom Par Chadhi'
+            loom: '5. Loom Par Chadhi'
         };
         const stText = stLabelMap[st] || st;
         const portalText = portalSt === 'processing'
@@ -1001,7 +1019,7 @@
                 <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                     <button type="button" class="tani-tally-btn" onclick="window.__taniCloseDetail()">← [Esc] Parchi List</button>
                     <strong style="font-size:14.5px; color:#1f2937;">Parchi #${esc(item.orderNo || '-')} · ${esc(item.kariger || '-')}</strong>
-                    <span class="tani-pill ${st === 'ready' ? 'ready' : ''}">${esc(stText)}</span>
+                    <span class="tani-pill ${st === 'ready' ? 'ready' : (st === 'loom' ? 'loom' : '')}">${esc(stText)}</span>
                     ${item.sancha ? `<span class="tani-pill-sub">${esc(portalText)}</span>` : ''}
                 </div>
                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
@@ -1348,14 +1366,14 @@
     };
 
     /* ========================================================================
-       11. PIPELINE TRACKING & BADGES (SANCHA / RANGAI SYNC PRESERVED)
+       11. PIPELINE TRACKING & BADGES (INCLUDES '5. LOOM PAR' TAB)
        ======================================================================== */
     const switchTaniOrderTab = (tab) => {
         window.currentTaniOrderTab = tab;
         taniOrderCurrentPage = 1;
         taniListActiveIdx = 0;
 
-        const tabs = ['all', 'sancha', 'baithak', 'rangai', 'ready'];
+        const tabs = ['all', 'sancha', 'baithak', 'rangai', 'ready', 'loom'];
         tabs.forEach((t) => {
             const el = document.getElementById(`tab-tani-${t}`);
             if (el) {
@@ -1367,18 +1385,21 @@
     };
 
     const cycleTaniOrderTab = () => {
-        const tabs = ['all', 'sancha', 'baithak', 'rangai', 'ready'];
+        const tabs = ['all', 'sancha', 'baithak', 'rangai', 'ready', 'loom'];
         const curIdx = tabs.indexOf(String(window.currentTaniOrderTab || 'all'));
         switchTaniOrderTab(tabs[(curIdx + 1) % tabs.length]);
     };
 
     const updateTaniOrderBadges = () => {
         const list = getTaniOrders();
-        let sanchaCount = 0, baithakCount = 0, rangaiCount = 0, readyCount = 0, activeCount = 0;
+        let sanchaCount = 0, baithakCount = 0, rangaiCount = 0, readyCount = 0, loomCount = 0, activeCount = 0;
 
         list.forEach((item) => {
             const st = String(item.status || 'sancha').toLowerCase();
-            if (st === 'loom') return;
+            if (st === 'loom') {
+                loomCount++;
+                return;
+            }
 
             activeCount++;
             if (st === 'sancha') sanchaCount++;
@@ -1392,6 +1413,11 @@
         setText('tani-stat-baithak', baithakCount);
         setText('tani-stat-rangai', rangaiCount);
         setText('tani-stat-ready', readyCount);
+
+        const loomTab = document.getElementById('tab-tani-loom');
+        if (loomTab) {
+            loomTab.textContent = `5. Loom Par (${loomCount})`;
+        }
 
         const dashBadge = document.getElementById('btn-total-tani-orders');
         if (dashBadge) {
@@ -1458,7 +1484,7 @@
     };
 
     /* ========================================================================
-       12. TABLE RENDERER (CLEAN WHITE & GOLD — ZERO ROW ACTION BUTTONS)
+       12. TABLE RENDERER (CLEAN WHITE & GOLD — LOOM TAB ISOLATED)
        ======================================================================== */
     const highlightTaniRow = (idx) => {
         const rows = Array.from(document.querySelectorAll('#tani-orders-table-body .tani-list-row'));
@@ -1481,6 +1507,7 @@
 
         let list = getTaniOrders();
 
+        // Active tabs hide mounted 'loom' orders; '5. Loom Par' shows exclusively mounted 'loom' orders
         if (window.currentTaniOrderTab !== 'loom') {
             list = list.filter(item => String(item.status || 'sancha').toLowerCase() !== 'loom');
         }
@@ -1519,7 +1546,10 @@
 
         if (!totalEntries) {
             currentPageOrdersCache = [];
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:24px; color:#6b7280;">Koi Tani Order Parchi nahi mili.</td></tr>';
+            const emptyMsg = (window.currentTaniOrderTab === 'loom')
+                ? 'Abhi koi Tani Loom Par nahi chadhi hai.'
+                : 'Koi Tani Order Parchi nahi mili.';
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:#6b7280;">${emptyMsg}</td></tr>`;
             if (pager) pager.innerHTML = '';
             return;
         }
@@ -1543,9 +1573,12 @@
             if (st === 'baithak') statusText = '2. Baithak';
             else if (st === 'rangai') statusText = '3. Rangai Par';
             else if (st === 'ready') statusText = '4. Ready!';
+            else if (st === 'loom') statusText = '5. Loom Par';
 
             let portalText = '-';
-            if (item.sancha) {
+            if (st === 'loom') {
+                portalText = 'Mounted on Loom';
+            } else if (item.sancha) {
                 if (portalSt === 'processing') portalText = 'Sancha Processing';
                 else if (portalSt === 'completed') portalText = 'Sancha Complete';
                 else if (st === 'sancha') portalText = 'Sancha Pending';
@@ -1553,6 +1586,7 @@
 
             const matchingCount = Array.isArray(item.matchingTable) ? item.matchingTable.length : 0;
             const activeCls = (idx === taniListActiveIdx) ? ' active' : '';
+            const pillCls = st === 'ready' ? 'ready' : (st === 'loom' ? 'loom' : '');
 
             html += `<tr class="tani-list-row${activeCls}" data-tidx="${idx}" onclick="window.__taniSelectAndOpen(${idx}, '${esc(item.id)}')">
                 <td><strong style="color:#92400e;">#${esc(item.orderNo || '-')}</strong></td>
@@ -1570,7 +1604,7 @@
                     <span style="font-size:11.5px; font-weight:700;">${matchingCount} Colors</span><br>
                     <small style="color:#6b7280; font-size:10.5px;">${esc(item.contrastLabel || 'Self')}</small>
                 </td>
-                <td><span class="tani-pill ${st === 'ready' ? 'ready' : ''}">${esc(statusText)}</span></td>
+                <td><span class="tani-pill ${pillCls}">${esc(statusText)}</span></td>
                 <td><span class="tani-pill-sub">${esc(portalText)}</span></td>
                 <td style="text-align:right; font-weight:700; font-size:12px;">Open →</td>
             </tr>`;
